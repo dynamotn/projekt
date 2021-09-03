@@ -10,13 +10,13 @@ project:
 	@mkdir -p $(BINARY_FOLDER)
 	go build -o $(BINARY_FOLDER)/project cmd/project/main.go
 
-.PHONY: all
-all: pj project
-
 .PHONY: clean
 clean:
 	@rm -rf $(BINARY_FOLDER)
 
 .PHONY: install
-install: all
+install: pj project
 	@mv $(BINARY_FOLDER)/* /usr/local/bin
+
+.PHONY: all
+all: pj project install clean
