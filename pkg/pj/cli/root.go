@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -9,8 +9,8 @@ import (
 
 var (
 	rootCmd = &cobra.Command{
-		Use:   "project",
-		Short: "A smart command to work with your project folder",
+		Use:   "pj",
+		Short: "Go to project",
 	}
 )
 
