@@ -16,3 +16,7 @@ all: pj project
 .PHONY: clean
 clean:
 	@rm -rf $(BINARY_FOLDER)
+
+.PHONY: install
+install: all
+	@mv $(BINARY_FOLDER)/* /usr/local/bin
