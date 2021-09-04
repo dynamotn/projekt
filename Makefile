@@ -31,6 +31,7 @@ install: pj t b projekt
 
 .PHONY: doc
 doc:
+	@rm -rf ${DOC_FOLDER}
 	@mkdir -p ${DOC_FOLDER}
 	go run doc.go
 
