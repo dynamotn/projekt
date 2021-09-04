@@ -17,14 +17,6 @@ var (
 		Use:   "projekt",
 		Short: "A smart command to work with your project folder",
 	}
-	versionCmd = &cobra.Command{
-		Use:   "version",
-		Short: "Print the version number of Projekt",
-		Long:  `All software has versions. This is Projekt's`,
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("Projekt CLI v" + pkg.Version)
-		},
-	}
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -42,7 +34,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.projekt/config.yaml)")
 
 	rootCmd.AddCommand(folder.Cmd)
-	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(pkg.VersionCmd)
 }
 
 func initConfig() {

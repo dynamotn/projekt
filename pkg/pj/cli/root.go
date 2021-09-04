@@ -14,14 +14,6 @@ var (
 		Use:   "pj",
 		Short: "Go to project",
 	}
-	versionCmd = &cobra.Command{
-		Use:   "version",
-		Short: "Print the version number of Projekt",
-		Long:  `All software has versions. This is Projekt's`,
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("Projekt CLI v" + pkg.Version)
-		},
-	}
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -34,5 +26,5 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(pkg.VersionCmd)
 }
