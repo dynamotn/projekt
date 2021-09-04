@@ -1,20 +1,28 @@
 package folder
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/spf13/cobra"
+
+	logic "gitlab.com/dynamo.foss/projekt/pkg/projekt/folder"
 )
 
 var (
-	Path string
+	prefix string
+	asWorkspace bool
 	addCmd = &cobra.Command{
-		Use:   "add",
-		Short: "Add your project folder to database",
+		Use:   "add [folder path]",
+		Short: "Add your project folder to cache",
+		Long:  "Add your project folder to cache",
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println(strings.Join(args, " "))
+			logic.ImportFolderToCache(args[0], prefix, asWorkspace)
 			return nil
 		},
 	}
 )
+
+func init() {
+	f := addCmd.Flags()
+	f.StringVarP(&prefix, "prefix", "p", "", "Prefix of folder(s) when call `pj` or `project folder go`")
+	f.BoolVarP(&asWorkspace, "as-workspace", "W", false, "Set folder as a workspace, like a parent folder of your projects")
+}
