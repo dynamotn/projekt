@@ -1,4 +1,5 @@
 BINARY_FOLDER = bin
+DOC_FOLDER = doc
 
 .PHONY: pj
 pj:
@@ -28,5 +29,10 @@ clean:
 install: pj t b projekt
 	@mv $(BINARY_FOLDER)/* /usr/local/bin
 
+.PHONY: doc
+doc:
+	@mkdir -p ${DOC_FOLDER}
+	go run doc.go
+
 .PHONY: all
-all: install clean
+all: install clean doc

@@ -15,16 +15,16 @@ import (
 
 var (
 	cfgFile string
-	rootCmd = &cobra.Command{
+	RootCmd = &cobra.Command{
 		Use:   "projekt",
 		Short: "A smart command to work with your project folder",
 	}
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
+// This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -33,14 +33,14 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.projekt/config.yaml)")
+	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.projekt/config.yaml)")
 
-	rootCmd.AddCommand(folder.Cmd)
-	rootCmd.AddCommand(template.Cmd)
-	rootCmd.AddCommand(boilerplate.Cmd)
-	rootCmd.AddCommand(pkg.VersionCmd)
+	RootCmd.AddCommand(folder.Cmd)
+	RootCmd.AddCommand(template.Cmd)
+	RootCmd.AddCommand(boilerplate.Cmd)
+	RootCmd.AddCommand(pkg.VersionCmd)
 
-	pkg.SetColorAndStyles(rootCmd)
+	pkg.SetColorAndStyles(RootCmd)
 }
 
 func initConfig() {
