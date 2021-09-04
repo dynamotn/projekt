@@ -5,8 +5,15 @@ import (
 )
 
 var (
+	description = "Create a template file from various sources"
 	Cmd = &cobra.Command{
-		Use:   "template",
-		Short: "Create a template file from various sources",
+		Use:     "template",
+		Aliases: []string{"t", "tpl"},
+		Short:   description,
+	}
+
+	FastCmd = &cobra.Command{
+		Use:   "t",
+		Short: description,
 	}
 )

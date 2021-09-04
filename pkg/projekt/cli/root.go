@@ -7,8 +7,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/projekt/cli/folder"
 	"gitlab.com/dynamo.foss/projekt/pkg"
+	"gitlab.com/dynamo.foss/projekt/pkg/projekt/cli/folder"
+	"gitlab.com/dynamo.foss/projekt/pkg/projekt/cli/template"
+	"gitlab.com/dynamo.foss/projekt/pkg/projekt/cli/boilerplate"
 )
 
 var (
@@ -34,6 +36,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.projekt/config.yaml)")
 
 	rootCmd.AddCommand(folder.Cmd)
+	rootCmd.AddCommand(template.Cmd)
+	rootCmd.AddCommand(boilerplate.Cmd)
 	rootCmd.AddCommand(pkg.VersionCmd)
 }
 

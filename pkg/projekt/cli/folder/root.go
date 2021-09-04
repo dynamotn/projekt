@@ -6,8 +6,9 @@ import (
 
 var (
 	Cmd = &cobra.Command{
-		Use:   "folder",
-		Short: "Manage your project folder",
+		Use:     "folder",
+		Aliases: []string{"f", "fd", "fol"},
+		Short:   "Manage your project folder",
 	}
 )
 

@@ -5,8 +5,15 @@ import (
 )
 
 var (
+	description = "Create boilerplate project folder of a language/framework/tool..."
 	Cmd = &cobra.Command{
-		Use:   "boilerplate",
-		Short: "Create boilerplate project folder of a language/framework/tool...",
+		Use:     "boilerplate",
+		Aliases: []string{"b", "bpl"},
+		Short:   description,
+	}
+
+	FastCmd = &cobra.Command{
+		Use:   "b",
+		Short: description,
 	}
 )
