@@ -2,6 +2,8 @@ package boilerplate
 
 import (
 	"github.com/spf13/cobra"
+
+	"gitlab.com/dynamo.foss/projekt/pkg"
 )
 
 var (
@@ -17,3 +19,7 @@ var (
 		Short: description,
 	}
 )
+
+func init() {
+	pkg.SetColorAndStyles(FastCmd)
+}

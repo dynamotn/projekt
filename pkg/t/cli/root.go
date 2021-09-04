@@ -23,4 +23,5 @@ func Execute() {
 
 func init() {
 	rootCmd.AddCommand(pkg.VersionCmd)
+	pkg.SetColorAndStyles(rootCmd)
 }

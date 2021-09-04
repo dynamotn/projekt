@@ -39,6 +39,8 @@ func init() {
 	rootCmd.AddCommand(template.Cmd)
 	rootCmd.AddCommand(boilerplate.Cmd)
 	rootCmd.AddCommand(pkg.VersionCmd)
+
+	pkg.SetColorAndStyles(rootCmd)
 }
 
 func initConfig() {
