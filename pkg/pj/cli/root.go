@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/dynamo.foss/project/pkg"
+	"gitlab.com/dynamo.foss/projekt/pkg"
 )
 
 var (
@@ -16,10 +16,10 @@ var (
 	}
 	versionCmd = &cobra.Command{
 		Use:   "version",
-		Short: "Print the version number of Project",
-		Long:  `All software has versions. This is Project's`,
+		Short: "Print the version number of Projekt",
+		Long:  `All software has versions. This is Projekt's`,
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("Project CLI v" + pkg.Version)
+			fmt.Println("Projekt CLI v" + pkg.Version)
 		},
 	}
 )

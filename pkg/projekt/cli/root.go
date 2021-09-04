@@ -7,22 +7,22 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"gitlab.com/dynamo.foss/project/pkg/project/cli/folder"
-	"gitlab.com/dynamo.foss/project/pkg"
+	"gitlab.com/dynamo.foss/projekt/pkg/projekt/cli/folder"
+	"gitlab.com/dynamo.foss/projekt/pkg"
 )
 
 var (
 	cfgFile string
 	rootCmd = &cobra.Command{
-		Use:   "project",
+		Use:   "projekt",
 		Short: "A smart command to work with your project folder",
 	}
 	versionCmd = &cobra.Command{
 		Use:   "version",
-		Short: "Print the version number of Project",
-		Long:  `All software has versions. This is Project's`,
+		Short: "Print the version number of Projekt",
+		Long:  `All software has versions. This is Projekt's`,
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("Project CLI v" + pkg.Version)
+			fmt.Println("Projekt CLI v" + pkg.Version)
 		},
 	}
 )
@@ -39,7 +39,7 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.project/config.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.projekt/config.yaml)")
 
 	rootCmd.AddCommand(folder.Cmd)
 	rootCmd.AddCommand(versionCmd)
@@ -55,7 +55,7 @@ func initConfig() {
 		cobra.CheckErr(err)
 
 		// Search config in home directory with name ".cobra" (without extension).
-		viper.AddConfigPath(home + "/.project")
+		viper.AddConfigPath(home + "/.projekt")
 		viper.SetConfigType("yaml")
 		viper.SetConfigName("config")
 	}
