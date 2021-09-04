@@ -15,7 +15,7 @@ var (
 		Long:  "Add your project folder to cache",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logic.ImportFolderToCache(args[0], prefix, asWorkspace)
+			logic.ImportFolderToConfig(args[0], prefix, asWorkspace)
 			return nil
 		},
 	}

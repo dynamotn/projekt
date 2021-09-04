@@ -5,16 +5,15 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"gitlab.com/dynamo.foss/projekt/pkg"
+	"gitlab.com/dynamo.foss/projekt/pkg/projekt"
 	"gitlab.com/dynamo.foss/projekt/pkg/projekt/cli/folder"
 	"gitlab.com/dynamo.foss/projekt/pkg/projekt/cli/template"
 	"gitlab.com/dynamo.foss/projekt/pkg/projekt/cli/boilerplate"
 )
 
 var (
-	cfgFile string
 	RootCmd = &cobra.Command{
 		Use:   "projekt",
 		Short: "A smart command to work with your project folder",
@@ -31,9 +30,9 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(projekt.InitConfig)
 
-	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.projekt/config.yaml)")
+	RootCmd.PersistentFlags().StringVar(&projekt.CfgFile, "config", "", "config file (default is $HOME/.projekt/config.yaml)")
 
 	RootCmd.AddCommand(folder.Cmd)
 	RootCmd.AddCommand(template.Cmd)
@@ -41,26 +40,4 @@ func init() {
 	RootCmd.AddCommand(pkg.VersionCmd)
 
 	pkg.SetColorAndStyles(RootCmd)
-}
-
-func initConfig() {
-	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
-	} else {
-		// Find home directory.
-		home, err := os.UserHomeDir()
-		cobra.CheckErr(err)
-
-		// Search config in home directory with name ".cobra" (without extension).
-		viper.AddConfigPath(home + "/.projekt")
-		viper.SetConfigType("yaml")
-		viper.SetConfigName("config")
-	}
-
-	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
-	}
 }

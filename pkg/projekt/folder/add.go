@@ -1,10 +1,10 @@
 package folder
 
 import (
-	"fmt"
+	"gitlab.com/dynamo.foss/projekt/pkg/projekt"
 )
 
-func ImportFolderToCache(path string, prefix string, asWorkspace bool) error {
-	fmt.Println(path, prefix, asWorkspace)
+func ImportFolderToConfig(path string, prefix string, asWorkspace bool) error {
+	projekt.AddFolderConfig(path, prefix, asWorkspace)
 	return nil
 }
