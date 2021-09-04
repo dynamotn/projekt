@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/dynamo.foss/project/pkg/project/cli/folder"
 )
 
 var (
@@ -21,4 +22,8 @@ func Execute() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func init() {
+	rootCmd.AddCommand(folder.Cmd)
 }
