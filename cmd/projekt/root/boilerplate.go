@@ -8,7 +8,7 @@ import (
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
-func NewBoilerplateCmd (out io.Writer) *cobra.Command {
+func NewBoilerplateCmd(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "boilerplate",
 		Aliases: []string{"b", "bpl"},
@@ -19,7 +19,7 @@ func NewBoilerplateCmd (out io.Writer) *cobra.Command {
 	return cmd
 }
 
-func NewFastBoilerplateCmd (out io.Writer) *cobra.Command {
+func NewFastBoilerplateCmd(out io.Writer) *cobra.Command {
 	cmd := NewBoilerplateCmd(out)
 
 	cmd.Use = "b"

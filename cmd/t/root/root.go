@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	projekt "gitlab.com/dynamo.foss/projekt/cmd/projekt/root"
+	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
 func NewRootCmd(out io.Writer) *cobra.Command {

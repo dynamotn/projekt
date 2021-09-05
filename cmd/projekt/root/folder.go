@@ -8,7 +8,7 @@ import (
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
-func NewFolderCmd (out io.Writer) *cobra.Command {
+func NewFolderCmd(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "folder",
 		Aliases: []string{"f", "fd", "fol"},

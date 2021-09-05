@@ -2,6 +2,33 @@
 
 Print the version number of Projekt
 
+### Synopsis
+
+
+Show the version for Projekt.
+
+This will print a representation the version of Projekt.
+The output will look something like this:
+
+Projekt CLI version.BuildInfo{Version:"vx.x.x", GitCommit:"ffffffffffffffffffffffffffffffffffffffff", GitTreeState:"clean", GoVersion:"gox.x.x"}
+
+- Version is the semantic version of the release.
+- GitCommit is the SHA for the commit that this version was built from.
+- GitTreeState is "clean" if there are no local code changes when this binary was
+  built, and "dirty" if the binary was built from locally modified code.
+- GoVersion is the version of Go that was used to compile Projekt.
+
+When using the --template flag the following properties are available to use in
+the template:
+
+- .Version contains the semantic version of Helm
+- .GitCommit is the git commit
+- .GitTreeState is the state of the git tree when Helm was built
+- .GoVersion contains the version of Go that Helm was compiled with
+
+For example, --template='Version: {{.Version}}' outputs 'Version: vx.x.x'.
+
+
 ```
 t version [flags]
 ```
@@ -9,7 +36,9 @@ t version [flags]
 ### Options
 
 ```
-  -h, --help   help for version
+  -h, --help              help for version
+      --short             Print the version number
+      --template string   Template for version string format
 ```
 
 ### Options inherited from parent commands

@@ -8,7 +8,7 @@ import (
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
-func NewTemplateCmd (out io.Writer) *cobra.Command {
+func NewTemplateCmd(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "template",
 		Aliases: []string{"t", "tpl"},
@@ -19,7 +19,7 @@ func NewTemplateCmd (out io.Writer) *cobra.Command {
 	return cmd
 }
 
-func NewFastTemplateCmd (out io.Writer) *cobra.Command {
+func NewFastTemplateCmd(out io.Writer) *cobra.Command {
 	cmd := NewTemplateCmd(out)
 
 	cmd.Use = "t"

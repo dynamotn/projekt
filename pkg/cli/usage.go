@@ -27,4 +27,3 @@ func SetColorAndStyles(cmd *cobra.Command) {
 
 	cmd.SetUsageTemplate(usageTemplate)
 }
-

@@ -13,7 +13,7 @@ var (
 	asWorkspace bool
 )
 
-func NewFolderAddCmd (out io.Writer) *cobra.Command {
+func NewFolderAddCmd(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add [folder path]",
 		Short: "Add your project folder to cache",

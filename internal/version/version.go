@@ -1,11 +1,18 @@
 package version
 
+import "runtime"
+
 var (
-	version = "0.1"
+	version      = ""
+	gitCommit    = ""
+	gitTreeState = ""
 )
 
 type BuildInfo struct {
-	Version string
+	Version      string
+	GitCommit    string
+	GitTreeState string
+	GoVersion    string
 }
 
 func GetVersionStr() string {
@@ -14,6 +21,9 @@ func GetVersionStr() string {
 
 func GetBuildInfo() BuildInfo {
 	return BuildInfo{
-		Version: GetVersionStr(),
+		Version:      GetVersionStr(),
+		GitCommit:    gitCommit,
+		GitTreeState: gitTreeState,
+		GoVersion:    runtime.Version(),
 	}
 }
