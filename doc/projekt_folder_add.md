@@ -22,6 +22,7 @@ projekt folder add [folder path] [flags]
 
 ```
       --config string   config file (default is $HOME/.projekt/config.yaml)
+  -d, --debug           Enable verbose ouput
 ```
 
 ### SEE ALSO

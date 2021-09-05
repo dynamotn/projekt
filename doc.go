@@ -1,32 +1,33 @@
 package main
 
 import (
-	"log"
+	"os"
 
 	"github.com/spf13/cobra/doc"
 
-	projekt "gitlab.com/dynamo.foss/projekt/pkg/projekt/cli"
-	pj "gitlab.com/dynamo.foss/projekt/pkg/pj/cli"
-	t "gitlab.com/dynamo.foss/projekt/pkg/t/cli"
-	b "gitlab.com/dynamo.foss/projekt/pkg/b/cli"
+	b "gitlab.com/dynamo.foss/projekt/cmd/b/root"
+	pj "gitlab.com/dynamo.foss/projekt/cmd/pj/root"
+	projekt "gitlab.com/dynamo.foss/projekt/cmd/projekt/root"
+	t "gitlab.com/dynamo.foss/projekt/cmd/t/root"
+	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
 func main() {
 	var err error
-	err = doc.GenMarkdownTree(projekt.RootCmd, "doc")
+	err = doc.GenMarkdownTree(projekt.NewRootCmd(os.Stdout), "doc")
 	if err != nil {
-		log.Fatal(err)
+		cli.Error("Failed to generate document", err)
 	}
-	err = doc.GenMarkdownTree(pj.RootCmd, "doc")
+	err = doc.GenMarkdownTree(pj.NewRootCmd(os.Stdout), "doc")
 	if err != nil {
-		log.Fatal(err)
+		cli.Error("Failed to generate document", err)
 	}
-	err = doc.GenMarkdownTree(t.RootCmd, "doc")
+	err = doc.GenMarkdownTree(t.NewRootCmd(os.Stdout), "doc")
 	if err != nil {
-		log.Fatal(err)
+		cli.Error("Failed to generate document", err)
 	}
-	err = doc.GenMarkdownTree(b.RootCmd, "doc")
+	err = doc.GenMarkdownTree(b.NewRootCmd(os.Stdout), "doc")
 	if err != nil {
-		log.Fatal(err)
+		cli.Error("Failed to generate document", err)
 	}
 }

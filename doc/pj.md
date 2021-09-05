@@ -1,11 +1,12 @@
 ## pj
 
-Go to project
+Go to project folder
 
 ### Options
 
 ```
-  -h, --help   help for pj
+  -d, --debug   Enable verbose ouput
+  -h, --help    help for pj
 ```
 
 ### SEE ALSO

@@ -6,6 +6,7 @@ A smart command to work with your project folder
 
 ```
       --config string   config file (default is $HOME/.projekt/config.yaml)
+  -d, --debug           Enable verbose ouput
   -h, --help            help for projekt
 ```
 

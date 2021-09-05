@@ -5,7 +5,8 @@ Create a template file from various sources
 ### Options
 
 ```
-  -h, --help   help for t
+  -d, --debug   Enable verbose ouput
+  -h, --help    help for t
 ```
 
 ### SEE ALSO

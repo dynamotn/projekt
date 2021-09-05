@@ -1,9 +1,11 @@
 package main
 
 import (
-	"gitlab.com/dynamo.foss/projekt/pkg/pj/cli"
+	"gitlab.com/dynamo.foss/projekt/cmd/pj/root"
+	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
 func main() {
-	cli.Execute()
+	cli.InitLogging()
+	root.Execute()
 }

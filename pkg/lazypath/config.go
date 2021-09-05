@@ -1,19 +1,19 @@
-package projekt
+package lazypath
 
 import (
 	"fmt"
-	"log"
 	"os"
-	"reflect"
 	"path/filepath"
+	"reflect"
 
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
 var (
 	CfgFile string
-	c config
+	c       config
 )
 
 type folder struct {
@@ -33,7 +33,7 @@ func unmarshalConfig() {
 
 	err := viper.Unmarshal(&c)
 	if err != nil {
-		log.Fatalf("unable to decode into struct, %v", err)
+		cli.Error("Unable to decode into struct", err)
 	}
 }
 
@@ -58,15 +58,15 @@ func AddFolderConfig(path string, prefix string, asWorkspace bool) {
 	}
 
 	c.Folders = append(c.Folders, folder{
-		Path: path,
-		Prefix: prefix,
+		Path:        path,
+		Prefix:      prefix,
 		IsWorkspace: asWorkspace,
 	})
 
 	viper.Set("folders", c.Folders)
 	err := viper.WriteConfig()
 	if err != nil {
-		log.Fatal(err)
+		cli.Error("Failed to write config", err)
 	}
 	fmt.Println("Added " + path + " to config")
 }
@@ -78,7 +78,9 @@ func InitConfig() {
 	} else {
 		// Find home directory.
 		home, err := os.UserHomeDir()
-		cobra.CheckErr(err)
+		if err != nil {
+			cli.Error("Failed to detech home user", err)
+		}
 
 		// Search config in home directory with name ".cobra" (without extension).
 		viper.AddConfigPath(home + "/.projekt")
@@ -93,13 +95,13 @@ func InitConfig() {
 		fmt.Println("Using config file:", viper.ConfigFileUsed())
 	} else {
 		err := os.MkdirAll(filepath.Dir(CfgFile), os.ModePerm)
-    if err != nil && !os.IsExist(err) {
-			log.Fatal(err)
-    }
+		if err != nil && !os.IsExist(err) {
+			cli.Error("Failed to create folder", err)
+		}
 
 		_, err = os.Create(CfgFile)
-    if err != nil {
-			log.Fatal(err)
-    }
+		if err != nil {
+			cli.Error("Failed to create file", err)
+		}
 	}
 }

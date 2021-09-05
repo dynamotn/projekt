@@ -5,7 +5,8 @@ Create boilerplate project folder of a language/framework/tool...
 ### Options
 
 ```
-  -h, --help   help for b
+  -d, --debug   Enable verbose ouput
+  -h, --help    help for b
 ```
 
 ### SEE ALSO

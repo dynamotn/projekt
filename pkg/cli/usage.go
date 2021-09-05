@@ -1,18 +1,19 @@
-package pkg
+package cli
 
 import (
-	"strings"
 	"regexp"
+	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/fatih/color"
+	"github.com/spf13/cobra"
 )
 
-func SetColorAndStyles(command *cobra.Command) {
-	command.SetOutput(color.Output)
+func SetColorAndStyles(cmd *cobra.Command) {
+	cmd.SetOutput(color.Output)
 
 	cobra.AddTemplateFunc("StyleHeading", color.New(color.FgGreen).SprintFunc())
-	usageTemplate := command.UsageTemplate()
+
+	usageTemplate := cmd.UsageTemplate()
 	usageTemplate = strings.NewReplacer(
 		`Usage:`, `{{StyleHeading "USAGE:"}}`,
 		`Aliases:`, `{{StyleHeading "ALIASES:"}}`,
@@ -24,5 +25,6 @@ func SetColorAndStyles(command *cobra.Command) {
 	re := regexp.MustCompile(`(?m)^Flags:\s*$`)
 	usageTemplate = re.ReplaceAllLiteralString(usageTemplate, `{{StyleHeading "FLAGS:"}}`)
 
-	command.SetUsageTemplate(usageTemplate)
+	cmd.SetUsageTemplate(usageTemplate)
 }
+
