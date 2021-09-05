@@ -1,6 +1,10 @@
 ## pj
 
-Go to project folder
+Get project folder by short name
+
+```
+pj [flags]
+```
 
 ### Options
 

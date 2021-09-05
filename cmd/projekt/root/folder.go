@@ -18,6 +18,7 @@ func NewFolderCmd(out io.Writer) *cobra.Command {
 	cmd.AddCommand(
 		NewFolderAddCmd(out),
 		NewFolderListCmd(out),
+		NewFolderGetCmd(out),
 	)
 
 	cli.SetColorAndStyles(cmd)

@@ -45,7 +45,7 @@ the template:
 
 For example, --template='Version: {{.Version}}' outputs 'Version: vx.x.x'.
 `,
-		Args:  cobra.NoArgs,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return o.run(out)
 		},

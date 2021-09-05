@@ -57,7 +57,7 @@ func InitConfig() {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
+		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	} else {
 		err := os.MkdirAll(filepath.Dir(CfgFile), os.ModePerm)
 		if err != nil && !os.IsExist(err) {

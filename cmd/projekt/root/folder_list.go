@@ -28,4 +28,3 @@ func NewFolderListCmd(out io.Writer) *cobra.Command {
 
 	return cmd
 }
-

@@ -15,7 +15,7 @@ func NewFolderAddCmd(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add [folder path]",
 		Short: "Add your project folder to config",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Path = args[0]
 			return folderutil.ImportFolderToConfig(o)

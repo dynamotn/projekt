@@ -12,7 +12,7 @@ const DEFAULT_REGEX_WORKSPACE = ".+"
 type Folder struct {
 	Path        string
 	Prefix      string
-	IsWorkspace bool `yaml:"is_workspace" mapstructure:"is_workspace"`
+	IsWorkspace bool   `yaml:"is_workspace" mapstructure:"is_workspace"`
 	RegexMatch  string `yaml:"regex" mapstructure:"regex"`
 	Priority    uint16
 }

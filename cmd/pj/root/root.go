@@ -6,15 +6,13 @@ import (
 
 	"github.com/spf13/cobra"
 
+	projekt "gitlab.com/dynamo.foss/projekt/cmd/projekt/root"
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
 
 func NewRootCmd(out io.Writer) *cobra.Command {
-	rootCmd := &cobra.Command{
-		Use:          "pj",
-		Short:        "Go to project folder",
-		SilenceUsage: true,
-	}
+	rootCmd := projekt.NewFastPjCmd(out)
 
 	f := rootCmd.PersistentFlags()
 	cli.GetEnv().AddFlags(f)
@@ -22,14 +20,13 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 	rootCmd.AddCommand(
 		cli.NewVersionCmd(out),
 	)
-	cli.SetColorAndStyles(rootCmd)
-
-	//TODO: Add completion of list folder
 
 	return rootCmd
 }
 
 func Execute() {
+	cobra.OnInitialize(lazypath.InitConfig)
+
 	if err := NewRootCmd(os.Stdout).Execute(); err != nil {
 		cli.Debug(err)
 		os.Exit(1)

@@ -11,7 +11,7 @@ import (
 
 type ParsedFolder struct {
 	ShortName string
-	Path			string
+	Path      string
 	Workspace string
 }
 
@@ -31,7 +31,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 			re := regexp.MustCompile(folder.GetRegexMatch())
 			fileInfo, err := ioutil.ReadDir(folder.Path)
 			if err != nil {
-				cli.Warning("Cannot read folder " + folder.Path, err)
+				cli.Warning("Cannot read folder "+folder.Path, err)
 				continue
 			}
 
@@ -52,7 +52,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 	return result, err
 }
 
-func appendToParsedFolder(list []ParsedFolder, prefix string, folderPath string, childFolderName string) []ParsedFolder{
+func appendToParsedFolder(list []ParsedFolder, prefix string, folderPath string, childFolderName string) []ParsedFolder {
 	result := list
 
 	// Get existed short name
@@ -75,7 +75,7 @@ func appendToParsedFolder(list []ParsedFolder, prefix string, folderPath string,
 
 	result = append(result, ParsedFolder{
 		ShortName: shortName,
-		Path: childFolderPath,
+		Path:      childFolderPath,
 		Workspace: folderPath,
 	})
 	return result
