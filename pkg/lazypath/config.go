@@ -13,21 +13,15 @@ import (
 
 var (
 	CfgFile string
-	c       config
+	c       Config
 )
 
-type folder struct {
-	Path        string
-	Prefix      string
-	IsWorkspace bool `yaml:"is_workspace" mapstructure:"is_workspace"`
-}
-
-type config struct {
-	Folders []folder
+type Config struct {
+	Folders []Folder
 }
 
 func unmarshalConfig() {
-	if !reflect.DeepEqual(c, config{}) {
+	if !reflect.DeepEqual(c, Config{}) {
 		return
 	}
 
@@ -37,38 +31,9 @@ func unmarshalConfig() {
 	}
 }
 
-func CheckFolderExist(path string) bool {
+func GetConfig() Config {
 	unmarshalConfig()
-
-	result := false
-	for _, folder := range c.Folders {
-		if folder.Path == path {
-			return true
-		}
-	}
-	return result
-}
-
-func AddFolderConfig(path string, prefix string, asWorkspace bool) {
-	unmarshalConfig()
-
-	if CheckFolderExist(path) {
-		fmt.Println(path + " is already existed!")
-		return
-	}
-
-	c.Folders = append(c.Folders, folder{
-		Path:        path,
-		Prefix:      prefix,
-		IsWorkspace: asWorkspace,
-	})
-
-	viper.Set("folders", c.Folders)
-	err := viper.WriteConfig()
-	if err != nil {
-		cli.Error("Failed to write config", err)
-	}
-	fmt.Println("Added " + path + " to config")
+	return c
 }
 
 func InitConfig() {
