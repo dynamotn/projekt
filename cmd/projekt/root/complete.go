@@ -8,7 +8,7 @@ import (
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
 
-func compListShortNames (search string) ([]string, cobra.ShellCompDirective) {
+func compListShortNames(search string) ([]string, cobra.ShellCompDirective) {
 	parsedFolders, err := folderutil.ParseConfig(lazypath.GetConfig())
 	if err != nil {
 		cli.Error("Can't parse config", err)
@@ -16,7 +16,6 @@ func compListShortNames (search string) ([]string, cobra.ShellCompDirective) {
 	}
 
 	var result []string
-
 
 	for _, pFolder := range parsedFolders {
 		result = append(result, pFolder.ShortName)

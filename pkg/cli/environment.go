@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	env EnvSettings
+	env = &EnvSettings{}
 )
 
 type EnvSettings struct {
@@ -20,10 +20,10 @@ func init() {
 	env.Debug, _ = strconv.ParseBool(os.Getenv("PROJEKT_DEBUG"))
 }
 
-func (e EnvSettings) AddFlags(fs *pflag.FlagSet) {
+func (e *EnvSettings) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVarP(&e.Debug, "debug", "d", false, "Enable verbose ouput")
 }
 
-func GetEnv() EnvSettings {
+func GetEnv() *EnvSettings {
 	return env
 }
