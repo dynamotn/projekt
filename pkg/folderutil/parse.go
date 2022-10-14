@@ -31,7 +31,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 			re := regexp.MustCompile(folder.GetRegexMatch())
 			fileInfo, err := ioutil.ReadDir(folder.Path)
 			if err != nil {
-				cli.Warning("Cannot read folder "+folder.Path, err)
+				cli.Warning("Cannot read folder " + folder.Path, err)
 				continue
 			}
 

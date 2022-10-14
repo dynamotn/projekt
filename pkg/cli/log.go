@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/fatih/color"
 )
 
 func InitLogging() {
@@ -12,13 +14,15 @@ func InitLogging() {
 
 func Debug(v ...interface{}) {
 	if GetEnv().Debug {
-		format := fmt.Sprintf("[debug] %s\n", "%+v")
+		cyan := color.New(color.FgCyan).SprintFunc()
+		format := fmt.Sprintf(cyan("[debug] %s\n"), "%+v")
 		log.Output(2, fmt.Sprintf(format, v...))
 	}
 }
 
-func Warning(v ...interface{}) {
-	format := fmt.Sprintf("WARNING: %s\n", "%+v")
+func Warning(message string, v ...interface{}) {
+	yellow := color.New(color.FgYellow).SprintFunc()
+	format := fmt.Sprintf(yellow("WARNING: %s\n%s\n"), message, "%+v")
 	fmt.Fprintf(os.Stderr, format, v...)
 }
 
