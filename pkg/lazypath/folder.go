@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/viper"
+	"github.com/samber/lo"
+
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
@@ -32,12 +34,11 @@ func (f *Folder) GetRegexMatch() string {
 func CheckFolderExist(path string) (bool, int) {
 	unmarshalConfig()
 
-	for index, folder := range c.Folders {
-		if folder.Path == path {
-			return true, index
-		}
-	}
-	return false, -1
+	_, index, ok := lo.FindIndexOf[Folder](c.Folders, func(folder Folder) bool {
+		return folder.Path == path
+	})
+
+	return ok, index
 }
 
 func (f *Folder) AddToConfig() error {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/samber/lo"
+
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
@@ -15,16 +17,10 @@ func FindFolderByShortName(out io.Writer, shortName string) error {
 		return err
 	}
 
-	result := ""
+	result, _ := lo.Find[ParsedFolder](parsedFolders, func(pFolder ParsedFolder) bool {
+		return pFolder.ShortName == shortName
+	})
 
-	//TODO: Change to binary search
-	for _, pFolder := range parsedFolders {
-		if pFolder.ShortName == shortName {
-			result = pFolder.Path
-			break
-		}
-	}
-
-	fmt.Fprintln(out, result)
+	fmt.Fprintln(out, result.Path)
 	return nil
 }
