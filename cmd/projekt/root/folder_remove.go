@@ -13,6 +13,7 @@ func NewFolderRemoveCmd(out io.Writer) *cobra.Command {
 		Use:   "remove [folder path]",
 		Short: "Remove your project folder to config",
 		Args:  cobra.ExactArgs(1),
+		Aliases: []string{"rm"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return folderutil.RemoveFolderFromConfig(args[0])
 		},

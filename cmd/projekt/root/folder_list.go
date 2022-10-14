@@ -18,6 +18,7 @@ func NewFolderListCmd(out io.Writer) *cobra.Command {
 		Use:   "list",
 		Short: "List all your project folders",
 		Args:  cobra.NoArgs,
+		Aliases: []string{"l"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return folderutil.ListFolders(out, o.plain)
 		},

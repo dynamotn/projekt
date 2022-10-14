@@ -14,6 +14,7 @@ func NewFolderGetCmd(out io.Writer) *cobra.Command {
 		Use:   "get [short name]",
 		Short: "Get project folder by short name",
 		Args:  cobra.ExactArgs(1),
+		Aliases: []string{"g"},
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			if len(args) != 0 {
 				return nil, cobra.ShellCompDirectiveNoFileComp
