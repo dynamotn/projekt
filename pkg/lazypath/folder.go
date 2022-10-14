@@ -2,9 +2,10 @@ package lazypath
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/spf13/viper"
 	"github.com/samber/lo"
+	"github.com/spf13/viper"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
@@ -35,7 +36,7 @@ func CheckFolderExist(path string) (bool, int) {
 	unmarshalConfig()
 
 	_, index, ok := lo.FindIndexOf[Folder](c.Folders, func(folder Folder) bool {
-		return folder.Path == path
+		return strings.TrimRight(folder.Path, "/") == strings.TrimRight(path, "/")
 	})
 
 	return ok, index

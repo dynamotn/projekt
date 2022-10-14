@@ -2,6 +2,7 @@ package root
 
 import (
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -13,12 +14,12 @@ func NewFolderAddCmd(out io.Writer) *cobra.Command {
 	o := &lazypath.Folder{}
 
 	cmd := &cobra.Command{
-		Use:   "add [folder path]",
-		Short: "Add your project folder to config",
-		Args:  cobra.ExactArgs(1),
+		Use:     "add [folder path]",
+		Short:   "Add your project folder to config",
+		Args:    cobra.ExactArgs(1),
 		Aliases: []string{"a"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			o.Path = args[0]
+			o.Path = strings.TrimRight(args[0], "/")
 			return folderutil.ImportFolderToConfig(o)
 		},
 	}

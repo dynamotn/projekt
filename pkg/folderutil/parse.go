@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
@@ -31,7 +32,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 			re := regexp.MustCompile(folder.GetRegexMatch())
 			fileInfo, err := ioutil.ReadDir(folder.Path)
 			if err != nil {
-				cli.Warning("Cannot read folder " + folder.Path, err)
+				cli.Warning("Cannot read folder "+folder.Path, err)
 				continue
 			}
 
@@ -62,7 +63,7 @@ func appendToParsedFolder(list []ParsedFolder, prefix string, folderPath string,
 	}
 
 	shortName := prefix + childFolderName
-	childFolderPath := filepath.Join(folderPath, childFolderName)
+	childFolderPath := strings.TrimRight(filepath.Join(folderPath, childFolderName), "/")
 	if childFolderName == "" {
 		shortName = prefix + filepath.Base(folderPath)
 	}
