@@ -4,13 +4,11 @@ INSTALL_PATH  ?= /usr/local/bin
 TARGETS        = darwin/amd64 darwin/arm64 linux/amd64 linux/386 linux/arm linux/arm64 windows/amd64
 
 # The version is of the format Major.Minor.Patch[-Prerelease][+BuildMetadata]
-VERSION    = 0.1.0
 GIT_COMMIT = $(shell git rev-parse HEAD)
 GIT_SHA    = $(shell git rev-parse --short HEAD)
 GIT_TAG    = $(shell git describe --tags --abbrev=0 --exact-match 2>/dev/null)
 GIT_DIRTY  = $(shell test -n "`git status --porcelain`" && echo "dirty" || echo "clean")
 
-LDFLAGS += -X gitlab.com/dynamo.foss/projekt/internal/version.version=${VERSION}
 LDFLAGS += -X gitlab.com/dynamo.foss/projekt/internal/version.gitCommit=${GIT_COMMIT}
 LDFLAGS += -X gitlab.com/dynamo.foss/projekt/internal/version.gitTreeState=${GIT_DIRTY}
 LDFLAGS += $(EXT_LDFLAGS)
@@ -54,7 +52,6 @@ all: install clean doc
 
 .PHONY: info
 info:
-	 @echo "Version:           ${VERSION}"
 	 @echo "Git Tag:           ${GIT_TAG}"
 	 @echo "Git Commit:        ${GIT_COMMIT}"
 	 @echo "Git Tree State:    ${GIT_DIRTY}"

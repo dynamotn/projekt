@@ -3,7 +3,7 @@ package version
 import "runtime"
 
 var (
-	version      = ""
+	version      = "v0.2.0"
 	gitCommit    = ""
 	gitTreeState = ""
 )
