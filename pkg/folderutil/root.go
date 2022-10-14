@@ -34,3 +34,7 @@ func ListFolders(out io.Writer, isPlain bool) error {
 
 	return cli.EncodeTable(out, table)
 }
+
+func RemoveFolderFromConfig(path string) error {
+	return lazypath.RemoveFromConfig(path)
+}

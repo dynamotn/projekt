@@ -29,22 +29,22 @@ func (f *Folder) GetRegexMatch() string {
 	}
 }
 
-func CheckFolderExist(path string) bool {
+func CheckFolderExist(path string) (bool, int) {
 	unmarshalConfig()
 
-	result := false
-	for _, folder := range c.Folders {
+	for index, folder := range c.Folders {
 		if folder.Path == path {
-			return true
+			return true, index
 		}
 	}
-	return result
+	return false, -1
 }
 
 func (f *Folder) AddToConfig() error {
 	unmarshalConfig()
+	isExisted, _ := CheckFolderExist(f.Path)
 
-	if CheckFolderExist(f.Path) {
+	if isExisted {
 		fmt.Println(f.Path + " is already existed!")
 		return nil
 	}
@@ -58,5 +58,27 @@ func (f *Folder) AddToConfig() error {
 	}
 
 	fmt.Println("Added " + f.Path + " to config")
+	return nil
+}
+
+func RemoveFromConfig(path string) error {
+	unmarshalConfig()
+
+	isExisted, index := CheckFolderExist(path)
+
+	if !isExisted {
+		fmt.Println(path + " wasn't added as project!")
+		return nil
+	}
+
+	c.Folders = append(c.Folders[:index], c.Folders[index+1:]...)
+	viper.Set("folders", c.Folders)
+	err := viper.WriteConfig()
+	if err != nil {
+		cli.Error("Failed to write config", err)
+		return err
+	}
+
+	fmt.Println("Removed " + path + " from config")
 	return nil
 }
