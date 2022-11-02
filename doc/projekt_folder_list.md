@@ -9,8 +9,10 @@ projekt folder list [flags]
 ### Options
 
 ```
-  -h, --help    help for list
-  -p, --plain   Show only plain folders and their prefix instead of auto parse format
+  -h, --help         help for list
+      --no-headers   Don't print headers
+  -p, --plain        Show only plain folders and their prefix instead of auto parse format
+  -s, --short-only   When show auto parse folders, show only short name of folders
 ```
 
 ### Options inherited from parent commands

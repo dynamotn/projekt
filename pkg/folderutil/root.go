@@ -3,8 +3,8 @@ package folderutil
 import (
 	"io"
 
-	"github.com/gosuri/uitable"
 	"github.com/fatih/color"
+	"github.com/gosuri/uitable"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
@@ -14,23 +14,35 @@ func ImportFolderToConfig(f *lazypath.Folder) error {
 	return f.AddToConfig()
 }
 
-func ListFolders(out io.Writer, isPlain bool) error {
+func ListFolders(out io.Writer, isPlain bool, showOnlyShortName bool, noHeaders bool) error {
 	table := uitable.New()
 	green := color.New(color.FgGreen).SprintFunc()
 
 	if isPlain {
-		table.AddRow(green("PATH"), green("PREFIX"), green("REGEX"), green("PRIORITY"), green("IS WORKSPACE"))
+		if !noHeaders {
+			table.AddRow(green("PATH"), green("PREFIX"), green("REGEX"), green("PRIORITY"), green("IS WORKSPACE"))
+		}
 		for _, folder := range lazypath.GetConfig().Folders {
 			table.AddRow(folder.Path, folder.Prefix, folder.GetRegexMatch(), folder.Priority, folder.IsWorkspace)
 		}
 	} else {
-		table.AddRow(green("SHORT NAME"), green("PATH"), green("WORKSPACE PATH"))
+		if !noHeaders {
+			if showOnlyShortName {
+				table.AddRow(green("SHORT NAME"))
+			} else {
+				table.AddRow(green("SHORT NAME"), green("PATH"), green("WORKSPACE PATH"))
+			}
+		}
 		folders, err := ParseConfig(lazypath.GetConfig())
 		if err != nil {
 			return err
 		}
 		for _, folder := range folders {
-			table.AddRow(folder.ShortName, folder.Path, folder.Workspace)
+			if showOnlyShortName {
+				table.AddRow(folder.ShortName)
+			} else {
+				table.AddRow(folder.ShortName, folder.Path, folder.Workspace)
+			}
 		}
 	}
 

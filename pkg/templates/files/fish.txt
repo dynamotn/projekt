@@ -13,3 +13,26 @@ function pj --description "Jump to a project"
     return 1
   end
 end
+
+function __pj_needs_command
+  set cmd (commandline -opc)
+  if [ (count $cmd) -eq 1 ]
+    return 0
+  else
+    # Skip first word because it's "pj" or a wrapper
+    for c in $cmd[2..-1]
+      switch $c
+        # We assume that any other token that's not an argument to a general option is a command
+        case "*"
+          return 1
+      end
+    end
+    return 0
+  end
+  return 1
+end
+
+projekt folder list --no-headers --short-only | while read -l project
+  set -l name (basename $project)
+  complete -f -c pj -n '__pj_needs_command' -a $name -d "Change to $project folder"
+end
