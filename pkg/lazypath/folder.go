@@ -35,7 +35,7 @@ func (f *Folder) GetRegexMatch() string {
 func CheckFolderExist(path string) (bool, int) {
 	unmarshalConfig()
 
-	_, index, ok := lo.FindIndexOf[Folder](c.Folders, func(folder Folder) bool {
+	_, index, ok := lo.FindIndexOf(c.Folders, func(folder Folder) bool {
 		return strings.TrimRight(folder.Path, "/") == strings.TrimRight(path, "/")
 	})
 

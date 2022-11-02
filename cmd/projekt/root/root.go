@@ -22,6 +22,7 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 	cli.GetEnv().AddFlags(f)
 
 	rootCmd.AddCommand(
+		NewInitCmd(out),
 		NewFolderCmd(out),
 		NewTemplateCmd(out),
 		NewBoilerplateCmd(out),

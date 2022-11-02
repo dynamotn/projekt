@@ -1,0 +1,17 @@
+#!/bin/bash
+# vim:filetype=sh
+function pj() {
+  if [ $# -ne 1 ]; then
+    return 1
+  fi
+
+  local target
+  target=$(projekt folder get "$1")
+  if [ -d "$target" ]; then
+    cd "$target" || return 1
+    [ "$TMUX" != "" ] && tmux rename-window "$1"
+  else
+    echo "No such project: $1"
+    return 1
+  fi
+}

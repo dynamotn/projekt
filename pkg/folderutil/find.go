@@ -17,7 +17,7 @@ func FindFolderByShortName(out io.Writer, shortName string) error {
 		return err
 	}
 
-	result, _ := lo.Find[ParsedFolder](parsedFolders, func(pFolder ParsedFolder) bool {
+	result, _ := lo.Find(parsedFolders, func(pFolder ParsedFolder) bool {
 		return pFolder.ShortName == shortName
 	})
 

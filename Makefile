@@ -13,11 +13,6 @@ LDFLAGS += -X gitlab.com/dynamo.foss/projekt/internal/version.gitCommit=${GIT_CO
 LDFLAGS += -X gitlab.com/dynamo.foss/projekt/internal/version.gitTreeState=${GIT_DIRTY}
 LDFLAGS += $(EXT_LDFLAGS)
 
-.PHONY: pj
-pj:
-	@mkdir -p '$(BINARY_FOLDER)'
-	go build -ldflags '$(LDFLAGS)' -o '$(BINARY_FOLDER)'/pj $(CURDIR)/cmd/pj/main.go
-
 .PHONY: t
 t:
 	@mkdir -p '$(BINARY_FOLDER)'
@@ -38,7 +33,7 @@ clean:
 	@rm -rf '$(BINARY_FOLDER)'
 
 .PHONY: install
-install: pj t b projekt
+install: t b projekt
 	@install '$(BINARY_FOLDER)'/* '$(INSTALL_PATH)'
 
 .PHONY: doc
