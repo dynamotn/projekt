@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 
+	"github.com/OpenPeeDeeP/xdg"
 	"github.com/spf13/viper"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
@@ -40,17 +41,11 @@ func InitConfig() {
 		// Use config file from the flag.
 		viper.SetConfigFile(CfgFile)
 	} else {
-		// Find home directory.
-		home, err := os.UserHomeDir()
-		if err != nil {
-			cli.Error("Failed to detech home user", err)
-		}
-
 		// Search config in home directory with name ".cobra" (without extension).
-		viper.AddConfigPath(home + "/.projekt")
+		viper.AddConfigPath(filepath.Join(xdg.ConfigHome(), "projekt"))
 		viper.SetConfigType("yaml")
 		viper.SetConfigName("config")
-		CfgFile = home + "/.projekt/config.yaml"
+		CfgFile = filepath.Join(xdg.ConfigHome(), "projekt", "config.yaml")
 	}
 
 	viper.AutomaticEnv()
