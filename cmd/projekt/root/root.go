@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	folder "gitlab.com/dynamo.foss/projekt/cmd/projekt/folder"
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
@@ -23,7 +24,7 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 
 	rootCmd.AddCommand(
 		NewInitCmd(out),
-		NewFolderCmd(out),
+		folder.NewFolderCmd(out),
 		NewTemplateCmd(out),
 		NewBoilerplateCmd(out),
 		cli.NewVersionCmd(out),

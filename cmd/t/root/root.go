@@ -6,12 +6,28 @@ import (
 
 	"github.com/spf13/cobra"
 
-	projekt "gitlab.com/dynamo.foss/projekt/cmd/projekt/root"
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
+func NewProjektTemplateCmd(out io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "template",
+		Aliases: []string{"t", "tpl"},
+		Short:   "Create a template file from various sources",
+	}
+
+	cmd.AddCommand()
+
+	cli.SetColorAndStyles(cmd)
+	return cmd
+}
+
 func NewRootCmd(out io.Writer) *cobra.Command {
-	rootCmd := projekt.NewFastTemplateCmd(out)
+	rootCmd := NewProjektTemplateCmd(out)
+
+	rootCmd.Use = "t"
+	rootCmd.Aliases = []string{}
+	rootCmd.SilenceUsage = true
 
 	f := rootCmd.PersistentFlags()
 	cli.GetEnv().AddFlags(f)

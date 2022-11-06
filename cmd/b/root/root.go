@@ -6,12 +6,26 @@ import (
 
 	"github.com/spf13/cobra"
 
-	projekt "gitlab.com/dynamo.foss/projekt/cmd/projekt/root"
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
+func NewProjektBoilerplateCmd(out io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "boilerplate",
+		Aliases: []string{"b", "bpl"},
+		Short:   "Create boilerplate project folder of a language/framework/tool...",
+	}
+
+	cli.SetColorAndStyles(cmd)
+	return cmd
+}
+
 func NewRootCmd(out io.Writer) *cobra.Command {
-	rootCmd := projekt.NewFastBoilerplateCmd(out)
+	rootCmd := NewProjektBoilerplateCmd(out)
+
+	rootCmd.Use = "b"
+	rootCmd.Aliases = []string{}
+	rootCmd.SilenceUsage = true
 
 	f := rootCmd.PersistentFlags()
 	cli.GetEnv().AddFlags(f)
