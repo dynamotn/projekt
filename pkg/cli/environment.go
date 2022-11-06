@@ -2,7 +2,6 @@ package cli
 
 import (
 	"os"
-	"strconv"
 
 	"github.com/spf13/pflag"
 )
@@ -12,16 +11,15 @@ var (
 )
 
 type EnvSettings struct {
-	//Debug indicates whether or not Projekt is running in Debug mode.
-	Debug bool
+	LogLevel string
 }
 
 func init() {
-	env.Debug, _ = strconv.ParseBool(os.Getenv("PROJEKT_DEBUG"))
+	env.LogLevel = os.Getenv("PROJEKT_LOG_LEVEL")
 }
 
 func (e *EnvSettings) AddFlags(fs *pflag.FlagSet) {
-	fs.BoolVarP(&e.Debug, "debug", "d", false, "Enable verbose ouput")
+	fs.StringVarP(&e.LogLevel, "verbose", "v", "info", "Log level, available options are: (debug, info, error)")
 }
 
 func GetEnv() *EnvSettings {

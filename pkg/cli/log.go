@@ -13,7 +13,7 @@ func InitLogging() {
 }
 
 func Debug(v ...interface{}) {
-	if GetEnv().Debug {
+	if GetEnv().LogLevel == "debug" {
 		cyan := color.New(color.FgCyan).SprintFunc()
 		format := fmt.Sprintf(cyan("[debug] %s\n"), "%+v")
 		log.Output(2, fmt.Sprintf(format, v...))
@@ -21,9 +21,11 @@ func Debug(v ...interface{}) {
 }
 
 func Warning(message string, v ...interface{}) {
-	yellow := color.New(color.FgYellow).SprintFunc()
-	format := fmt.Sprintf(yellow("WARNING: %s\n%s\n"), message, "%+v")
-	fmt.Fprintf(os.Stderr, format, v...)
+	if GetEnv().LogLevel == "debug" || GetEnv().LogLevel == "info" {
+		yellow := color.New(color.FgYellow).SprintFunc()
+		format := fmt.Sprintf(yellow("WARNING: %s\n%s\n"), message, "%+v")
+		fmt.Fprintf(os.Stderr, format, v...)
+	}
 }
 
 func Error(message string, v ...interface{}) {

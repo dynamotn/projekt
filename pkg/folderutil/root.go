@@ -10,24 +10,31 @@ import (
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
 
+type ListOption struct {
+	IsPlain    bool
+	ShortOnly  bool
+	NoHeaders  bool
+	NoWarnings bool
+}
+
 func ImportFolderToConfig(f *lazypath.Folder) error {
 	return f.AddToConfig()
 }
 
-func ListFolders(out io.Writer, isPlain bool, showOnlyShortName bool, noHeaders bool) error {
+func ListFolders(out io.Writer, o *ListOption) error {
 	table := uitable.New()
 	green := color.New(color.FgGreen).SprintFunc()
 
-	if isPlain {
-		if !noHeaders {
+	if o.IsPlain {
+		if !o.NoHeaders {
 			table.AddRow(green("PATH"), green("PREFIX"), green("REGEX"), green("PRIORITY"), green("IS WORKSPACE"))
 		}
 		for _, folder := range lazypath.GetConfig().Folders {
 			table.AddRow(folder.Path, folder.Prefix, folder.GetRegexMatch(), folder.Priority, folder.IsWorkspace)
 		}
 	} else {
-		if !noHeaders {
-			if showOnlyShortName {
+		if !o.NoHeaders {
+			if o.ShortOnly {
 				table.AddRow(green("SHORT NAME"))
 			} else {
 				table.AddRow(green("SHORT NAME"), green("PATH"), green("WORKSPACE PATH"))
@@ -38,7 +45,7 @@ func ListFolders(out io.Writer, isPlain bool, showOnlyShortName bool, noHeaders 
 			return err
 		}
 		for _, folder := range folders {
-			if showOnlyShortName {
+			if o.ShortOnly {
 				table.AddRow(folder.ShortName)
 			} else {
 				table.AddRow(folder.ShortName, folder.Path, folder.Workspace)
