@@ -3,6 +3,8 @@ module gitlab.com/dynamo.foss/projekt
 go 1.18
 
 require (
+	github.com/Masterminds/sprig v2.22.0+incompatible
+	github.com/OpenPeeDeeP/xdg v1.0.0
 	github.com/fatih/color v1.13.0
 	github.com/gosuri/uitable v0.0.4
 	github.com/samber/lo v1.33.0
@@ -14,8 +16,6 @@ require (
 require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
-	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
-	github.com/OpenPeeDeeP/xdg v1.0.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/google/uuid v1.1.2 // indirect
