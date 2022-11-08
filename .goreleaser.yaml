@@ -1,0 +1,83 @@
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+builds:
+  - main: ./cmd/projekt
+    id: projekt
+    binary: projekt
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - "386"
+      - amd64
+      - arm
+      - arm64
+    ldflags:
+      - -s -w
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.version={{.Version}}
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitCommit={{.Commit}}
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitTreeState=clean
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.buildTime={{.Timestamp}}
+  - main: ./cmd/t
+    id: t
+    binary: t
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - "386"
+      - amd64
+      - arm
+      - arm64
+    ldflags:
+      - -s -w
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.version={{.Version}}
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitCommit={{.Commit}}
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitTreeState=clean
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.buildTime={{.Timestamp}}
+  - main: ./cmd/b
+    id: b
+    binary: b
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - "386"
+      - amd64
+      - arm
+      - arm64
+    ldflags:
+      - -s -w
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.version={{.Version}}
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitCommit={{.Commit}}
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitTreeState=clean
+      - -X gitlab.com/dynamo.foss/projekt/internal/version.buildTime={{.Timestamp}}
+archives:
+  - replacements:
+      darwin: MacOS
+      linux: Linux
+      386: i386
+      amd64: x86_64
+    format: tar.gz
+release:
+  github:
+    owner: dynamotn
+    name: projekt
+checksum:
+  name_template: 'CHECKSUMS'
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'

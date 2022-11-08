@@ -10,6 +10,7 @@ import (
 
 func SetColorAndStyles(cmd *cobra.Command) {
 	cobra.AddTemplateFunc("StyleHeading", color.New(color.FgGreen).SprintFunc())
+	cobra.AddTemplateFunc("Name", color.New(color.FgBlue).SprintFunc())
 
 	usageTemplate := cmd.UsageTemplate()
 	usageTemplate = strings.NewReplacer(
