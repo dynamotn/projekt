@@ -2,6 +2,7 @@ package folderutil
 
 import (
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -37,7 +38,9 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 			}
 
 			for _, f := range fileInfo {
-				if !f.IsDir() {
+				if !f.IsDir() && f.Mode()&os.ModeSymlink == 0 {
+					cli.Debug("Not is directory or symlink: " + f.Name())
+					cli.Debug(f.Mode().String())
 					continue
 				}
 				if !re.MatchString(f.Name()) {
