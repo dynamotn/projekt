@@ -1,3 +1,4 @@
+version: 2
 before:
   hooks:
     - go mod tidy
@@ -61,11 +62,13 @@ builds:
       - -X gitlab.com/dynamo.foss/projekt/internal/version.gitTreeState=clean
       - -X gitlab.com/dynamo.foss/projekt/internal/version.buildTime={{.Timestamp}}
 archives:
-  - replacements:
-      darwin: MacOS
-      linux: Linux
-      386: i386
-      amd64: x86_64
+  - name_template: >-
+      {{- .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end -}}
     format: tar.gz
 release:
   github:
