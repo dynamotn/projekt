@@ -9,6 +9,7 @@ function pj() {
   target=$(projekt folder get "$1")
   if [ -d "$target" ]; then
     cd "$target" || return 1
+    [ "$ZELLIJ" != "" ] && zellij action rename-pane "$1"
     [ "$TMUX" != "" ] && tmux rename-window "$1"
   else
     echo "No such project: $1"
