@@ -19,7 +19,7 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 	}
 
 	f := rootCmd.PersistentFlags()
-	f.StringVar(&lazypath.CfgFile, "config", "", "config file (default is $HOME/.projekt/config.yaml)")
+	f.StringVar(&lazypath.CfgFile, "config", "", "config file (default is $XDG_CONFIG_HOME/projekt/config.yaml)")
 	cli.GetEnv().AddFlags(f)
 
 	rootCmd.AddCommand(
