@@ -7,7 +7,7 @@ require (
 	github.com/OpenPeeDeeP/xdg v1.0.0
 	github.com/fatih/color v1.18.0
 	github.com/gosuri/uitable v0.0.4
-	github.com/samber/lo v1.33.0
+	github.com/samber/lo v1.51.0
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.20.1
@@ -39,8 +39,7 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/crypto v0.32.0 // indirect
-	golang.org/x/exp v0.0.0-20221028150844-83b7d23a625f // indirect
 	golang.org/x/sys v0.29.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
