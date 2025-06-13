@@ -1,0 +1,19 @@
+{
+  "lspconfig": {
+    "sonarlint": {
+      "sonarlint.rules": {},
+      "sonarlint.connectedMode.connections.sonarcloud": [
+        {
+          "connectionId": "sonarcloud_personal",
+          "region": "EU",
+          "organizationKey": "dynamotn",
+          "disableNotifications": false
+        }
+      ],
+      "sonarlint.connectedMode.project": {
+        "connectionId": "sonarcloud_personal",
+        "projectKey": "dynamotn_projekt"
+      }
+    }
+  }
+}
