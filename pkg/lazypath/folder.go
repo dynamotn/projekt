@@ -10,7 +10,7 @@ import (
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
-const DEFAULT_REGEX_WORKSPACE = ".+"
+const defaultRegexWorkspace = `^[^.].+`
 
 type Folder struct {
 	Path        string
@@ -27,7 +27,7 @@ func (f *Folder) GetRegexMatch() string {
 		if f.RegexMatch != "" {
 			return f.RegexMatch
 		} else {
-			return DEFAULT_REGEX_WORKSPACE
+			return defaultRegexWorkspace
 		}
 	}
 }

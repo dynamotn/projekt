@@ -1,7 +1,6 @@
 package folderutil
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,6 +14,25 @@ type ParsedFolder struct {
 	ShortName string
 	Path      string
 	Workspace string
+}
+
+func isDirOrSymlinkToDir(path string) (bool, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return false, err
+	}
+
+	if info.Mode()&os.ModeSymlink != 0 {
+		realPath, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return false, err
+		}
+		info, err = os.Stat(realPath)
+		if err != nil {
+			return false, err
+		}
+	}
+	return info.IsDir(), nil
 }
 
 func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
@@ -31,24 +49,25 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 			result = appendToParsedFolder(result, prefix, folder.Path, "")
 		} else {
 			re := regexp.MustCompile(folder.GetRegexMatch())
-			fileInfo, err := ioutil.ReadDir(folder.Path)
+			dirEntry, err := os.ReadDir(folder.Path)
 			if err != nil {
 				cli.Warning("Cannot read folder "+folder.Path, err)
 				continue
 			}
 
-			for _, f := range fileInfo {
-				if !f.IsDir() && f.Mode()&os.ModeSymlink == 0 {
-					cli.Debug("Not is directory or symlink: " + f.Name())
-					cli.Debug(f.Mode().String())
+			for _, entry := range dirEntry {
+				fullPath := filepath.Join(folder.Path, entry.Name())
+				ok, err := isDirOrSymlinkToDir(fullPath)
+				if err != nil || !ok {
+					cli.Debug("Not is directory or symlink: " + entry.Name())
 					continue
 				}
-				if !re.MatchString(f.Name()) {
-					cli.Debug("Not Match: " + f.Name())
+				if !re.MatchString(entry.Name()) {
+					cli.Debug("Not Match: " + entry.Name())
 					continue
 				}
-				cli.Debug("Match: " + f.Name())
-				result = appendToParsedFolder(result, prefix, folder.Path, f.Name())
+				cli.Debug("Match: " + entry.Name())
+				result = appendToParsedFolder(result, prefix, folder.Path, entry.Name())
 			}
 		}
 	}
