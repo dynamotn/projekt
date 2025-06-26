@@ -6,7 +6,7 @@ function pj() {
   fi
 
   local target
-  target=$(projekt folder get "$1")
+  target=$(projekt folder get --verbose=error "$1")
   if [ -d "$target" ]; then
     cd "$target" || return 1
     [ "$ZELLIJ" != "" ] && zellij action rename-tab "$1"
