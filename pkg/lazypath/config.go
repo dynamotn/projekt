@@ -1,6 +1,23 @@
+// Package lazypath provides configuration management for project folders.
+//
+// It handles loading, saving, and validating folder configurations from YAML files.
+// Folders can be regular project folders or workspaces containing multiple projects.
+//
+// Example usage:
+//
+//	lazypath.InitConfig()
+//	config := lazypath.GetConfig()
+//
+//	folder := &lazypath.Folder{
+//	    Path:        "/home/user/projects/myapp",
+//	    Prefix:      "app",
+//	    IsWorkspace: false,
+//	}
+//	err := folder.AddToConfig()
 package lazypath
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +33,7 @@ var (
 	c       Config
 )
 
+// Config represents the application configuration
 type Config struct {
 	Folders []Folder
 }
@@ -29,13 +47,34 @@ func unmarshalConfig() {
 	if err != nil {
 		cli.Error("Unable to decode into struct", err)
 	}
+
+	if err := c.Validate(); err != nil {
+		cli.Warning("Config validation warning", err)
+	}
 }
 
+// Validate checks if the configuration is valid
+func (c *Config) Validate() error {
+	for i, folder := range c.Folders {
+		if folder.Path == "" {
+			return fmt.Errorf("folder at index %d has empty path", i)
+		}
+		if _, err := os.Stat(folder.Path); err != nil {
+			if os.IsNotExist(err) {
+				cli.Debug(fmt.Sprintf("Folder path does not exist: %s", folder.Path))
+			}
+		}
+	}
+	return nil
+}
+
+// GetConfig returns the current configuration
 func GetConfig() Config {
 	unmarshalConfig()
 	return c
 }
 
+// InitConfig initializes the configuration from file or creates a new one
 func InitConfig() {
 	if CfgFile != "" {
 		// Use config file from the flag.

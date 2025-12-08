@@ -10,6 +10,7 @@ import (
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
 
+// ListOption contains options for listing folders
 type ListOption struct {
 	IsPlain    bool
 	ShortOnly  bool
@@ -17,10 +18,12 @@ type ListOption struct {
 	NoWarnings bool
 }
 
+// ImportFolderToConfig adds a folder to the configuration
 func ImportFolderToConfig(f *lazypath.Folder) error {
 	return f.AddToConfig()
 }
 
+// ListFolders displays a list of configured folders in a table format
 func ListFolders(out io.Writer, o *ListOption) error {
 	table := uitable.New()
 	green := color.New(color.FgGreen).SprintFunc()
@@ -56,6 +59,7 @@ func ListFolders(out io.Writer, o *ListOption) error {
 	return cli.EncodeTable(out, table)
 }
 
+// RemoveFolderFromConfig removes a folder from the configuration by path
 func RemoveFolderFromConfig(path string) error {
 	return lazypath.RemoveFromConfig(path)
 }

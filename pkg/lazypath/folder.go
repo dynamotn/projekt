@@ -10,8 +10,9 @@ import (
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
 
-const DEFAULT_REGEX_WORKSPACE = ".+"
+const defaultRegexWorkspace = ".+"
 
+// Folder represents a project folder configuration
 type Folder struct {
 	Path        string
 	Prefix      string
@@ -20,28 +21,30 @@ type Folder struct {
 	Priority    uint16
 }
 
+// GetRegexMatch returns the regex pattern for matching folders
 func (f *Folder) GetRegexMatch() string {
 	if !f.IsWorkspace {
 		return ""
-	} else {
-		if f.RegexMatch != "" {
-			return f.RegexMatch
-		} else {
-			return DEFAULT_REGEX_WORKSPACE
-		}
 	}
+	if f.RegexMatch != "" {
+		return f.RegexMatch
+	}
+	return defaultRegexWorkspace
 }
 
+// CheckFolderExist checks if a folder path exists in the configuration
 func CheckFolderExist(path string) (bool, int) {
 	unmarshalConfig()
 
+	normalizedPath := strings.TrimRight(path, "/")
 	_, index, ok := lo.FindIndexOf(c.Folders, func(folder Folder) bool {
-		return strings.TrimRight(folder.Path, "/") == strings.TrimRight(path, "/")
+		return strings.TrimRight(folder.Path, "/") == normalizedPath
 	})
 
 	return ok, index
 }
 
+// AddToConfig adds the folder to the configuration file
 func (f *Folder) AddToConfig() error {
 	unmarshalConfig()
 	isExisted, _ := CheckFolderExist(f.Path)
@@ -63,6 +66,7 @@ func (f *Folder) AddToConfig() error {
 	return nil
 }
 
+// RemoveFromConfig removes a folder from the configuration by path
 func RemoveFromConfig(path string) error {
 	unmarshalConfig()
 
