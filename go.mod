@@ -7,7 +7,7 @@ require (
 	github.com/OpenPeeDeeP/xdg v1.0.0
 	github.com/fatih/color v1.18.0
 	github.com/gosuri/uitable v0.0.4
-	github.com/samber/lo v1.51.0
+	github.com/samber/lo v1.52.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.20.1
