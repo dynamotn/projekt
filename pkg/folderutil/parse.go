@@ -51,7 +51,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 			re := regexp.MustCompile(folder.GetRegexMatch())
 			dirEntry, err := os.ReadDir(folder.Path)
 			if err != nil {
-				cli.Warning("Cannot read folder "+folder.Path, err)
+				cli.Warn("Cannot read folder %s: %v", folder.Path, err)
 				continue
 			}
 
@@ -59,14 +59,14 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 				fullPath := filepath.Join(folder.Path, entry.Name())
 				ok, err := isDirOrSymlinkToDir(fullPath)
 				if err != nil || !ok {
-					cli.Debug("Not is directory or symlink: " + entry.Name())
+					cli.Debug("Not is directory or symlink: %s", entry.Name())
 					continue
 				}
 				if !re.MatchString(entry.Name()) {
-					cli.Debug("Not Match: " + entry.Name())
+					cli.Debug("Not Match: %s", entry.Name())
 					continue
 				}
-				cli.Debug("Match: " + entry.Name())
+				cli.Debug("Match: %s", entry.Name())
 				result = appendToParsedFolder(result, prefix, folder.Path, entry.Name())
 			}
 		}
@@ -92,7 +92,7 @@ func appendToParsedFolder(list []ParsedFolder, prefix string, folderPath string,
 
 	_, exists := existedName[shortName]
 	if exists {
-		cli.Debug("Not Valid: " + childFolderPath + " with existed short name " + shortName)
+		cli.Debug("Not Valid: %s with existed short name %s", childFolderPath, shortName)
 		return list
 	}
 

@@ -11,7 +11,7 @@ func EncodeTable(out io.Writer, table *uitable.Table) error {
 	raw = append(raw, []byte("\n")...)
 	_, err := out.Write(raw)
 	if err != nil {
-		Error("Unable to write table output", err)
+		Error("Unable to write table output %v", err)
 		return err
 	}
 	return nil

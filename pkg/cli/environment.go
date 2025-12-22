@@ -6,20 +6,26 @@ import (
 	"github.com/spf13/pflag"
 )
 
-var (
-	env = &EnvSettings{}
-)
+var env = &EnvSettings{}
 
 type EnvSettings struct {
 	LogLevel string
 }
 
 func init() {
-	env.LogLevel = os.Getenv("PROJEKT_LOG_LEVEL")
+	// Check for LOG_LEVEL first (standard), then PROJEKT_LOG_LEVEL (legacy)
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = os.Getenv("PROJEKT_LOG_LEVEL")
+	}
+	if logLevel == "" {
+		logLevel = "info" // default level
+	}
+	env.LogLevel = logLevel
 }
 
 func (e *EnvSettings) AddFlags(fs *pflag.FlagSet) {
-	fs.StringVarP(&e.LogLevel, "verbose", "v", "info", "Log level, available options are: (debug, info, error)")
+	fs.StringVarP(&e.LogLevel, "verbose", "v", "info", "Log level, available options are: (trace, debug, info, warn, error, fatal)")
 }
 
 func GetEnv() *EnvSettings {

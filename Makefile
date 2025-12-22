@@ -1,6 +1,6 @@
 BINARY_FOLDER  = $(CURDIR)/bin
 DOC_FOLDER     = $(CURDIR)/doc
-INSTALL_PATH  ?= /usr/local/bin
+INSTALL_PATH  ?= $(HOME)/.local/bin
 TARGETS        = darwin/amd64 darwin/arm64 darwin/386 darwin/arm linux/amd64 linux/386 linux/arm linux/arm64
 
 # The version is of the format Major.Minor.Patch[-Prerelease][+BuildMetadata]
@@ -34,8 +34,11 @@ projekt:
 clean:
 	@rm -rf '$(BINARY_FOLDER)'
 
+.PHONY: build
+build: t b projekt
+
 .PHONY: install
-install: t b projekt
+install: build
 	@install '$(BINARY_FOLDER)'/* '$(INSTALL_PATH)'
 
 .PHONY: doc

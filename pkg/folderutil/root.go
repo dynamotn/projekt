@@ -11,10 +11,9 @@ import (
 )
 
 type ListOption struct {
-	IsPlain    bool
-	ShortOnly  bool
-	NoHeaders  bool
-	NoWarnings bool
+	IsPlain   bool
+	ShortOnly bool
+	NoHeaders bool
 }
 
 func ImportFolderToConfig(f *lazypath.Folder) error {

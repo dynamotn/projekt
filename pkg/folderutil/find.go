@@ -13,7 +13,7 @@ import (
 func FindFolderByShortName(out io.Writer, shortName string) error {
 	parsedFolders, err := ParseConfig(lazypath.GetConfig())
 	if err != nil {
-		cli.Error("Can't parse config", err)
+		cli.Error("Can't parse config %v", err)
 		return err
 	}
 
@@ -21,6 +21,6 @@ func FindFolderByShortName(out io.Writer, shortName string) error {
 		return pFolder.ShortName == shortName
 	})
 
-	fmt.Fprintln(out, result.Path)
-	return nil
+	_, err = fmt.Fprintln(out, result.Path)
+	return err
 }

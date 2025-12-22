@@ -1,7 +1,6 @@
 package lazypath
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/samber/lo"
@@ -47,7 +46,7 @@ func (f *Folder) AddToConfig() error {
 	isExisted, _ := CheckFolderExist(f.Path)
 
 	if isExisted {
-		fmt.Println(f.Path + " is already existed!")
+		cli.Info("%s is already existed!", f.Path)
 		return nil
 	}
 
@@ -55,11 +54,11 @@ func (f *Folder) AddToConfig() error {
 	viper.Set("folders", c.Folders)
 	err := viper.WriteConfig()
 	if err != nil {
-		cli.Error("Failed to write config", err)
+		cli.Error("Failed to write config %v", err)
 		return err
 	}
 
-	fmt.Println("Added " + f.Path + " to config")
+	cli.Info("Added %s to config", f.Path)
 	return nil
 }
 
@@ -69,7 +68,7 @@ func RemoveFromConfig(path string) error {
 	isExisted, index := CheckFolderExist(path)
 
 	if !isExisted {
-		fmt.Println(path + " wasn't added as project!")
+		cli.Info("%s wasn't added as project!", path)
 		return nil
 	}
 
@@ -77,10 +76,10 @@ func RemoveFromConfig(path string) error {
 	viper.Set("folders", c.Folders)
 	err := viper.WriteConfig()
 	if err != nil {
-		cli.Error("Failed to write config", err)
+		cli.Error("Failed to write config %v", err)
 		return err
 	}
 
-	fmt.Println("Removed " + path + " from config")
+	cli.Info("Removed %s from config", path)
 	return nil
 }

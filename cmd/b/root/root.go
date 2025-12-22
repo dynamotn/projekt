@@ -39,7 +39,7 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 
 func Execute() {
 	if err := NewRootCmd(os.Stdout).Execute(); err != nil {
-		cli.Debug(err)
+		cli.Debug("%v", err)
 		os.Exit(1)
 	}
 }

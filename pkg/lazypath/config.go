@@ -27,7 +27,7 @@ func unmarshalConfig() {
 
 	err := viper.Unmarshal(&c)
 	if err != nil {
-		cli.Error("Unable to decode into struct", err)
+		cli.Error("Unable to decode into struct %v", err)
 	}
 }
 
@@ -51,16 +51,16 @@ func InitConfig() {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err == nil {
-		cli.Debug("Using config file: " + viper.ConfigFileUsed())
+		cli.Debug("Using config file: %v", viper.ConfigFileUsed())
 	} else {
 		err := os.MkdirAll(filepath.Dir(CfgFile), os.ModePerm)
 		if err != nil && !os.IsExist(err) {
-			cli.Error("Failed to create folder", err)
+			cli.Error("Failed to create folder %v", err)
 		}
 
 		_, err = os.Create(CfgFile)
 		if err != nil {
-			cli.Error("Failed to create file", err)
+			cli.Error("Failed to create file %v", err)
 		}
 	}
 }
