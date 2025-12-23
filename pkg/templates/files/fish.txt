@@ -35,8 +35,7 @@ end
 
 function __pj_completion
   command projekt folder list --no-headers --no-color --short-only --verbose=error \
-    | tail -n +2 \
-    | head -n -1 \
+    | command sed '1d;$d' \
     | string trim -c '|' \
     | string trim \
     | while read -l project
