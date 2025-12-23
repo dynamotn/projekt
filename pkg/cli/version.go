@@ -68,8 +68,8 @@ func (o *versionOptions) run(out io.Writer) error {
 		}
 		return tt.Execute(out, version.GetBuildInfo())
 	}
-	fmt.Fprintln(out, formatVersion(o.short))
-	return nil
+	_, err := fmt.Fprintln(out, formatVersion(o.short))
+	return err
 }
 
 func formatVersion(short bool) string {

@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// SetColorAndStyles applies color and style templates to cobra commands
 func SetColorAndStyles(cmd *cobra.Command) {
 	cobra.AddTemplateFunc("StyleHeading", color.New(color.FgGreen).SprintFunc())
 	cobra.AddTemplateFunc("Name", color.New(color.FgBlue).SprintFunc())
