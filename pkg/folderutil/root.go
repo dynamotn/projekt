@@ -19,8 +19,7 @@ package folderutil
 import (
 	"io"
 
-	"github.com/fatih/color"
-	"github.com/gosuri/uitable"
+	"github.com/jedib0t/go-pretty/v6/table"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
@@ -31,6 +30,7 @@ type ListOption struct {
 	IsPlain   bool
 	ShortOnly bool
 	NoHeaders bool
+	NoColor   bool
 }
 
 // ImportFolderToConfig adds a folder to the configuration
@@ -40,22 +40,21 @@ func ImportFolderToConfig(f *lazypath.Folder) error {
 
 // ListFolders displays a list of configured folders in a table format
 func ListFolders(out io.Writer, o *ListOption) error {
-	table := uitable.New()
-	green := color.New(color.FgGreen).SprintFunc()
+	tw := table.NewWriter()
 
 	if o.IsPlain {
 		if !o.NoHeaders {
-			table.AddRow(green("PATH"), green("PREFIX"), green("REGEX"), green("PRIORITY"), green("IS WORKSPACE"))
+			tw.AppendHeader(table.Row{"PATH", "PREFIX", "REGEX", "PRIORITY", "IS WORKSPACE"})
 		}
 		for _, folder := range lazypath.GetConfig().Folders {
-			table.AddRow(folder.Path, folder.Prefix, folder.GetRegexMatch(), folder.Priority, folder.IsWorkspace)
+			tw.AppendRow(table.Row{folder.Path, folder.Prefix, folder.GetRegexMatch(), folder.Priority, folder.IsWorkspace})
 		}
 	} else {
 		if !o.NoHeaders {
 			if o.ShortOnly {
-				table.AddRow(green("SHORT NAME"))
+				tw.AppendHeader(table.Row{"SHORT NAME"})
 			} else {
-				table.AddRow(green("SHORT NAME"), green("PATH"), green("WORKSPACE PATH"))
+				tw.AppendHeader(table.Row{"SHORT NAME", "PATH", "WORKSPACE PATH"})
 			}
 		}
 		folders, err := ParseConfig(lazypath.GetConfig())
@@ -64,14 +63,14 @@ func ListFolders(out io.Writer, o *ListOption) error {
 		}
 		for _, folder := range folders {
 			if o.ShortOnly {
-				table.AddRow(folder.ShortName)
+				tw.AppendRow(table.Row{folder.ShortName})
 			} else {
-				table.AddRow(folder.ShortName, folder.Path, folder.Workspace)
+				tw.AppendRow(table.Row{folder.ShortName, folder.Path, folder.Workspace})
 			}
 		}
 	}
 
-	return cli.EncodeTable(out, table)
+	return cli.EncodeTable(out, tw, o.NoColor)
 }
 
 // RemoveFolderFromConfig removes a folder from the configuration by path

@@ -10,6 +10,7 @@ projekt folder list [flags]
 
 ```
   -h, --help         help for list
+      --no-color     Don't use color
       --no-headers   Don't print headers
   -p, --plain        Show only plain folders and their prefix instead of auto parse format
   -s, --short-only   When show auto parse folders, show only short name of folders

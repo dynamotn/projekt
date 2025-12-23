@@ -34,7 +34,12 @@ function __pj_needs_command
 end
 
 function __pj_completion
-  command projekt folder list --no-headers --short-only --verbose=error | while read -l project
+  command projekt folder list --no-headers --no-color --short-only --verbose=error \
+    | tail -n +2 \
+    | head -n -1 \
+    | string trim -c '|' \
+    | string trim \
+    | while read -l project
     set -l name (basename $project)
     complete -f -c pj -n '__pj_needs_command' -a $name -d "Change to $project folder"
   end
