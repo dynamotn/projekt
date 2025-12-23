@@ -419,3 +419,40 @@ func TestLogFunctionsWithDisabledLevel(t *testing.T) {
 		})
 	}
 }
+
+func TestFatal_Coverage(t *testing.T) {
+	// We cannot actually test Fatal executing as it would exit the test
+	// But we can test the code path and ensure it doesn't panic when level check passes
+	originalLogLevel := os.Getenv("LOG_LEVEL")
+	originalLogger := logger
+	defer func() {
+		if originalLogLevel != "" {
+			os.Setenv("LOG_LEVEL", originalLogLevel)
+		} else {
+			os.Unsetenv("LOG_LEVEL")
+		}
+		logger = originalLogger
+	}()
+
+	// Test that Fatal initializes logger when nil and level is enabled
+	// We set level to FATAL so isLevelEnabled returns true
+	os.Setenv("LOG_LEVEL", FATAL)
+	env = &EnvSettings{
+		LogLevel: FATAL,
+	}
+	logger = nil
+
+	// We can't actually call Fatal as it would exit
+	// Instead we test isLevelEnabled for FATAL
+	if !isLevelEnabled(FATAL) {
+		t.Error("isLevelEnabled(FATAL) should return true when log level is FATAL")
+	}
+
+	// Verify logger would be initialized
+	if logger == nil {
+		InitLogging()
+		if logger == nil {
+			t.Error("InitLogging() should initialize logger")
+		}
+	}
+}

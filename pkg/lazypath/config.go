@@ -66,6 +66,16 @@ func GetConfig() Config {
 	return c
 }
 
+// SetTestConfig sets the configuration for testing purposes
+func SetTestConfig(config Config) {
+	c = config
+}
+
+// ResetTestConfig resets the configuration to empty state
+func ResetTestConfig() {
+	c = Config{}
+}
+
 // InitConfig initializes the configuration from file or creates a new one
 func InitConfig() {
 	if CfgFile != "" {

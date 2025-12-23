@@ -338,3 +338,172 @@ func TestCheckFolderGitRepos(t *testing.T) {
 		t.Errorf("checkFolderGitRepos failed: %v", err)
 	}
 }
+
+func TestGetURLType(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want string
+	}{
+		{
+			name: "https url",
+			url:  "https://github.com/org/repo.git",
+			want: "HTTPS",
+		},
+		{
+			name: "http url",
+			url:  "http://github.com/org/repo.git",
+			want: "HTTPS",
+		},
+		{
+			name: "ssh url",
+			url:  "git@github.com:org/repo.git",
+			want: "SSH",
+		},
+		{
+			name: "ssh:// url",
+			url:  "ssh://git@github.com/org/repo.git",
+			want: "SSH",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getURLType(tt.url)
+			if got != tt.want {
+				t.Errorf("getURLType(%s) = %s, want %s", tt.url, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSyncGitRepos(t *testing.T) {
+	tempDir := t.TempDir()
+
+	c = Config{
+		Folders: []Folder{
+			{
+				Path:        tempDir,
+				IsWorkspace: true,
+				Git: &GitConfig{
+					Host:  "github",
+					Group: "test",
+					Repos: []GitRepo{
+						{Name: "repo1", Path: "repo1"},
+					},
+				},
+			},
+		},
+		GitServers: []GitServer{
+			{
+				Name:         "github",
+				Type:         "github",
+				HTTPS:        "https://github.com",
+				SSH:          "git@github.com",
+				PreferGitSSH: true,
+			},
+		},
+	}
+
+	err := SyncGitRepos(true)
+	if err != nil {
+		t.Errorf("SyncGitRepos(dryRun=true) error = %v", err)
+	}
+}
+
+func TestCheckGitReposStatus(t *testing.T) {
+	tempDir := t.TempDir()
+
+	c = Config{
+		Folders: []Folder{
+			{
+				Path:        tempDir,
+				IsWorkspace: true,
+				Git: &GitConfig{
+					Host:  "github",
+					Group: "test",
+					Repos: []GitRepo{
+						{Name: "repo1", Path: "repo1"},
+					},
+				},
+			},
+		},
+		GitServers: []GitServer{
+			{
+				Name:  "github",
+				Type:  "github",
+				HTTPS: "https://github.com",
+				SSH:   "git@github.com",
+			},
+		},
+	}
+
+	err := CheckGitReposStatus()
+	if err != nil {
+		t.Errorf("CheckGitReposStatus() error = %v", err)
+	}
+}
+
+func TestSyncFolderGitRepos_NoGitConfig(t *testing.T) {
+	folder := Folder{
+		Path:        "/tmp/test",
+		IsWorkspace: true,
+		Git:         nil,
+	}
+
+	err := syncFolderGitRepos(folder, false)
+	if err != nil {
+		t.Errorf("syncFolderGitRepos() with no Git config should not error, got: %v", err)
+	}
+}
+
+func TestCheckFolderGitRepos_NoGitConfig(t *testing.T) {
+	folder := Folder{
+		Path:        "/tmp/test",
+		IsWorkspace: true,
+		Git:         nil,
+	}
+
+	err := checkFolderGitRepos(folder)
+	if err != nil {
+		t.Errorf("checkFolderGitRepos() with no Git config should not error, got: %v", err)
+	}
+}
+
+func TestBuildGitURL_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		server   GitServer
+		group    string
+		repoName string
+		expected string
+	}{
+		{
+			name: "ssh format without @ and ssh:// prefix",
+			server: GitServer{
+				SSH: "gitlab.com",
+			},
+			group:    "group",
+			repoName: "repo",
+			expected: "git@gitlab.com:group/repo.git",
+		},
+		{
+			name: "ssh with @ but no ssh:// prefix",
+			server: GitServer{
+				SSH: "git@gitlab.com:2222",
+			},
+			group:    "group",
+			repoName: "repo",
+			expected: "git@gitlab.com:2222:group/repo.git",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildGitURL(&tt.server, tt.group, tt.repoName)
+			if got != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, got)
+			}
+		})
+	}
+}
