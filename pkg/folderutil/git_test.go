@@ -1,20 +1,22 @@
-package lazypath
+package folderutil
 
 import (
 	"path/filepath"
 	"testing"
+
+	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
 
 func TestGitConfig(t *testing.T) {
 	tests := []struct {
 		name     string
-		folder   Folder
+		folder   lazypath.Folder
 		wantNil  bool
 		wantHost string
 	}{
 		{
 			name: "folder without git config",
-			folder: Folder{
+			folder: lazypath.Folder{
 				Path:        "/tmp/test",
 				IsWorkspace: true,
 			},
@@ -22,13 +24,13 @@ func TestGitConfig(t *testing.T) {
 		},
 		{
 			name: "folder with git config",
-			folder: Folder{
+			folder: lazypath.Folder{
 				Path:        "/tmp/test",
 				IsWorkspace: true,
-				Git: &GitConfig{
+				Git: &lazypath.GitConfig{
 					Host:  "git3",
 					Group: "test/group",
-					Repos: []GitRepo{
+					Repos: []lazypath.GitRepo{
 						{Name: "repo1", Path: "repo1"},
 					},
 				},
@@ -56,12 +58,12 @@ func TestGitConfig(t *testing.T) {
 func TestGitServer(t *testing.T) {
 	tests := []struct {
 		name     string
-		server   GitServer
+		server   lazypath.GitServer
 		expected string
 	}{
 		{
 			name: "gitlab server with ssh format",
-			server: GitServer{
+			server: lazypath.GitServer{
 				Name:  "git3",
 				Type:  "gitlab",
 				HTTPS: "https://git.test.dev",
@@ -71,7 +73,7 @@ func TestGitServer(t *testing.T) {
 		},
 		{
 			name: "github server",
-			server: GitServer{
+			server: lazypath.GitServer{
 				Name:  "github",
 				Type:  "github",
 				HTTPS: "https://github.com",
@@ -93,14 +95,14 @@ func TestGitServer(t *testing.T) {
 func TestBuildGitURL(t *testing.T) {
 	tests := []struct {
 		name     string
-		server   GitServer
+		server   lazypath.GitServer
 		group    string
 		repoName string
 		expected string
 	}{
 		{
 			name: "ssh with port format",
-			server: GitServer{
+			server: lazypath.GitServer{
 				SSH: "ssh://git@git.test.dev:2022",
 			},
 			group:    "GROUP/SUBGROUP",
@@ -109,7 +111,7 @@ func TestBuildGitURL(t *testing.T) {
 		},
 		{
 			name: "standard git format",
-			server: GitServer{
+			server: lazypath.GitServer{
 				SSH: "git@github.com",
 			},
 			group:    "myorg/myteam",
@@ -131,14 +133,14 @@ func TestBuildGitURL(t *testing.T) {
 func TestBuildHTTPSURL(t *testing.T) {
 	tests := []struct {
 		name     string
-		server   GitServer
+		server   lazypath.GitServer
 		group    string
 		repoName string
 		expected string
 	}{
 		{
 			name: "gitlab https",
-			server: GitServer{
+			server: lazypath.GitServer{
 				HTTPS: "https://git.test.dev",
 			},
 			group:    "GROUP/SUBGROUP",
@@ -147,7 +149,7 @@ func TestBuildHTTPSURL(t *testing.T) {
 		},
 		{
 			name: "github https",
-			server: GitServer{
+			server: lazypath.GitServer{
 				HTTPS: "https://github.com",
 			},
 			group:    "myorg/myteam",
@@ -169,7 +171,7 @@ func TestBuildHTTPSURL(t *testing.T) {
 func TestGetGitURLs(t *testing.T) {
 	tests := []struct {
 		name             string
-		server           GitServer
+		server           lazypath.GitServer
 		group            string
 		repoName         string
 		expectedPrimary  string
@@ -177,7 +179,7 @@ func TestGetGitURLs(t *testing.T) {
 	}{
 		{
 			name: "preferGitSSH true",
-			server: GitServer{
+			server: lazypath.GitServer{
 				SSH:          "git@github.com",
 				HTTPS:        "https://github.com",
 				PreferGitSSH: true,
@@ -189,7 +191,7 @@ func TestGetGitURLs(t *testing.T) {
 		},
 		{
 			name: "preferGitSSH false",
-			server: GitServer{
+			server: lazypath.GitServer{
 				SSH:          "git@github.com",
 				HTTPS:        "https://github.com",
 				PreferGitSSH: false,
@@ -216,8 +218,8 @@ func TestGetGitURLs(t *testing.T) {
 
 func TestGetGitServer(t *testing.T) {
 	// Mock config with git servers
-	c = Config{
-		GitServers: []GitServer{
+	lazypath.SetTestConfig(lazypath.Config{
+		GitServers: []lazypath.GitServer{
 			{
 				Name:  "git3",
 				Type:  "gitlab",
@@ -231,7 +233,7 @@ func TestGetGitServer(t *testing.T) {
 				SSH:   "git@github.com",
 			},
 		},
-	}
+	})
 
 	tests := []struct {
 		name     string
@@ -262,7 +264,7 @@ func TestGetGitServer(t *testing.T) {
 				t.Errorf("expected nil, got %v", got)
 			}
 			if !tt.wantNil && got == nil {
-				t.Errorf("expected non-nil GitServer, got nil")
+				t.Errorf("expected non-nil lazypath.GitServer, got nil")
 			}
 			if !tt.wantNil && got.Name != tt.hostName {
 				t.Errorf("expected name %s, got %s", tt.hostName, got.Name)
@@ -274,21 +276,21 @@ func TestGetGitServer(t *testing.T) {
 func TestSyncFolderGitRepos_DryRun(t *testing.T) {
 	tempDir := t.TempDir()
 
-	folder := Folder{
+	folder := lazypath.Folder{
 		Path:        filepath.Join(tempDir, "testfolder"),
 		IsWorkspace: true,
-		Git: &GitConfig{
+		Git: &lazypath.GitConfig{
 			Host:  "github",
 			Group: "test/group",
-			Repos: []GitRepo{
+			Repos: []lazypath.GitRepo{
 				{Name: "repo1", Path: "repo1"},
 			},
 		},
 	}
 
 	// Mock config with git servers
-	c = Config{
-		GitServers: []GitServer{
+	lazypath.SetTestConfig(lazypath.Config{
+		GitServers: []lazypath.GitServer{
 			{
 				Name:  "github",
 				Type:  "github",
@@ -296,7 +298,7 @@ func TestSyncFolderGitRepos_DryRun(t *testing.T) {
 				SSH:   "git@github.com",
 			},
 		},
-	}
+	})
 
 	// Dry run should not clone repos
 	err := syncFolderGitRepos(folder, true)
@@ -308,21 +310,21 @@ func TestSyncFolderGitRepos_DryRun(t *testing.T) {
 func TestCheckFolderGitRepos(t *testing.T) {
 	tempDir := t.TempDir()
 
-	folder := Folder{
+	folder := lazypath.Folder{
 		Path:        tempDir,
 		IsWorkspace: true,
-		Git: &GitConfig{
+		Git: &lazypath.GitConfig{
 			Host:  "github",
 			Group: "test/group",
-			Repos: []GitRepo{
+			Repos: []lazypath.GitRepo{
 				{Name: "nonexistent", Path: "nonexistent"},
 			},
 		},
 	}
 
 	// Mock config with git servers
-	c = Config{
-		GitServers: []GitServer{
+	lazypath.SetTestConfig(lazypath.Config{
+		GitServers: []lazypath.GitServer{
 			{
 				Name:  "github",
 				Type:  "github",
@@ -330,7 +332,7 @@ func TestCheckFolderGitRepos(t *testing.T) {
 				SSH:   "git@github.com",
 			},
 		},
-	}
+	})
 
 	// This should not fail even if repos don't exist
 	err := checkFolderGitRepos(folder)
@@ -380,21 +382,21 @@ func TestGetURLType(t *testing.T) {
 func TestSyncGitRepos(t *testing.T) {
 	tempDir := t.TempDir()
 
-	c = Config{
-		Folders: []Folder{
+	lazypath.SetTestConfig(lazypath.Config{
+		Folders: []lazypath.Folder{
 			{
 				Path:        tempDir,
 				IsWorkspace: true,
-				Git: &GitConfig{
+				Git: &lazypath.GitConfig{
 					Host:  "github",
 					Group: "test",
-					Repos: []GitRepo{
+					Repos: []lazypath.GitRepo{
 						{Name: "repo1", Path: "repo1"},
 					},
 				},
 			},
 		},
-		GitServers: []GitServer{
+		GitServers: []lazypath.GitServer{
 			{
 				Name:         "github",
 				Type:         "github",
@@ -403,7 +405,7 @@ func TestSyncGitRepos(t *testing.T) {
 				PreferGitSSH: true,
 			},
 		},
-	}
+	})
 
 	err := SyncGitRepos(true)
 	if err != nil {
@@ -414,21 +416,21 @@ func TestSyncGitRepos(t *testing.T) {
 func TestCheckGitReposStatus(t *testing.T) {
 	tempDir := t.TempDir()
 
-	c = Config{
-		Folders: []Folder{
+	lazypath.SetTestConfig(lazypath.Config{
+		Folders: []lazypath.Folder{
 			{
 				Path:        tempDir,
 				IsWorkspace: true,
-				Git: &GitConfig{
+				Git: &lazypath.GitConfig{
 					Host:  "github",
 					Group: "test",
-					Repos: []GitRepo{
+					Repos: []lazypath.GitRepo{
 						{Name: "repo1", Path: "repo1"},
 					},
 				},
 			},
 		},
-		GitServers: []GitServer{
+		GitServers: []lazypath.GitServer{
 			{
 				Name:  "github",
 				Type:  "github",
@@ -436,7 +438,7 @@ func TestCheckGitReposStatus(t *testing.T) {
 				SSH:   "git@github.com",
 			},
 		},
-	}
+	})
 
 	err := CheckGitReposStatus()
 	if err != nil {
@@ -445,7 +447,7 @@ func TestCheckGitReposStatus(t *testing.T) {
 }
 
 func TestSyncFolderGitRepos_NoGitConfig(t *testing.T) {
-	folder := Folder{
+	folder := lazypath.Folder{
 		Path:        "/tmp/test",
 		IsWorkspace: true,
 		Git:         nil,
@@ -458,7 +460,7 @@ func TestSyncFolderGitRepos_NoGitConfig(t *testing.T) {
 }
 
 func TestCheckFolderGitRepos_NoGitConfig(t *testing.T) {
-	folder := Folder{
+	folder := lazypath.Folder{
 		Path:        "/tmp/test",
 		IsWorkspace: true,
 		Git:         nil,
@@ -473,14 +475,14 @@ func TestCheckFolderGitRepos_NoGitConfig(t *testing.T) {
 func TestBuildGitURL_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
-		server   GitServer
+		server   lazypath.GitServer
 		group    string
 		repoName string
 		expected string
 	}{
 		{
 			name: "ssh format without @ and ssh:// prefix",
-			server: GitServer{
+			server: lazypath.GitServer{
 				SSH: "gitlab.com",
 			},
 			group:    "group",
@@ -489,7 +491,7 @@ func TestBuildGitURL_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "ssh with @ but no ssh:// prefix",
-			server: GitServer{
+			server: lazypath.GitServer{
 				SSH: "git@gitlab.com:2222",
 			},
 			group:    "group",

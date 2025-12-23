@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
 )
 
 func NewFolderCheckCmd(out io.Writer) *cobra.Command {
@@ -20,7 +20,7 @@ This command will verify:
 - Whether they are valid Git repositories
 - Whether remote URLs match configuration`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return lazypath.CheckGitReposStatus()
+			return folderutil.CheckGitReposStatus()
 		},
 	}
 

@@ -1,4 +1,4 @@
-package lazypath
+package folderutil
 
 import (
 	"fmt"
@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
 
-func getGitServer(hostName string) *GitServer {
+func getGitServer(hostName string) *lazypath.GitServer {
+	c := lazypath.GetConfig()
 	for _, server := range c.GitServers {
 		if server.Name == hostName {
 			return &server
@@ -21,7 +23,7 @@ func getGitServer(hostName string) *GitServer {
 
 // SyncGitRepos synchronizes all Git repositories in the configuration
 func SyncGitRepos(dryRun bool) error {
-	unmarshalConfig()
+	c := lazypath.GetConfig()
 
 	for _, folder := range c.Folders {
 		if folder.Git == nil {
@@ -39,7 +41,7 @@ func SyncGitRepos(dryRun bool) error {
 
 // CheckGitReposStatus checks status of all Git repositories
 func CheckGitReposStatus() error {
-	unmarshalConfig()
+	c := lazypath.GetConfig()
 
 	for _, folder := range c.Folders {
 		if folder.Git == nil {
@@ -55,7 +57,7 @@ func CheckGitReposStatus() error {
 	return nil
 }
 
-func syncFolderGitRepos(folder Folder, dryRun bool) error {
+func syncFolderGitRepos(folder lazypath.Folder, dryRun bool) error {
 	if folder.Git == nil {
 		return nil
 	}
@@ -105,7 +107,7 @@ func syncFolderGitRepos(folder Folder, dryRun bool) error {
 	return nil
 }
 
-func checkFolderGitRepos(folder Folder) error {
+func checkFolderGitRepos(folder lazypath.Folder) error {
 	if folder.Git == nil {
 		return nil
 	}
@@ -144,7 +146,7 @@ func checkFolderGitRepos(folder Folder) error {
 	return nil
 }
 
-func buildGitURL(server *GitServer, group string, repoName string) string {
+func buildGitURL(server *lazypath.GitServer, group string, repoName string) string {
 	// Parse SSH URL to extract host and port
 	sshURL := server.SSH
 
@@ -165,11 +167,11 @@ func buildGitURL(server *GitServer, group string, repoName string) string {
 	return fmt.Sprintf("git@%s:%s/%s.git", server.SSH, group, repoName)
 }
 
-func buildHTTPSURL(server *GitServer, group string, repoName string) string {
+func buildHTTPSURL(server *lazypath.GitServer, group string, repoName string) string {
 	return fmt.Sprintf("%s/%s/%s.git", server.HTTPS, group, repoName)
 }
 
-func getGitURLs(server *GitServer, group string, repoName string) (primary string, fallback string) {
+func getGitURLs(server *lazypath.GitServer, group string, repoName string) (primary string, fallback string) {
 	sshURL := buildGitURL(server, group, repoName)
 	httpsURL := buildHTTPSURL(server, group, repoName)
 
@@ -179,7 +181,7 @@ func getGitURLs(server *GitServer, group string, repoName string) (primary strin
 	return httpsURL, ""
 }
 
-func cloneRepoWithFallback(server *GitServer, group string, repoName string, targetPath string) error {
+func cloneRepoWithFallback(server *lazypath.GitServer, group string, repoName string, targetPath string) error {
 	primaryURL, fallbackURL := getGitURLs(server, group, repoName)
 
 	// Try primary URL
@@ -214,7 +216,7 @@ func cloneRepo(gitURL, targetPath string) error {
 	return cmd.Run()
 }
 
-func checkGitRemote(repoPath string, server *GitServer, gitConfig *GitConfig, repo GitRepo) error {
+func checkGitRemote(repoPath string, server *lazypath.GitServer, gitConfig *lazypath.GitConfig, repo lazypath.GitRepo) error {
 	cmd := exec.Command("git", "-C", repoPath, "remote", "get-url", "origin")
 	output, err := cmd.Output()
 	if err != nil {

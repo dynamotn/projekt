@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
 )
 
 type folderSyncOptions struct {
@@ -43,5 +43,5 @@ func runFolderSync(opts *folderSyncOptions, out io.Writer) error {
 		cli.Info("Running in dry-run mode...")
 	}
 
-	return lazypath.SyncGitRepos(opts.dryRun)
+	return folderutil.SyncGitRepos(opts.dryRun)
 }
