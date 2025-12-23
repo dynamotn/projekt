@@ -43,7 +43,6 @@ install: build
 
 .PHONY: doc
 doc:
-	@rm -rf '${DOC_FOLDER}'
 	@mkdir -p '${DOC_FOLDER}'
 	go run $(CURDIR)/doc.go
 

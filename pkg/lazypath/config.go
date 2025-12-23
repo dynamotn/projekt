@@ -19,7 +19,16 @@ var (
 
 // Config represents the application configuration
 type Config struct {
-	Folders []Folder
+	Folders    []Folder    `yaml:"folders" mapstructure:"folders"`
+	GitServers []GitServer `yaml:"gitServers" mapstructure:"gitServers"`
+}
+
+type GitServer struct {
+	Name         string `yaml:"name" mapstructure:"name"`
+	Type         string `yaml:"type" mapstructure:"type"`
+	HTTPS        string `yaml:"https" mapstructure:"https"`
+	SSH          string `yaml:"ssh" mapstructure:"ssh"`
+	PreferGitSSH bool   `yaml:"preferGitSSH" mapstructure:"preferGitSSH"`
 }
 
 func unmarshalConfig() {

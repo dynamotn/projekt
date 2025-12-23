@@ -11,12 +11,24 @@ import (
 
 const defaultRegexWorkspace = `^[^.].+`
 
+type GitRepo struct {
+	Name string `yaml:"name" mapstructure:"name"`
+	Path string `yaml:"path" mapstructure:"path"`
+}
+
+type GitConfig struct {
+	Host  string    `yaml:"host" mapstructure:"host"`
+	Group string    `yaml:"group" mapstructure:"group"`
+	Repos []GitRepo `yaml:"repos" mapstructure:"repos"`
+}
+
 type Folder struct {
-	Path        string
-	Prefix      string
-	IsWorkspace bool   `yaml:"is_workspace" mapstructure:"is_workspace"`
-	RegexMatch  string `yaml:"regex" mapstructure:"regex"`
-	Priority    uint16
+	Path        string     `yaml:"path" mapstructure:"path"`
+	Prefix      string     `yaml:"prefix" mapstructure:"prefix"`
+	IsWorkspace bool       `yaml:"is_workspace" mapstructure:"is_workspace"`
+	RegexMatch  string     `yaml:"regex" mapstructure:"regex"`
+	Priority    uint16     `yaml:"priority" mapstructure:"priority"`
+	Git         *GitConfig `yaml:"git,omitempty" mapstructure:"git,omitempty"`
 }
 
 func (f *Folder) GetRegexMatch() string {
