@@ -1,18 +1,17 @@
 module gitlab.com/dynamo.foss/projekt
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/OpenPeeDeeP/xdg v1.0.0
-	github.com/fatih/color v1.18.0
-	github.com/gosuri/uitable v0.0.4
+	github.com/fatih/color v1.19.0
+	github.com/jedib0t/go-pretty/v6 v6.7.7
 	github.com/samber/lo v1.52.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
 	go.uber.org/zap v1.27.1
-	github.com/jedib0t/go-pretty/v6 v6.7.7
 )
 
 require (
@@ -25,7 +24,7 @@ require (
 	github.com/huandu/xstrings v1.3.3 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
@@ -41,6 +40,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 )
