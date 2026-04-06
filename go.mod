@@ -6,13 +6,12 @@ require (
 	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/OpenPeeDeeP/xdg v1.0.0
 	github.com/fatih/color v1.18.0
-	github.com/gosuri/uitable v0.0.4
+	github.com/jedib0t/go-pretty/v6 v6.7.9
 	github.com/samber/lo v1.52.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
 	go.uber.org/zap v1.27.1
-	github.com/jedib0t/go-pretty/v6 v6.7.7
 )
 
 require (
