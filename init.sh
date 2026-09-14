@@ -54,6 +54,8 @@ export DYBATPHO_DIR
 . "${DYBATPHO_DIR}/src/helpers.sh"
 # shellcheck source=src/process.sh
 . "${DYBATPHO_DIR}/src/process.sh"
+# shellcheck source=src/lock.sh
+. "${DYBATPHO_DIR}/src/lock.sh"
 # shellcheck source=src/network.sh
 . "${DYBATPHO_DIR}/src/network.sh"
 # shellcheck source=src/date.sh

@@ -14,7 +14,7 @@
 
 ```sh
 . dybatpho/init.sh
-dybatpho::register_common_handlers   # strict mode, error trap, signal cleanup
+dybatpho::register_common_handlers # strict mode, error trap, signal cleanup
 
 dybatpho::git_is_clean "." || dybatpho::die "Commit your changes first"
 
@@ -90,6 +90,7 @@ dybatpho::info "Greetings from dybatpho!"
 | [helpers.sh](doc/helpers.md)      | Argument expectation, dry-run, retries and other everyday patterns  |
 | [logging.sh](doc/logging.md)      | Levelled logs, boxed output, structured JSON logging                |
 | [process.sh](doc/process.md)      | Process management, traps, signal-safe cleanup                      |
+| [lock.sh](doc/lock.md)            | Portable file locking to serialize concurrent script runs           |
 
 ### 🔤 Data & text
 
