@@ -364,3 +364,27 @@ function _append_git_commit {
   assert_failure
   assert_output --partial "Unknown git commit: missing-commit"
 }
+
+@test "Git helpers ignore Git env vars injected by hooks" {
+  local repo_path hook_repo
+  repo_path="$(_new_git_repo_path)"
+  hook_repo="$(_new_git_repo_path)"
+  _create_git_repo "${repo_path}" main
+  _create_git_repo "${hook_repo}" master
+  _append_git_commit "${repo_path}" 'Second commit'
+
+  # Mimic the environment a `pre-commit` hook runs in: git exports GIT_DIR and
+  # GIT_INDEX_FILE, which would otherwise win over `git -C <repo_path>`.
+  export GIT_DIR="${hook_repo}/.git"
+  export GIT_INDEX_FILE="${hook_repo}/.git/index"
+  export GIT_WORK_TREE="${hook_repo}"
+
+  assert_equal "$(dybatpho::git_root "${repo_path}")" "${repo_path}"
+  assert_equal "$(dybatpho::git_branch "${repo_path}")" 'main'
+  assert_equal "$(dybatpho::git_default_branch "${repo_path}")" 'main'
+  assert_equal "$(dybatpho::git_commit_subject "${repo_path}")" 'Second commit'
+  assert_equal "$(dybatpho::git_commit_count "${repo_path}" 'HEAD~1')" '1'
+  dybatpho::git_is_clean "${repo_path}"
+
+  unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
+}

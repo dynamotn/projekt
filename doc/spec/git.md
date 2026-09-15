@@ -129,6 +129,9 @@ and verify the corresponding predicates and lists.
   non-ignored untracked paths, then sort and deduplicate them.
 - **FR-011**: `git_tags_containing` MUST resolve the commit and print containing
   tags in sorted order.
+- **FR-012**: All helpers MUST target the requested repository path even when
+  Git environment variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, and
+  related) are exported by a surrounding Git hook.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -161,6 +164,8 @@ and verify the corresponding predicates and lists.
 - **IT-005**: Read an existing remote URL and test missing remote behavior.
 - **IT-006**: List sorted changed files and tags containing a commit.
 - **IT-007**: Verify all repository helpers fail clearly outside a worktree.
+- **IT-008**: Verify helpers work when run with `GIT_DIR`/`GIT_INDEX_FILE` set,
+  as happens inside a `pre-commit` hook.
 
 ## Acceptance Criteria *(mandatory)*
 
