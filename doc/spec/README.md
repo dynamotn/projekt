@@ -12,8 +12,8 @@ The goal is to capture the current product behavior of the library in a form tha
 ## Scope
 
 - `project.md` describes the full Bash utility library as a product.
-- Each `src/*.sh` module has a matching spec file, including `semver.md` and
-  `notification.md`.
+- Every `src/*.sh` module has a matching spec file. This mapping is mandatory:
+  adding a module without adding its spec is an incomplete change.
 - `init.md` describes repository bootstrap and module loading behavior.
 - Recent helper additions are folded into the existing module specs here rather than tracked in a separate spec tree.
 

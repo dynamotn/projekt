@@ -5,10 +5,18 @@
 #   Configuration files are loaded in the order provided, so later files
 #   override earlier files. Environment variables loaded with
 #   `dybatpho::config_env` are applied last.
+#
+#   Keys can also be given a typed schema with `dybatpho::config_schema`.
+#   `dybatpho::config_validate` then applies declared defaults, enforces
+#   required keys, types, ranges, and enum choices, and reports every
+#   violation together with the key that caused it. The same schema renders a
+#   configuration reference through `dybatpho::config_doc`.
 : "${DYBATPHO_DIR:?DYBATPHO_DIR must be set. Please source dybatpho/init.sh before other scripts from dybatpho.}"
 
 declare -gA DYBATPHO_CONFIG=()
 declare -gA DYBATPHO_CONFIG_SCHEMA=()
+declare -ga DYBATPHO_CONFIG_SCHEMA_KEYS=()
+declare -ga DYBATPHO_CONFIG_ERRORS=()
 
 function __dybatpho_config_set {
   local key value
@@ -151,21 +159,101 @@ function dybatpho::config_export {
 }
 
 #######################################
+# @description Normalize a schema type name to its canonical form.
+# @arg $1 string Declared type
+# @stdout Canonical type: string, int, bool, url, or enum
+# @exitcode 1 The type is not supported
+#######################################
+function __dybatpho_config_schema_type {
+  local input="${1,,}"
+  case "${input}" in
+    string) printf 'string' ;;
+    int | integer) printf 'int' ;;
+    bool | boolean) printf 'bool' ;;
+    url) printf 'url' ;;
+    enum) printf 'enum' ;;
+    *) return 1 ;;
+  esac
+}
+
+#######################################
+# @description Drop every attribute previously declared for a key.
+# @arg $1 string Configuration key
+#######################################
+function __dybatpho_config_schema_clear {
+  local key attribute
+  dybatpho::expect_args key -- "$@"
+  for attribute in "${!DYBATPHO_CONFIG_SCHEMA[@]}"; do
+    if [[ "${attribute}" == "${key}."* ]]; then
+      unset "DYBATPHO_CONFIG_SCHEMA[${attribute}]"
+    fi
+  done
+  return 0
+}
+
+#######################################
+# @description Print a schema attribute, or a fallback when it is not declared.
+# @arg $1 string Configuration key
+# @arg $2 string Attribute name
+# @arg $3 string Optional fallback value
+# @stdout Attribute value
+#######################################
+function __dybatpho_config_schema_attr {
+  local key attribute
+  dybatpho::expect_args key attribute -- "$@"
+  printf '%s' "${DYBATPHO_CONFIG_SCHEMA[${key}.${attribute}]-${3-}}"
+}
+
+#######################################
+# @description Describe the range and choice constraints declared for a key.
+# @arg $1 string Configuration key
+# @stdout Human readable constraints, or an empty string when none are declared
+#######################################
+function __dybatpho_config_schema_constraints {
+  local key type min max choices unit
+  dybatpho::expect_args key -- "$@"
+  type="$(__dybatpho_config_schema_attr "${key}" type string)"
+  min="$(__dybatpho_config_schema_attr "${key}" min)"
+  max="$(__dybatpho_config_schema_attr "${key}" max)"
+  choices="$(__dybatpho_config_schema_attr "${key}" choices)"
+  if [[ "${type}" == enum ]]; then
+    printf 'one of: %s' "${choices//,/, }"
+    return 0
+  fi
+  if [[ "${type}" == int ]]; then
+    unit=""
+  else
+    unit=" characters"
+  fi
+  if [[ -n "${min}" && -n "${max}" ]]; then
+    printf '%s..%s%s' "${min}" "${max}" "${unit}"
+  elif [[ -n "${min}" ]]; then
+    printf '>= %s%s' "${min}" "${unit}"
+  elif [[ -n "${max}" ]]; then
+    printf '<= %s%s' "${max}" "${unit}"
+  fi
+  return 0
+}
+
+#######################################
 # @description Declare validation rules for a configuration key.
 # @arg $1 string Configuration key
-# @arg $2 string Type: string, int, bool, url, or enum
-# @arg $@ string Rules: required:true, default:value, min:number, max:number, choices:a,b
+# @arg $2 string Type: `string`, `int` (`integer`), `bool` (`boolean`), `url`, or `enum`
+# @arg $@ string Rules: `required:true`, `default:value`, `min:number`, `max:number`, `choices:a,b`, `description:text`
+# @set DYBATPHO_CONFIG_SCHEMA Declared attributes, keyed by `<key>.<attribute>`
+# @set DYBATPHO_CONFIG_SCHEMA_KEYS Declaration order used by validation and documentation
 # @tip Call `dybatpho::config_validate` after all files and environment overlays are loaded.
+# @tip Declaring the same key twice replaces its previous rules instead of merging them.
+# @exitcode 1 The key, type, or a rule is invalid
 #######################################
 function dybatpho::config_schema {
-  local key type rule name value
-  dybatpho::expect_args key type -- "$@"
+  local key declared_type type rule name value known
+  dybatpho::expect_args key declared_type -- "$@"
   [[ "${key}" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*$ ]] \
     || dybatpho::die "Invalid configuration key: ${key}"
-  case "${type}" in
-    string|int|bool|url|enum) ;; # kcov(skip)
-    *) dybatpho::die "Unsupported configuration type: ${type}" ;; # kcov(skip)
-  esac
+  type="$(__dybatpho_config_schema_type "${declared_type}")" \
+    || dybatpho::die "Unsupported configuration type: ${declared_type}"
+  __dybatpho_config_schema_clear "${key}"
   DYBATPHO_CONFIG_SCHEMA["${key}.type"]="${type}"
   shift 2
   for rule in "$@"; do
@@ -173,77 +261,263 @@ function dybatpho::config_schema {
     name="${rule%%:*}"
     value="${rule#*:}"
     case "${name}" in
-      required|default|min|max|choices) ;; # kcov(skip)
+      required)
+        dybatpho::is true "${value}" || dybatpho::is false "${value}" \
+          || dybatpho::die "Invalid \`required\` rule for ${key}: ${value}"
+        ;;
+      min | max)
+        [[ "${value}" =~ ^-?[0-9]+$ ]] \
+          || dybatpho::die "Invalid \`${name}\` rule for ${key}: ${value}"
+        ;;
+      choices)
+        [[ -n "${value}" ]] || dybatpho::die "Empty \`choices\` rule for ${key}"
+        ;;
+      default | description) ;; # kcov(skip)
       *) dybatpho::die "Unsupported configuration schema rule: ${name}" ;; # kcov(skip)
     esac
     DYBATPHO_CONFIG_SCHEMA["${key}.${name}"]="${value}"
   done
+  if [[ "${type}" == enum && -z "$(__dybatpho_config_schema_attr "${key}" choices)" ]]; then
+    dybatpho::die "Configuration schema for ${key} requires \`choices\`"
+  fi
+  known=false
+  for name in ${DYBATPHO_CONFIG_SCHEMA_KEYS[@]+"${DYBATPHO_CONFIG_SCHEMA_KEYS[@]}"}; do
+    if [[ "${name}" == "${key}" ]]; then
+      known=true
+      break
+    fi
+  done
+  [[ "${known}" == true ]] || DYBATPHO_CONFIG_SCHEMA_KEYS+=("${key}")
 }
 
+#######################################
+# @description Forget every declared configuration schema.
+# @noargs
+# @set DYBATPHO_CONFIG_SCHEMA Emptied
+# @set DYBATPHO_CONFIG_SCHEMA_KEYS Emptied
+#######################################
+function dybatpho::config_schema_reset {
+  DYBATPHO_CONFIG_SCHEMA=()
+  DYBATPHO_CONFIG_SCHEMA_KEYS=()
+}
+
+#######################################
+# @description Record a validation failure for a configuration key.
+# @arg $1 string Configuration key
+# @arg $2 string Reason describing the violation
+# @set DYBATPHO_CONFIG_ERRORS Appends the formatted message
+#######################################
 function __dybatpho_config_schema_error {
-  # kcov(disabled) - this helper always terminates the shell
   local key reason
   dybatpho::expect_args key reason -- "$@"
-  dybatpho::die "Invalid configuration \`${key}\`: ${reason}"
-  # kcov(enabled)
+  DYBATPHO_CONFIG_ERRORS+=("Invalid configuration \`${key}\`: ${reason}")
+}
+
+#######################################
+# @description Validate a single value against the type declared for its key.
+# @arg $1 string Configuration key
+# @arg $2 string Effective value
+# @set DYBATPHO_CONFIG_ERRORS Appends one message per violation
+#######################################
+function __dybatpho_config_schema_check {
+  local key value type choices matched choice min max length subject
+  dybatpho::expect_args key value -- "$@"
+  type="$(__dybatpho_config_schema_attr "${key}" type string)"
+  case "${type}" in
+    int)
+      if [[ ! "${value}" =~ ^-?[0-9]+$ ]]; then
+        __dybatpho_config_schema_error "${key}" "expected an integer, got \`${value}\`"
+        return 0
+      fi
+      ;;
+    bool)
+      if [[ ! "${value,,}" =~ ^(true|false|yes|no|on|off|1|0)$ ]]; then
+        __dybatpho_config_schema_error "${key}" "expected a boolean, got \`${value}\`"
+        return 0
+      fi
+      ;;
+    url)
+      if [[ ! "${value}" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*://[^[:space:]]+$ ]]; then
+        __dybatpho_config_schema_error "${key}" "expected a URL, got \`${value}\`"
+        return 0
+      fi
+      ;;
+    enum)
+      choices="$(__dybatpho_config_schema_attr "${key}" choices)"
+      matched=false
+      local -a choice_list=()
+      IFS=',' read -r -a choice_list <<< "${choices}"
+      for choice in ${choice_list[@]+"${choice_list[@]}"}; do
+        if [[ "${value}" == "${choice}" ]]; then
+          matched=true
+          break
+        fi
+      done
+      if [[ "${matched}" != true ]]; then
+        __dybatpho_config_schema_error "${key}" "expected one of: ${choices}, got \`${value}\`"
+        return 0
+      fi
+      ;;
+  esac
+
+  min="$(__dybatpho_config_schema_attr "${key}" min)"
+  max="$(__dybatpho_config_schema_attr "${key}" max)"
+  if [[ -z "${min}" && -z "${max}" ]]; then
+    return 0
+  fi
+  if [[ "${type}" == int ]]; then
+    length="${value}"
+    subject=""
+  else
+    length="${#value}"
+    subject=" characters"
+  fi
+  if [[ -n "${min}" ]] && ((length < min)); then
+    __dybatpho_config_schema_error "${key}" "must be at least ${min}${subject}"
+  fi
+  if [[ -n "${max}" ]] && ((length > max)); then
+    __dybatpho_config_schema_error "${key}" "must be at most ${max}${subject}"
+  fi
+  return 0
 }
 
 #######################################
 # @description Validate configured values against all declared schemas.
+#   Missing optional keys take their declared default, and every violation is
+#   reported with the key that caused it.
+# @noargs
+# @set DYBATPHO_CONFIG Applies declared defaults for missing keys
+# @set DYBATPHO_CONFIG_ERRORS One message per violation, in declaration order
 # @exitcode 1 A required key is missing or a value violates its schema
 #######################################
 function dybatpho::config_validate {
-  local schema_key key type value required min max choices choice choice_value
-  for schema_key in "${!DYBATPHO_CONFIG_SCHEMA[@]}"; do
-    [[ "${schema_key}" == *.type ]] || continue
-    key="${schema_key%.type}"
-    type="${DYBATPHO_CONFIG_SCHEMA[${schema_key}]}"
+  local key required
+  DYBATPHO_CONFIG_ERRORS=()
+  for key in ${DYBATPHO_CONFIG_SCHEMA_KEYS[@]+"${DYBATPHO_CONFIG_SCHEMA_KEYS[@]}"}; do
     if [[ ! -v "DYBATPHO_CONFIG[${key}]" ]]; then
-      required="${DYBATPHO_CONFIG_SCHEMA[${key}.required]-false}"
-      if dybatpho::is true "${required}"; then
-        __dybatpho_config_schema_error "${key}" "required value is missing" # kcov(skip)
-      elif [[ -v "DYBATPHO_CONFIG_SCHEMA[${key}.default]" ]]; then
+      if [[ -v "DYBATPHO_CONFIG_SCHEMA[${key}.default]" ]]; then
         DYBATPHO_CONFIG["${key}"]="${DYBATPHO_CONFIG_SCHEMA[${key}.default]}"
       else
+        required="$(__dybatpho_config_schema_attr "${key}" required false)"
+        if dybatpho::is true "${required}"; then
+          __dybatpho_config_schema_error "${key}" "required value is missing"
+        fi
         continue
       fi
     fi
-    value="${DYBATPHO_CONFIG[${key}]}"
-    case "${type}" in
-      int)
-        [[ "${value}" =~ ^-?[0-9]+$ ]] || __dybatpho_config_schema_error "${key}" "expected an integer"
+    __dybatpho_config_schema_check "${key}" "${DYBATPHO_CONFIG[${key}]}"
+  done
+  if ((${#DYBATPHO_CONFIG_ERRORS[@]} == 0)); then
+    return 0
+  fi
+  local report
+  printf -v report '%s\n' "${DYBATPHO_CONFIG_ERRORS[@]}"
+  dybatpho::die "${report%$'\n'}" # kcov(skip)
+}
+
+#######################################
+# @description Render one Markdown table cell, escaping pipes and marking empties.
+# @arg $1 string Cell text
+# @arg $2 string Optional `code` to wrap a non-empty cell in backticks
+# @stdout Markdown cell text, or `-` when the value is empty
+#######################################
+function __dybatpho_config_doc_cell {
+  local value="${1-}" style="${2-}"
+  if [[ -z "${value}" ]]; then
+    printf -- '-'
+    return 0
+  fi
+  value="${value//|/\\|}"
+  if [[ "${style}" == code ]]; then
+    printf '%s%s%s' '`' "${value}" '`'
+  else
+    printf '%s' "${value}"
+  fi
+}
+
+#######################################
+# @description Render one JSON value, emitting `null` for an undeclared attribute.
+# @arg $1 string Attribute value
+# @arg $2 string Optional `declared` to emit an empty string instead of `null`
+# @stdout Quoted JSON string, or `null`
+#######################################
+function __dybatpho_config_doc_json_value {
+  local value="${1-}" declared="${2-}"
+  if [[ -z "${value}" && "${declared}" != declared ]]; then
+    printf 'null'
+    return 0
+  fi
+  printf '"%s"' "$(__log_json_escape "${value}")"
+}
+
+#######################################
+# @description Render documentation for every declared configuration key.
+# @arg $1 string Optional format: `markdown` (default), `text`, or `json`
+# @arg $2 string Optional title used by the `markdown` and `text` formats
+# @stdout Configuration reference in the requested format
+# @tip Pipe the Markdown output into a `CONFIGURATION.md` file to keep docs in sync with the schema.
+# @exitcode 1 The format is not supported
+#######################################
+function dybatpho::config_doc {
+  local format="${1:-markdown}" title="${2:-Configuration}"
+  local key type required default constraints description separator
+  case "${format}" in
+    markdown | text | json) ;; # kcov(skip)
+    *) dybatpho::die "Unsupported configuration documentation format: ${format}" ;; # kcov(skip)
+  esac
+
+  case "${format}" in
+    markdown)
+      printf '# %s\n\n' "${title}"
+      printf '| Key | Type | Required | Default | Constraints | Description |\n'
+      printf '| --- | --- | --- | --- | --- | --- |\n'
+      ;;
+    text) printf '%s\n\n' "${title}" ;;
+    json) printf '[' ;;
+  esac
+
+  separator=""
+  for key in ${DYBATPHO_CONFIG_SCHEMA_KEYS[@]+"${DYBATPHO_CONFIG_SCHEMA_KEYS[@]}"}; do
+    type="$(__dybatpho_config_schema_attr "${key}" type string)"
+    default="$(__dybatpho_config_schema_attr "${key}" default)"
+    description="$(__dybatpho_config_schema_attr "${key}" description)"
+    constraints="$(__dybatpho_config_schema_constraints "${key}")"
+    if dybatpho::is true "$(__dybatpho_config_schema_attr "${key}" required false)"; then
+      required=true
+    else
+      required=false
+    fi
+    case "${format}" in
+      markdown)
+        printf '| %s | %s | %s | %s | %s | %s |\n' \
+          "$(__dybatpho_config_doc_cell "${key}" code)" \
+          "${type}" "${required}" \
+          "$(__dybatpho_config_doc_cell "${default}" code)" \
+          "$(__dybatpho_config_doc_cell "${constraints}")" \
+          "$(__dybatpho_config_doc_cell "${description}")"
         ;;
-      bool)
-        [[ "${value,,}" =~ ^(true|false|yes|no|1|0)$ ]] \
-          || __dybatpho_config_schema_error "${key}" "expected a boolean"
+      text)
+        printf '%s\n  type: %s\n  required: %s\n' "${key}" "${type}" "${required}"
+        [[ -n "${default}" ]] && printf '  default: %s\n' "${default}" || true
+        [[ -n "${constraints}" ]] && printf '  constraints: %s\n' "${constraints}" || true
+        [[ -n "${description}" ]] && printf '  description: %s\n' "${description}" || true
+        printf '\n'
         ;;
-      url)
-        [[ "${value}" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*://[^[:space:]]+$ ]] \
-          || __dybatpho_config_schema_error "${key}" "expected a URL"
-        ;;
-      enum)
-        choices="${DYBATPHO_CONFIG_SCHEMA[${key}.choices]-}"
-        choice=false
-        IFS=',' read -r -a __dybatpho_config_choices <<< "${choices}"
-        for choice_value in "${__dybatpho_config_choices[@]}"; do
-          [[ "${value}" == "${choice_value}" ]] && choice=true && break
-        done
-        [[ "${choice}" == true ]] \
-          || __dybatpho_config_schema_error "${key}" "expected one of: ${choices}"
+      json)
+        local declared=""
+        [[ -v "DYBATPHO_CONFIG_SCHEMA[${key}.default]" ]] && declared="declared" || true
+        printf '%s{"key":"%s","type":"%s","required":%s,"default":%s,"constraints":%s,"description":%s}' \
+          "${separator}" \
+          "$(__log_json_escape "${key}")" "${type}" "${required}" \
+          "$(__dybatpho_config_doc_json_value "${default}" "${declared}")" \
+          "$(__dybatpho_config_doc_json_value "${constraints}")" \
+          "$(__dybatpho_config_doc_json_value "${description}")"
+        separator=","
         ;;
     esac
-    min="${DYBATPHO_CONFIG_SCHEMA[${key}.min]-}"
-    max="${DYBATPHO_CONFIG_SCHEMA[${key}.max]-}"
-    if [[ -n "${min}" || -n "${max}" ]]; then
-      [[ -z "${min}" || "${min}" =~ ^-?[0-9]+$ ]] \
-        || __dybatpho_config_schema_error "${key}" "minimum must be an integer"
-      [[ -z "${max}" || "${max}" =~ ^-?[0-9]+$ ]] \
-        || __dybatpho_config_schema_error "${key}" "maximum must be an integer"
-      [[ "${value}" =~ ^-?[0-9]+$ ]] || __dybatpho_config_schema_error "${key}" "range requires an integer"
-      [[ -z "${min}" || "${value}" -ge "${min}" ]] \
-        || __dybatpho_config_schema_error "${key}" "must be at least ${min}"
-      [[ -z "${max}" || "${value}" -le "${max}" ]] \
-        || __dybatpho_config_schema_error "${key}" "must be at most ${max}"
-    fi
   done
+  if [[ "${format}" == json ]]; then
+    printf ']\n'
+  fi
+  return 0
 }

@@ -51,7 +51,7 @@ changed examples.
 | `array.sh` | Create, read, join, filter, and manipulate Bash arrays | `test/array.bats`, `doc/array.md`, `doc/spec/array.md` |
 | `archive.sh` | Create, extract, and inspect archives | `test/archive.bats`, `doc/archive.md`, `doc/spec/archive.md` |
 | `cli.sh` | Declarative parser, help, subcommands, completions, and CLI artifacts | `test/cli.bats`, `doc/cli.md`, `doc/spec/cli.md` |
-| `config.sh` | Load dotenv, JSON/YAML configuration and precedence | `test/config.bats`, `doc/config.md`, `doc/spec/config.md` |
+| `config.sh` | Load dotenv, JSON/YAML configuration, precedence, typed schema validation, and configuration docs | `test/config.bats`, `doc/config.md`, `doc/spec/config.md` |
 | `date.sh` | Portable date/time parsing, formatting, and calculations | `test/date.bats`, `doc/date.md`, `doc/spec/date.md` |
 | `file.sh` | Path, file, directory, and temporary-file helpers | `test/file.bats`, `doc/file.md`, `doc/spec/file.md` |
 | `git.sh` | Safe repository, branch, commit, and Git operations | `test/git.bats`, `doc/git.md`, `doc/spec/git.md` |

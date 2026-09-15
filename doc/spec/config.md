@@ -112,11 +112,42 @@ then verify defaults, required keys, ranges, and choices.
 
 1. **Given** a schema with `default:value`, **When** `config_validate` runs and
    the key is missing, **Then** the default is added to the configuration map
-2. **Given** a required schema key is missing, **When** validation runs, **Then**
-   it fails with a key-specific diagnostic
+2. **Given** a required schema key is missing and has no default, **When**
+   validation runs, **Then** it fails with a key-specific diagnostic
 3. **Given** an integer, boolean, URL, or enum value violates its schema,
    **When** validation runs, **Then** it fails with the relevant type, range,
    or choice diagnostic
+4. **Given** several keys violate their schemas, **When** validation runs,
+   **Then** every violation is reported once, named by its key, in declaration
+   order
+
+### User Story 6 - Generate a configuration reference (Priority: P2)
+
+As a maintainer, I want the declared schema rendered as documentation so that
+the published configuration reference cannot drift from the validation rules.
+
+**Independent Test**: Declare schemas with descriptions and render the
+reference in each supported format.
+
+**Acceptance Scenarios**:
+
+1. **Given** declared schemas, **When** `config_doc` runs, **Then** it prints a
+   Markdown table of keys, types, required flags, defaults, constraints, and
+   descriptions in declaration order
+2. **Given** the `text` or `json` format, **When** `config_doc` runs, **Then**
+   it prints the same metadata in that format
+3. **Given** an unsupported format, **When** `config_doc` runs, **Then** it
+   fails with a diagnostic
+
+### Example Schema Workflow
+
+```bash
+dybatpho::config_schema HOST url required:true description:"API base URL"
+dybatpho::config_schema PORT integer default:8080 min:1 max:65535
+dybatpho::config_schema MODE enum choices:dev,prod default:dev
+dybatpho::config_validate
+dybatpho::config_doc markdown "App settings" > CONFIGURATION.md
+```
 
 ## Edge Cases
 
@@ -130,10 +161,18 @@ then verify defaults, required keys, ranges, and choices.
 - A missing key is queried without a default.
 - A configuration key contains `.` or `-` and therefore cannot be exported as
   a shell variable.
-- A schema uses an unsupported type or rule.
+- A schema uses an unsupported type, an unsupported rule, or a rule value that
+  is not valid for that rule.
+- An `enum` schema is declared without `choices`, or with empty `choices`.
+- The same key is declared twice, so the later declaration must replace the
+  earlier rules rather than merge them.
 - A required value is missing, a default is defined, or an integer is outside
   its declared bounds.
+- A non-integer value carries `min`/`max`, which bound its length instead of
+  its numeric value.
 - An enum value is not included in its comma-separated choices.
+- Several keys fail at once and must all be reported.
+- Documentation is requested for an empty schema or an unsupported format.
 
 ## Requirements *(mandatory)*
 
@@ -161,14 +200,22 @@ then verify defaults, required keys, ranges, and choices.
   optional valid shell-identifier prefix.
 - **FR-012**: Invalid files, keys, prefixes, or required settings MUST fail
   through the library's diagnostic path.
-- **FR-013**: `config_schema` MUST declare `string`, `int`, `bool`, `url`, or
-  `enum` types for valid configuration keys.
-- **FR-014**: Schema rules MUST support `required`, `default`, `min`, `max`, and
-  `choices`, and MUST reject unsupported rule names or types.
-- **FR-015**: `config_validate` MUST apply declared defaults for missing optional
-  keys and reject missing required keys.
+- **FR-013**: `config_schema` MUST declare `string`, `int` (`integer`), `bool`
+  (`boolean`), `url`, or `enum` types for valid configuration keys, and MUST
+  record declaration order.
+- **FR-014**: Schema rules MUST support `required`, `default`, `min`, `max`,
+  `choices`, and `description`, and MUST reject unsupported rule names, types,
+  and malformed rule values.
+- **FR-015**: `config_validate` MUST apply declared defaults for missing keys
+  and reject missing required keys that have no default.
 - **FR-016**: Validation MUST enforce integer, boolean, URL, and enum values,
-  plus numeric minimum and maximum bounds where declared.
+  apply `min`/`max` as numeric bounds for `int` and as length bounds otherwise.
+- **FR-017**: Validation MUST report every violation, each naming its key, and
+  MUST expose them through `DYBATPHO_CONFIG_ERRORS`.
+- **FR-018**: Re-declaring a key MUST replace its previous rules, and
+  `config_schema_reset` MUST forget every declared schema.
+- **FR-019**: `config_doc` MUST render the declared schema in declaration order
+  as `markdown`, `text`, or `json`, and MUST reject other formats.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -182,7 +229,9 @@ then verify defaults, required keys, ranges, and choices.
 - **Exported Variable**: A shell variable derived from a configuration key
   during `config_export`.
 - **Configuration Schema**: A set of type and validation rules stored in
-  `DYBATPHO_CONFIG_SCHEMA`.
+  `DYBATPHO_CONFIG_SCHEMA`, ordered by `DYBATPHO_CONFIG_SCHEMA_KEYS`.
+- **Validation Report**: The `DYBATPHO_CONFIG_ERRORS` array holding one
+  key-specific message per violation from the last validation run.
 
 ## Success Criteria *(mandatory)*
 
@@ -195,6 +244,10 @@ then verify defaults, required keys, ranges, and choices.
 - **SC-004**: Shell-compatible settings can be exported without unsafe sourcing.
 - **SC-005**: Merged configuration can be validated consistently before
   application startup, with defaults applied in one step.
+- **SC-006**: A single validation run names every misconfigured key, so an
+  operator does not need repeated runs to find all problems.
+- **SC-007**: The published configuration reference is generated from the same
+  schema that validation enforces, so the two cannot drift.
 
 ## Integration Tests *(mandatory)*
 
@@ -211,6 +264,11 @@ then verify defaults, required keys, ranges, and choices.
 - **IT-008**: Declare schemas for all supported types, apply defaults, enforce
   integer ranges and URLs, validate enum choices, and reject invalid schema
   declarations.
+- **IT-009**: Declare long type aliases, re-declare a key, and verify the later
+  rules replace the earlier ones.
+- **IT-010**: Fail several keys at once and verify each is reported by name.
+- **IT-011**: Render the schema as Markdown, text, and JSON, and reject an
+  unsupported format.
 
 ## Acceptance Criteria *(mandatory)*
 

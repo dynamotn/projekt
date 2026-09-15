@@ -162,7 +162,7 @@ setup() {
 
 @test "config_validate applies defaults and validates types, ranges, URLs, and enums" {
   DYBATPHO_CONFIG=()
-  DYBATPHO_CONFIG_SCHEMA=()
+  dybatpho::config_schema_reset
   dybatpho::config_schema HOST url required:true
   dybatpho::config_schema PORT int default:8080 min:1 max:65535
   dybatpho::config_schema MODE enum choices:dev,prod
@@ -179,14 +179,14 @@ setup() {
 
 @test "config_validate rejects missing required and invalid values" {
   DYBATPHO_CONFIG=()
-  DYBATPHO_CONFIG_SCHEMA=()
+  dybatpho::config_schema_reset
   dybatpho::config_schema REQUIRED string required:true
   run --separate-stderr dybatpho::config_validate
   assert_failure
   assert_stderr --partial "required value is missing"
 
   DYBATPHO_CONFIG=()
-  DYBATPHO_CONFIG_SCHEMA=()
+  dybatpho::config_schema_reset
   dybatpho::config_schema PORT int min:1 max:10
   __dybatpho_config_set PORT 99
   run --separate-stderr dybatpho::config_validate
@@ -194,7 +194,7 @@ setup() {
   assert_stderr --partial "must be at most 10"
 
   DYBATPHO_CONFIG=()
-  DYBATPHO_CONFIG_SCHEMA=()
+  dybatpho::config_schema_reset
   dybatpho::config_schema MODE enum choices:dev,prod
   __dybatpho_config_set MODE test
   run --separate-stderr dybatpho::config_validate
@@ -209,4 +209,122 @@ setup() {
   run --separate-stderr dybatpho::config_schema VALUE string unknown:value
   assert_failure
   assert_stderr --partial "Unsupported configuration schema rule"
+}
+
+@test "config_schema accepts long type aliases and replaces earlier declarations" {
+  DYBATPHO_CONFIG=()
+  dybatpho::config_schema_reset
+  dybatpho::config_schema PORT integer min:1 max:65535
+  dybatpho::config_schema DEBUG boolean default:no
+  # Re-declaring a key replaces its rules instead of merging them.
+  dybatpho::config_schema PORT integer default:9000
+  __dybatpho_config_set PORT 70000
+  dybatpho::config_validate
+  assert_equal "$(dybatpho::config_get DEBUG)" "no"
+  assert_equal "${#DYBATPHO_CONFIG_SCHEMA_KEYS[@]}" "2"
+}
+
+@test "config_validate applies string length ranges and reports every failing key" {
+  DYBATPHO_CONFIG=()
+  dybatpho::config_schema_reset
+  dybatpho::config_schema NAME string min:3 max:5
+  dybatpho::config_schema PORT int
+  dybatpho::config_schema ENDPOINT url required:true
+  __dybatpho_config_set NAME "ab"
+  __dybatpho_config_set PORT "eight"
+
+  run --separate-stderr dybatpho::config_validate
+  assert_failure
+  assert_stderr --partial "\`NAME\`: must be at least 3 characters"
+  assert_stderr --partial "\`PORT\`: expected an integer"
+  assert_stderr --partial "\`ENDPOINT\`: required value is missing"
+}
+
+@test "config_validate prefers a declared default over a required failure" {
+  DYBATPHO_CONFIG=()
+  dybatpho::config_schema_reset
+  dybatpho::config_schema REGION string required:true default:us-east-1
+  dybatpho::config_validate
+  assert_equal "$(dybatpho::config_get REGION)" "us-east-1"
+  assert_equal "${#DYBATPHO_CONFIG_ERRORS[@]}" "0"
+}
+
+@test "config_validate accepts every supported boolean and rejects other values" {
+  DYBATPHO_CONFIG=()
+  dybatpho::config_schema_reset
+  dybatpho::config_schema FLAG bool
+  local value
+  for value in true False YES no ON off 1 0; do
+    __dybatpho_config_set FLAG "${value}"
+    dybatpho::config_validate
+  done
+
+  __dybatpho_config_set FLAG maybe
+  run --separate-stderr dybatpho::config_validate
+  assert_failure
+  assert_stderr --partial "expected a boolean"
+}
+
+@test "config_schema rejects malformed rule values and enums without choices" {
+  dybatpho::config_schema_reset
+  run --separate-stderr dybatpho::config_schema PORT int min:many
+  assert_failure
+  assert_stderr --partial "Invalid \`min\` rule for PORT"
+
+  run --separate-stderr dybatpho::config_schema FLAG bool required:sometimes
+  assert_failure
+  assert_stderr --partial "Invalid \`required\` rule for FLAG"
+
+  run --separate-stderr dybatpho::config_schema MODE enum
+  assert_failure
+  assert_stderr --partial "requires \`choices\`"
+
+  run --separate-stderr dybatpho::config_schema MODE enum choices:
+  assert_failure
+  assert_stderr --partial "Empty \`choices\` rule for MODE"
+
+  run --separate-stderr dybatpho::config_schema "bad key" string
+  assert_failure
+  assert_stderr --partial "Invalid configuration key"
+
+  run --separate-stderr dybatpho::config_schema VALUE string nocolon
+  assert_failure
+  assert_stderr --partial "Invalid configuration schema rule"
+}
+
+@test "config_doc renders markdown, text, and JSON references in declaration order" {
+  dybatpho::config_schema_reset
+  dybatpho::config_schema HOST url required:true description:"API base URL"
+  dybatpho::config_schema PORT int default:8080 min:1 max:65535
+  dybatpho::config_schema MODE enum choices:dev,prod default:dev
+
+  run dybatpho::config_doc
+  assert_success
+  assert_line --index 0 "# Configuration"
+  assert_line --partial "| \`HOST\` | url | true | - | - | API base URL |"
+  assert_line --partial "| \`PORT\` | int | false | \`8080\` | 1..65535 | - |"
+  assert_line --partial "| \`MODE\` | enum | false | \`dev\` | one of: dev, prod | - |"
+
+  run dybatpho::config_doc text "App settings"
+  assert_success
+  assert_line --index 0 "App settings"
+  assert_line --partial "  type: url"
+  assert_line --partial "  constraints: 1..65535"
+  assert_line --partial "  description: API base URL"
+
+  run dybatpho::config_doc json
+  assert_success
+  assert_output --partial '{"key":"HOST","type":"url","required":true,"default":null,"constraints":null,"description":"API base URL"}'
+  assert_output --partial '{"key":"PORT","type":"int","required":false,"default":"8080","constraints":"1..65535","description":null}'
+}
+
+@test "config_doc reports unsupported formats and renders an empty schema" {
+  dybatpho::config_schema_reset
+  run --separate-stderr dybatpho::config_doc xml
+  assert_failure
+  assert_stderr --partial "Unsupported configuration documentation format"
+
+  run dybatpho::config_doc json
+  assert_success
+  assert_output "[]"
 }
