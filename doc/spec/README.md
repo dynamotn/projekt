@@ -31,6 +31,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `cli.md`
 - `os.md`
 - `config.md`
+- `lock.md`
 - `archive.md`
 - `git.md`
 - `table.md`
@@ -54,6 +55,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `src/cli.sh` -> `cli.md`
 - `src/os.sh` -> `os.md`
 - `src/config.sh` -> `config.md`
+- `src/lock.sh` -> `lock.md`
 - `src/archive.sh` -> `archive.md`
 - `src/git.sh` -> `git.md`
 - `src/table.sh` -> `table.md`
@@ -69,3 +71,6 @@ The goal is to capture the current product behavior of the library in a form tha
 - These specs describe the current observable behavior of the existing codebase, not a proposed rewrite.
 - They intentionally stay focused on user-visible outcomes and contracts rather than line-by-line implementation details.
 - `doc/spec/` is the canonical spec location for the repository.
+- Keep the Spec Files and Source Mapping lists above in sync with `src/`. The
+  check is `comm -23 <(ls src/*.sh | xargs -n1 basename | sed 's/\.sh$/.md/' | sort) <(ls doc/spec/*.md | xargs -n1 basename | sort)`,
+  which must print nothing.

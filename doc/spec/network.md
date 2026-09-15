@@ -1,9 +1,8 @@
 # Feature Specification: HTTP Request and Download Utilities
 
 **Feature Branch**: `[reverse-spec-network]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/network.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/network.sh`, `doc/network.md`, `test/network.bats`, and `example/network_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -115,6 +114,25 @@ As an operator, I want to override connect/total timeouts for a single request a
 
 ---
 
+### Example Workflow
+
+```bash
+# Fetch, parse, and act on a response without hand-rolled curl pipelines.
+dybatpho::create_temp headers_file ".txt"
+dybatpho::create_temp body_file ".json"
+
+dybatpho::curl_request "https://api.example.test/status" "${body_file}" -D "${headers_file}"
+dybatpho::curl_parse_response "${headers_file}" "${body_file}"
+
+if ((DYBATPHO_HTTP_STATUS == 200)); then
+  dybatpho::info "content-type: $(dybatpho::curl_response_header content-type "unknown")"
+fi
+
+# Download with resume plus integrity check, guarded by a circuit breaker.
+dybatpho::circuit_breaker api.example.test \
+  "dybatpho::curl_resume_download https://api.example.test/app.tgz /tmp/app.tgz sha256:${EXPECTED_SHA256}"
+```
+
 ## Edge Cases
 
 - Curl is not installed.
@@ -141,7 +159,9 @@ As an operator, I want to override connect/total timeouts for a single request a
 - **FR-003**: The request helper MUST map final HTTP classes into consistent shell exit codes for success, 3xx, 4xx, 5xx, and unknown failures.
 - **FR-004**: The request helper MUST write the response body to the caller-specified destination or a safe default sink.
 - **FR-005**: The module MUST expose a download helper that creates the destination directory automatically.
-- **FR-006**: The module MUST expose an HTTP status-description helper suitable for diagnostics.
+- **FR-006**: The request helper MUST log a human-readable description of the
+  received HTTP status at debug level; the description table itself is
+  internal and is not part of the public API.
 - **FR-007**: The module MUST expose a JSON-oriented curl helper that adds standard JSON headers.
 - **FR-008**: The module MUST expose a HEAD-oriented curl helper that retrieves response headers without downloading a body.
 - **FR-009**: Requests MUST retry server errors, transport failures, and

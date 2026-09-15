@@ -1,9 +1,8 @@
 # Feature Specification: Process Lifecycle, Traps, Cleanup, and Dry Run
 
 **Feature Branch**: `[reverse-spec-process]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/process.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/process.sh`, `doc/process.md`, `test/process.bats`, and `example/process_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -48,6 +47,22 @@ As an operator, I want files and directories removed on shell exit so that tempo
 2. **Given** multiple cleanup actions already exist on a signal or exit trap, **When** a new cleanup action is added, **Then** existing trap behavior is preserved instead of overwritten
 
 ---
+
+### Example Workflow
+
+```bash
+# Install the ERR/INT/TERM handlers once, at the top of the script.
+dybatpho::register_common_handlers
+
+dybatpho::create_temp workdir "/" "build"
+dybatpho::cleanup_file_on_exit "${workdir}"
+dybatpho::trap 'dybatpho::warn "Interrupted, rolling back"; ./rollback.sh' INT TERM
+
+# DRY_RUN=true prints the command instead of running it.
+dybatpho::dry_run "rsync -a ${workdir}/ /srv/app/"
+
+[[ -f "${workdir}/manifest" ]] || dybatpho::die "Build produced no manifest" 2
+```
 
 ## Edge Cases
 

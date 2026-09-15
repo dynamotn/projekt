@@ -1,9 +1,8 @@
 # Feature Specification: Bootstrap and Module Loading
 
 **Feature Branch**: `[reverse-spec-init]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "init.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `init.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -50,6 +49,17 @@ As a maintainer, I want invalid startup modes rejected so that downstream behavi
 
 ---
 
+### Example Workflow
+
+```bash
+#!/usr/bin/env bash
+# Source the entrypoint once; every module becomes available.
+. "path/to/dybatpho/init.sh"
+
+dybatpho::register_common_handlers
+dybatpho::info "Running on $(dybatpho::goos)/$(dybatpho::goarch)"
+```
+
 ## Edge Cases
 
 - The current shell is not Bash v4+.
@@ -89,7 +99,8 @@ As a maintainer, I want invalid startup modes rejected so that downstream behavi
 ## Integration Tests *(mandatory)*
 
 - **IT-001**: Source `init.sh` and call one representative function from each
-  shipped module, including archive, Git, notification, and SemVer helpers.
+  shipped module, including archive, config, Git, lock, notification, secret,
+  and SemVer helpers.
 - **IT-002**: Execute `init.sh` directly and verify the session is rejected.
 - **IT-003**: Run under Bash v4+ strict mode and verify bootstrap completes without manual overrides.
 

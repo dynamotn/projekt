@@ -1,9 +1,8 @@
 # Feature Specification: Array Utilities
 
 **Feature Branch**: `[reverse-spec-array]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/array.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/array.sh`, `doc/array.md`, `test/array.bats`, and `example/array_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -113,6 +112,24 @@ As a script author, I want a helper that returns the first array value accepted 
 2. **Given** no array values satisfy the predicate, **When** the find helper runs, **Then** it fails without printing output
 
 ---
+
+### Example Workflow
+
+```bash
+services=(api worker "" api frontend)
+
+function _is_backend { [[ "$1" == api || "$1" == worker ]]; }
+function _to_unit { printf '%s.service' "$1"; }
+
+dybatpho::array_compact services            # drop the empty placeholder
+dybatpho::array_unique services             # drop the duplicate api
+dybatpho::array_filter services _is_backend # keep only backend services
+dybatpho::array_map services _to_unit --    # rewrite and print the result
+
+if dybatpho::array_contains services "api.service"; then
+  dybatpho::info "deploying: $(dybatpho::array_join services ", ")"
+fi
+```
 
 ## Edge Cases
 

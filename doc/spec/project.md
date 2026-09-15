@@ -1,9 +1,8 @@
 # Feature Specification: dybatpho Bash Utility Library
 
 **Feature Branch**: `[reverse-spec-project]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "Repository-wide analysis of init.sh, src/*.sh, doc/, example/, and test/"
+**Status**: Implemented
+**Input**: Repository-wide analysis of `init.sh`, `src/*.sh`, `doc/`, `doc/spec/`, `example/`, and `test/`
 
 ## Problem Statement *(mandatory)*
 
@@ -66,6 +65,31 @@ As a CLI author, I want to declare command specs in shell functions so that I ca
 
 ---
 
+### Example Workflow
+
+```bash
+#!/usr/bin/env bash
+# One source line, then compose modules across a single automation flow.
+. "path/to/dybatpho/init.sh"
+
+dybatpho::register_common_handlers
+dybatpho::lock_acquire "release" 30 || dybatpho::die "Another release is running"
+
+dybatpho::config_load defaults.env production.yaml
+dybatpho::config_schema VERSION string required:true
+dybatpho::config_validate
+
+version="$(dybatpho::config_get VERSION)"
+dybatpho::semver_valid "${version}" || dybatpho::die "Invalid version: ${version}"
+
+dybatpho::git_is_clean . || dybatpho::die "Dirty worktree"
+dybatpho::curl_download "https://dl.example.test/${version}.tgz" /tmp/app.tgz
+dybatpho::archive_extract /tmp/app.tgz /srv/app
+
+dybatpho::notify_slack "Released ${version}"
+dybatpho::lock_release "release"
+```
+
 ## Edge Cases
 
 - Sourcing is attempted from a shell that is not Bash v4 or newer.
@@ -81,9 +105,9 @@ As a CLI author, I want to declare command specs in shell functions so that I ca
 - **FR-001**: The library MUST provide a single bootstrap file that validates the runtime shell and loads all shipped modules in a stable order.
 - **FR-002**: The library MUST expose reusable shell functions for strings,
   arrays, text, tables, logging, helpers, process handling, networking, date
-  and structured data, configuration, file and archive operations, Git,
-  notifications, secret handling, SemVer, CLI generation, and OS
-  normalization.
+  and structured data, configuration, file and archive operations, process
+  locking, Git, notifications, secret handling, SemVer, CLI generation, and
+  OS normalization.
 - **FR-003**: The library MUST support strict-mode-friendly usage in scripts that run with fail-fast shell settings.
 - **FR-004**: The library MUST ship examples and generated documentation that map to the available modules and primary workflows.
 - **FR-005**: The library MUST keep user-visible behavior covered by the existing automated test suite.
@@ -112,7 +136,7 @@ As a CLI author, I want to declare command specs in shell functions so that I ca
 
 - **IT-001**: End-to-end bootstrap: source `init.sh` in a Bash v4+ shell and
   verify representative functions from all modules are available, including
-  archive, Git, notification, and SemVer.
+  archive, config, Git, lock, notification, secret, and SemVer.
 - **IT-002**: Composite automation: validate inputs, create temp files, perform a network request, log progress, and clean up on shell exit using dybatpho utilities.
 - **IT-003**: CLI generation: define a nested spec and verify parsing, help, aliases, hooks, and standardized failures without separate parser code.
 

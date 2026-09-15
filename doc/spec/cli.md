@@ -1,9 +1,8 @@
 # Feature Specification: Declarative CLI Generation
 
 **Feature Branch**: `[reverse-spec-cli]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/cli.sh and example/cli_advanced.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/cli.sh`, `doc/cli.md`, `test/cli.bats`, `example/cli_basic.sh`, `example/cli_advanced.sh`, and `example/cli_ux.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -124,6 +123,30 @@ roff man-page output.
    environment variables, and subcommands
 
 ---
+
+### Example Workflow
+
+```bash
+function _run_deploy {
+  dybatpho::info "Deploying ${COMPONENT} to ${ENVIRONMENT}"
+}
+
+function _spec {
+  dybatpho::opts::setup "Deployment tool" ARGS action:"_run_deploy"
+  dybatpho::opts::param "Target environment" ENVIRONMENT -e --env \
+    choices:dev,staging,prod required:true
+  dybatpho::opts::param "Component to deploy" COMPONENT --component \
+    env:DEPLOY_COMPONENT init:="api"
+  dybatpho::opts::flag "Verbose output" VERBOSE -v --verbose
+  dybatpho::opts::disp "Show help" --help action:"dybatpho::generate_help _spec"
+}
+
+# One spec drives parsing, help, completions, schema, and the man page.
+dybatpho::generate_from_spec _spec "$@"
+dybatpho::generate_completion _spec bash mytool
+dybatpho::generate_schema _spec mytool
+dybatpho::generate_man _spec mytool
+```
 
 ## Edge Cases
 

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `[reverse-spec-config]`
 **Status**: Implemented
-**Input**: Existing source analysis: `src/config.sh`, `doc/config.md`, and `test/config.bats`
+**Input**: Existing source analysis: `src/config.sh`, `doc/config.md`, `test/config.bats`, and `example/config_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -89,16 +89,6 @@ without a prefix, and verify the variables are exported.
    variable, **When** export is requested, **Then** it fails instead of
    creating an invalid assignment
 
-### Example Workflow
-
-```bash
-dybatpho::config_load defaults.env production.yaml
-dybatpho::config_env APP_
-dybatpho::config_require HOST
-host="$(dybatpho::config_get HOST)"
-dybatpho::config_export
-```
-
 ### User Story 5 - Validate typed configuration (Priority: P1)
 
 As a maintainer, I want to declare schemas for configuration keys so that
@@ -139,13 +129,22 @@ reference in each supported format.
 3. **Given** an unsupported format, **When** `config_doc` runs, **Then** it
    fails with a diagnostic
 
-### Example Schema Workflow
+### Example Workflow
 
 ```bash
+# Layer files, then overlay the environment.
+dybatpho::config_load defaults.env production.yaml
+dybatpho::config_env APP_
+
+# Declare the contract, then enforce it once.
 dybatpho::config_schema HOST url required:true description:"API base URL"
 dybatpho::config_schema PORT integer default:8080 min:1 max:65535
 dybatpho::config_schema MODE enum choices:dev,prod default:dev
 dybatpho::config_validate
+
+# Consume the effective values and publish the reference.
+host="$(dybatpho::config_get HOST)"
+dybatpho::config_export
 dybatpho::config_doc markdown "App settings" > CONFIGURATION.md
 ```
 

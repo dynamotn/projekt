@@ -2,7 +2,7 @@
 
 **Feature Branch**: `[reverse-spec-semver]`
 **Status**: Implemented
-**Input**: Existing source analysis: `src/semver.sh`, `doc/semver.md`, and `test/semver.bats`
+**Input**: Existing source analysis: `src/semver.sh`, `doc/semver.md`, `test/semver.bats`, and `example/semver_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -72,6 +72,22 @@ classify core, pre-release, build-only, and equal changes.
    those values are attached to the new version
 3. **Given** two valid versions, **When** release type runs, **Then** it prints
    `major`, `minor`, `patch`, `pre-release`, `build`, or `equal`
+
+### Example Workflow
+
+```bash
+current="v1.4.2"
+dybatpho::semver_valid "${current}" || dybatpho::die "Not a semantic version"
+
+next="$(dybatpho::semver_bump "${current}" minor)"          # 1.5.0
+candidate="$(dybatpho::semver_bump "${current}" minor rc.1)" # 1.5.0-rc.1
+
+dybatpho::info "release type: $(dybatpho::semver_release_type "${current}" "${next}")"
+
+if dybatpho::semver_compare "${next}" "${current}"; then
+  dybatpho::info "${next} supersedes ${current}"
+fi
+```
 
 ## Edge Cases
 

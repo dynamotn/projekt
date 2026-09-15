@@ -1,9 +1,8 @@
 # Feature Specification: Table Rendering Utilities
 
 **Feature Branch**: `[reverse-spec-table]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/table.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/table.sh`, `doc/table.md`, `test/table.bats`, and `example/table_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -64,6 +63,21 @@ As a script author, I want per-column alignment rules and a CSV convenience wrap
 
 1. **Given** an alignment specification, **When** the aligned-table helper runs, **Then** each column uses the requested alignment
 2. **Given** comma-delimited row data, **When** the CSV helper runs, **Then** it dispatches to the requested renderer using `,` as the delimiter
+
+### Example Workflow
+
+```bash
+rows="Service|Status|Replicas
+api|healthy|3
+worker|degraded|1"
+
+# Same data, three renderings.
+dybatpho::table_box "${rows}"
+dybatpho::table_markdown "${rows}" >> report.md
+dybatpho::table_align "${rows}" "|" "left,left,right" 3
+
+kubectl get pods --no-headers | tr -s ' ' ',' | dybatpho::table_csv - box
+```
 
 ## Edge Cases
 

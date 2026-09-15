@@ -2,7 +2,7 @@
 
 **Feature Branch**: `[reverse-spec-git]`
 **Status**: Implemented
-**Input**: Existing source analysis: `src/git.sh`, `doc/git.md`, and `test/git.bats`
+**Input**: Existing source analysis: `src/git.sh`, `doc/git.md`, `test/git.bats`, and `example/git_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -75,25 +75,22 @@ and verify the corresponding predicates and lists.
 4. **Given** a commit contained by one or more tags, **When** tag lookup runs,
    **Then** matching tag names are printed in sorted order
 
-## Public API
+### Example Workflow
 
-| Function | Arguments | Result |
-| --- | --- | --- |
-| `dybatpho::git_root` | `[path]` | Absolute repository root |
-| `dybatpho::git_branch` | `[path]` | Branch or short detached-HEAD SHA |
-| `dybatpho::git_default_branch` | `[path]` | Preferred default branch |
-| `dybatpho::git_commit_hash` | `[path] [commit-ish]` | Full SHA |
-| `dybatpho::git_commit_short_hash` | `[path] [commit-ish]` | 7-character SHA |
-| `dybatpho::git_commit_subject` | `[path] [commit-ish]` | Subject line |
-| `dybatpho::git_commit_author` | `[path] [commit-ish]` | Author name |
-| `dybatpho::git_has_commit` | `[path] [commit-ish]` | Exit success if present |
-| `dybatpho::git_commits_between` | `path base [head]` | Oldest-to-newest SHAs |
-| `dybatpho::git_commit_count` | `path base [head]` | Range count |
-| `dybatpho::git_is_clean` | `[path]` | Exit success if clean |
-| `dybatpho::git_remote_url` | `[remote] [path]` | Remote URL |
-| `dybatpho::git_has_remote` | `[remote] [path]` | Exit success if present |
-| `dybatpho::git_changed_files` | `[path] [base]` | Sorted changed paths |
-| `dybatpho::git_tags_containing` | `[path] [commit-ish]` | Sorted tag names |
+```bash
+root="$(dybatpho::git_root)"
+base="$(dybatpho::git_default_branch "${root}")"
+
+dybatpho::info "branch: $(dybatpho::git_branch "${root}")"
+dybatpho::info "commit: $(dybatpho::git_commit_short_hash "${root}") $(dybatpho::git_commit_subject "${root}")"
+dybatpho::info "$(dybatpho::git_commit_count "${root}" "${base}") commits ahead of ${base}"
+
+dybatpho::git_is_clean "${root}" || dybatpho::die "Refusing to release a dirty worktree"
+dybatpho::git_has_remote origin "${root}" \
+  && dybatpho::info "origin: $(dybatpho::git_remote_url origin "${root}")"
+
+dybatpho::git_changed_files "${root}" "${base}"
+```
 
 ## Edge Cases
 

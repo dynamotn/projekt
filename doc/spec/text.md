@@ -1,9 +1,8 @@
 # Feature Specification: Text Block Utilities
 
 **Feature Branch**: `[reverse-spec-text]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/text.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/text.sh`, `doc/text.md`, `test/text.bats`, and `example/text_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -65,6 +64,23 @@ As a script author, I want helpers for bullet lists and lightweight aligned colu
 
 1. **Given** a multi-line list, **When** the bullet helper runs, **Then** every non-empty line is prefixed with the chosen bullet marker
 2. **Given** delimited text rows, **When** the column helper runs, **Then** cells are padded into aligned plain columns with the requested gap
+
+### Example Workflow
+
+```bash
+notes="$(cat <<'EOF'
+      Fixed the retry budget
+      Documented the new flags
+EOF
+)"
+
+dybatpho::text_bullet_list "$(dybatpho::text_dedent "${notes}")" "*"
+dybatpho::text_indent "$(dybatpho::text_dedent "${notes}")" "    "
+
+# Strip colors before storing captured terminal output.
+./build.sh 2>&1 | dybatpho::text_strip_ansi - > build.log
+dybatpho::text_columns "name|status" "|" 4
+```
 
 ## Edge Cases
 

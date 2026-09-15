@@ -1,9 +1,8 @@
 # Feature Specification: JSON and YAML Utilities
 
 **Feature Branch**: `[reverse-spec-json]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/json.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/json.sh`, `doc/json.md`, `test/json.bats`, and `example/json_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -61,6 +60,21 @@ As a maintainer, I want conversion helpers between JSON and YAML so that scripts
 2. **Given** a YAML document, **When** the conversion helper runs, **Then** it prints or writes JSON output
 
 ---
+
+### Example Workflow
+
+```bash
+# Read a value, guard on a filter, and convert between formats.
+version="$(dybatpho::json_query package.json '.version')"
+
+if dybatpho::json_has package.json '.scripts.test'; then
+  dybatpho::info "package.json ${version} defines a test script"
+fi
+
+dybatpho::json_to_yaml package.json package.yaml
+dybatpho::yaml_query package.yaml '.name'
+curl -sSf https://api.example.test/status | dybatpho::json_pretty -
+```
 
 ## Edge Cases
 

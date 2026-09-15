@@ -1,9 +1,8 @@
 # Feature Specification: String Utilities
 
 **Feature Branch**: `[reverse-spec-string]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/string.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/string.sh`, `doc/string.md`, `test/string.bats`, and `example/string_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -110,6 +109,24 @@ As a maintainer, I want URL encode/decode helpers so that scripts can safely pas
 2. **Given** an encoded string contains `%` sequences and plus signs, **When** the decode helper runs, **Then** the caller receives a decoded value with spaces handled correctly
 
 ---
+
+### Example Workflow
+
+```bash
+raw="  Release Notes: v1.5.0 (Beta)  "
+title="$(dybatpho::trim "${raw}")"
+
+slug="$(dybatpho::string_slugify "${title}")"        # release-notes-v1-5-0-beta
+dybatpho::info "writing ${slug}.md"
+
+if dybatpho::string_starts_with "${title}" "Release"; then
+  body="$(dybatpho::string_trim_prefix "${title}" "Release Notes: ")"
+  dybatpho::info "$(dybatpho::string_truncate "${body}" 10)"
+fi
+
+query="q=$(dybatpho::url_encode "${title}")"
+printf '%s\n' "$(dybatpho::string_pad "name" 12)|$(dybatpho::upper "${slug}")"
+```
 
 ## Edge Cases
 

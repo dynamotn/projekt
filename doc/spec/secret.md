@@ -2,8 +2,7 @@
 
 **Feature Branch**: `[feature-secret]`
 **Status**: Implemented
-**Input**: New module: `src/secret.sh`, `doc/secret.md`, `test/secret.bats`, and
-`example/secret_ops.sh`
+**Input**: Existing source analysis: `src/secret.sh`, `doc/secret.md`, `test/secret.bats`, and `example/secret_ops.sh`
 
 ## Problem Statement *(mandatory)*
 

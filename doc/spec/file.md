@@ -1,9 +1,8 @@
 # Feature Specification: File Preview and Temporary Resource Management
 
 **Feature Branch**: `[reverse-spec-file]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/file.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/file.sh`, `doc/file.md`, `test/file.bats`, and `example/file_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -111,6 +110,22 @@ As a script author, I want a helper that cleans repeated separators plus `.` and
 2. **Given** a relative path that begins with unresolved `..` segments, **When** the normalize helper runs, **Then** those parent traversals are preserved
 
 ---
+
+### Example Workflow
+
+```bash
+# Build a report in a temporary file that is cleaned up on exit.
+dybatpho::create_temp report_file ".csv" "build-report"
+dybatpho::cleanup_file_on_exit "${report_file}"
+
+# Derive sibling paths without shelling out to dirname/basename.
+config="$(dybatpho::path_join "$(dybatpho::path_dirname "${report_file}")" "report.json")"
+dybatpho::info "stem=$(dybatpho::path_stem "${report_file}")"
+dybatpho::info "json=$(dybatpho::path_change_ext "${report_file}" json)"
+
+dybatpho::path_is_abs "${config}" || dybatpho::die "Expected an absolute path"
+dybatpho::show_file "${report_file}"
+```
 
 ## Edge Cases
 

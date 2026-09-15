@@ -2,7 +2,7 @@
 
 **Feature Branch**: `[reverse-spec-notification]`
 **Status**: Implemented
-**Input**: Existing source analysis: `src/notification.sh`, `doc/notification.md`, and `example/notification_ops.sh`
+**Input**: Existing source analysis: `src/notification.sh`, `doc/notification.md`, `test/notification.bats`, and `example/notification_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -69,6 +69,20 @@ carriage returns, and tabs and inspect the generated value.
 1. **Given** message text containing JSON-sensitive characters, **When** a
    provider helper builds its payload, **Then** those characters are escaped
    as JSON string content
+
+### Example Workflow
+
+```bash
+export DYBATPHO_SLACK_WEBHOOK_URL="https://hooks.slack.test/services/T/B/X"
+
+if ./deploy.sh; then
+  dybatpho::notify_slack ":white_check_mark: *Deploy succeeded* for \`${BUILD_TAG}\`"
+else
+  dybatpho::notify_slack ":x: Deploy failed, see the build log"
+  dybatpho::notify_webhook "https://alerts.example.test/hook" \
+    "$(printf '{"severity":"high","build":"%s"}' "${BUILD_TAG}")"
+fi
+```
 
 ## Edge Cases
 

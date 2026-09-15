@@ -1,9 +1,8 @@
 # Feature Specification: Structured Logging and Trace Output
 
 **Feature Branch**: `[reverse-spec-logging]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/logging.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/logging.sh`, `doc/logging.md`, `test/logging.bats`, and `example/logging_demo.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -129,6 +128,25 @@ file captures more events than stdout while every file line is valid JSON.
    no file is created and no error is raised
 
 ---
+
+### Example Workflow
+
+```bash
+# Text on the terminal, JSON in a rotating file, at independent verbosity.
+export LOG_LEVEL="info"
+export LOG_FORMAT="text"
+export LOG_FILE="/var/log/deploy.log"
+export LOG_FILE_LEVEL="debug"
+export LOG_FILE_MAX_BYTES=$((1024 * 1024))
+export LOG_FILE_MAX_BACKUPS=5
+export LOG_REQUEST_ID="deploy-42"
+
+dybatpho::header "DEPLOY"
+dybatpho::info "Starting deployment"
+dybatpho::debug "Only the log file records this line"
+dybatpho::progress_bar 50
+dybatpho::success "Deployment finished"
+```
 
 ## Edge Cases
 

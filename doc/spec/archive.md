@@ -1,9 +1,8 @@
 # Feature Specification: Archive Utilities
 
 **Feature Branch**: `[reverse-spec-archive]`
-**Created**: 2026-03-14
-**Status**: Draft
-**Input**: Existing source analysis: "src/archive.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/archive.sh`, `doc/archive.md`, `test/archive.bats`, and `example/archive_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -56,6 +55,17 @@ As a script author, I want to list archive contents before extraction so that va
 1. **Given** a `.tar` archive, **When** the list helper runs, **Then** it prints the output from `tar -tf`
 2. **Given** a `.zip` archive, **When** the list helper runs, **Then** it prints the output from `unzip -Z1`
 3. **Given** a single-file compressed archive, **When** the list helper runs, **Then** it prints the decompressed output file name inferred from the archive name
+
+### Example Workflow
+
+```bash
+# Pack a build directory, inspect it, then restore it elsewhere.
+dybatpho::archive_create dist/ release.tar.gz
+dybatpho::archive_list release.tar.gz
+
+mkdir -p /srv/app
+dybatpho::archive_extract release.tar.gz /srv/app 1
+```
 
 ## Edge Cases
 

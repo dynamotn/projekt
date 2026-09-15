@@ -24,8 +24,58 @@ This document describes the repository workflow and conventions to preserve.
 Every module in `src/` must have a clear responsibility and expose public
 functions under the `dybatpho::` namespace. Every public module must have a
 corresponding complete example in `example/` (normally
-`example/<module>_ops.sh`). When changing a module, read its source, tests, API
-documentation, matching specification, and example before editing.
+`example/<module>_ops.sh`) **and a specification in `doc/spec/<module>.md`**.
+When changing a module, read its source, tests, API documentation, matching
+specification, and example before editing.
+
+### Specification requirements
+
+**Every module in `src/` MUST have `doc/spec/<module>.md`. A change that adds a
+module or public behavior without its spec is incomplete and must not be
+reported as done.** This is not conditional on the size of the change.
+
+Generate or update the spec in the same change that touches the module:
+
+- **New module** — write `doc/spec/<module>.md` before the work is considered
+  complete, and register it in both the Spec Files and Source Mapping lists of
+  `doc/spec/README.md`.
+- **New or changed public function, argument, rule, output, or exit code** —
+  add or update the matching user story, functional requirement (`FR-xxx`),
+  edge case, and integration test (`IT-xxx`) entries.
+- **Removed behavior** — delete the requirements it covered rather than leaving
+  them describing code that no longer exists.
+
+Every spec follows the same section order, taken from the existing files:
+
+1. Header (`# Feature Specification: <title>`, `Feature Branch`, `Status`,
+   `Input` naming the source, tests, docs, and example it was derived from)
+2. `## Problem Statement *(mandatory)*`
+3. `## Business Value *(mandatory)*`
+4. `## User Scenarios & Testing *(mandatory)*` — numbered, prioritized user
+   stories, each with an **Independent Test** and numbered
+   **Acceptance Scenarios** in Given/When/Then form, plus an example workflow
+5. `## Edge Cases`
+6. `## Requirements *(mandatory)*` — `FR-001`-style functional requirements
+   written with MUST, and `### Key Entities` when the feature owns data
+7. `## Success Criteria *(mandatory)*` — `SC-001`-style measurable outcomes
+8. `## Integration Tests *(mandatory)*` — `IT-001`-style entries that map to
+   real cases in `test/<module>.bats`
+9. `## Acceptance Criteria *(mandatory)*`
+
+Specs describe observable behavior and contracts, not implementation lines.
+Requirements must be traceable: every `FR-xxx` should be enforced by code and
+every `IT-xxx` should correspond to a test that exists.
+
+Verify no module is missing a spec before finishing:
+
+```bash
+comm -23 \
+  <(ls src/*.sh | xargs -n1 basename | sed 's/\.sh$/.md/' | sort) \
+  <(ls doc/spec/*.md | xargs -n1 basename | sort)
+```
+
+The command must print nothing. Any output is a missing spec that must be
+written before the change is complete.
 
 ### Complete example requirements
 
@@ -57,6 +107,7 @@ changed examples.
 | `git.sh` | Safe repository, branch, commit, and Git operations | `test/git.bats`, `doc/git.md`, `doc/spec/git.md` |
 | `helpers.sh` | Argument validation, command lookup, retry, and common helpers | `test/helpers.bats`, `doc/helpers.md`, `doc/spec/helpers.md` |
 | `json.sh` | Query, validate, pretty-print, and convert JSON/YAML | `test/json.bats`, `doc/json.md`, `doc/spec/json.md` |
+| `lock.sh` | Portable `mkdir`-based process locks, waiting, stale reclaim, and `with_lock` | `test/lock.bats`, `doc/lock.md`, `doc/spec/lock.md` |
 | `logging.sh` | Log levels, text/JSON logging, banners, and Bash tracing | `test/logging.bats`, `doc/logging.md`, `doc/spec/logging.md` |
 | `network.sh` | Curl wrappers, retries, JSON requests, and HTTP metadata | `test/network.bats`, `doc/network.md`, `doc/spec/network.md` |
 | `notification.sh` | Webhook notifications and JSON payloads | `test/notification.bats`, `doc/notification.md`, `doc/spec/notification.md` |
@@ -67,7 +118,6 @@ changed examples.
 | `string.sh` | Case conversion, matching, splitting, trimming, and predicates | `test/string.bats`, `doc/string.md`, `doc/spec/string.md` |
 | `table.sh` | Plain-text and Markdown table rendering | `test/table.bats`, `doc/table.md`, `doc/spec/table.md` |
 | `text.sh` | Multiline text processing, indentation, wrapping, and formatting | `test/text.bats`, `doc/text.md`, `doc/spec/text.md` |
-| `testing.sh` | Helpers for writing and running library tests | `test/testing.bats`, `doc/spec/testing.md` |
 
 `init.sh` loads modules according to their dependencies. Do not source a module
 in isolation when it uses helpers from another module unless the source header
@@ -87,8 +137,9 @@ documents the dependency and isolated tests provide the required setup.
 - **Presentation modules** (`logging`, `cli`): reserve stdout for pipeable or
   capturable data and stderr for diagnostics; preserve text output when adding
   machine-readable output.
-- **Testing module** (`testing`): changes to test helpers must be checked against
-  existing module tests, not only the helper's own tests.
+- **Coordination modules** (`lock`): keep operations atomic and portable
+  without `flock`, always report the holder on failure, and never leave a lock
+  behind on the failure path.
 
 ## Bash conventions
 
@@ -225,7 +276,8 @@ When adding CLI behavior, update these together:
 2. Find its tests in `test/<module>.bats`; extend tests near the changed behavior.
 3. Add API comments for new public functions so `scripts/doc.sh` can generate
    the reference documentation.
-4. Update `doc/spec/<module>.md` for contract or capability changes.
+4. Create or update `doc/spec/<module>.md`. This step is mandatory for any
+   contract or capability change, and for every new module; do not defer it.
 5. Add or update the module's complete example in `example/`; do not defer
    examples for public behavior.
 6. Run `bash -n` on the source, the module test, and tests for affected
@@ -246,6 +298,8 @@ to the module convention.
 | Git/process/config | Temporary repository/config, failure paths, traps, and cleanup |
 | Logging/CLI | Separate stdout/stderr, filtering, strict mode, and machine-readable output |
 | JSON/YAML/notification | Escaping, malformed input, and unavailable dependencies |
+| Locking/coordination | Atomic acquire, stale reclaim, release on failure paths, and `DYBATPHO_LOCK_DIR` isolation in tests |
+| New module | `doc/spec/<module>.md`, `doc/spec/README.md` entries, `test/<module>.bats`, and `example/<module>_ops.sh` |
 | Documentation/spec | Correct links/references and `git diff --check` |
 
 ## Completion checklist
@@ -255,6 +309,8 @@ to the module convention.
 3. Make a focused, backward-compatible change unless the contract requires otherwise.
 4. Add regression tests for new or fixed behavior.
 5. Add or update a complete example for every changed public module.
-6. Run targeted tests, `bash -n example/*.sh`, changed examples, and
+6. Add or update `doc/spec/<module>.md` for every changed public module, and
+   confirm the missing-spec check above prints nothing.
+7. Run targeted tests, `bash -n example/*.sh`, changed examples, and
    `git diff --check`.
-7. Review the final diff and remove temporary artifacts.
+8. Review the final diff and remove temporary artifacts.

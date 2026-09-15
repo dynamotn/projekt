@@ -1,9 +1,8 @@
 # Feature Specification: Validation, Predicates, Retry, and Breakpoint Helpers
 
 **Feature Branch**: `[reverse-spec-helpers]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/helpers.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/helpers.sh`, `doc/helpers.md`, `test/helpers.bats`, and `example/helpers_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -102,6 +101,28 @@ debugging.
 verify its documented inspection and quit controls.
 
 ---
+
+### Example Workflow
+
+```bash
+function _deploy {
+  local environment token
+  dybatpho::expect_args environment token -- "$@"
+
+  dybatpho::require curl
+  dybatpho::expect_envs DEPLOY_HOST
+  dybatpho::assert "[[ -n '${token}' ]]" "A deploy token is required"
+
+  # Try three times, two seconds apart, before giving up.
+  dybatpho::retry_until 3 2 "curl -sSf https://${DEPLOY_HOST}/health" "health check"
+}
+
+editor="$(dybatpho::coalesce "${VISUAL:-}" "${EDITOR:-}" "vi")"
+timeout="$(dybatpho::default_env DEPLOY_TIMEOUT 30)"
+dybatpho::is int "${timeout}" || dybatpho::die "DEPLOY_TIMEOUT must be an integer"
+
+_deploy prod "${DEPLOY_TOKEN:-}"
+```
 
 ## Edge Cases
 

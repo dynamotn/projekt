@@ -1,9 +1,8 @@
 # Feature Specification: Date and Timestamp Utilities
 
 **Feature Branch**: `[reverse-spec-date]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/date.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/date.sh`, `doc/date.md`, `test/date.bats`, and `example/date_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -77,6 +76,20 @@ As a script author, I want a helper that prints the signed difference in days be
 
 ---
 
+### Example Workflow
+
+```bash
+started_at="$(dybatpho::date_now)"
+
+if dybatpho::date_is_valid "2026-01-15"; then
+  expires_at="$(dybatpho::date_add_days "2026-01-15" 30)"
+  dybatpho::info "Certificate expires on ${expires_at}"
+  dybatpho::info "Valid for $(dybatpho::date_diff_days "2026-01-15" "${expires_at}") days"
+fi
+
+dybatpho::info "Run started at $(dybatpho::date_format "${started_at}" "%F %T")"
+```
+
 ## Edge Cases
 
 - A date string cannot be parsed by the underlying `date` command.
@@ -96,7 +109,8 @@ As a script author, I want a helper that prints the signed difference in days be
 - **FR-006**: The module MUST provide a helper that formats a Unix timestamp into a date string.
 - **FR-007**: The module MUST provide a helper that adds or subtracts whole days from a date string.
 - **FR-008**: The module MUST provide a helper that prints the signed whole-day difference between two date strings.
-- **FR-009**: The module MUST respect a configurable timezone across its helpers.
+- **FR-009**: The module MUST respect the timezone configured through
+  `DYBATPHO_DATE_TIMEZONE` across every parsing and formatting helper.
 
 ### Key Entities *(include if feature involves data)*
 

@@ -1,9 +1,8 @@
 # Feature Specification: Operating System and Architecture Normalization
 
 **Feature Branch**: `[reverse-spec-os]`
-**Created**: 2026-03-13
-**Status**: Draft
-**Input**: Existing source analysis: "src/os.sh"
+**Status**: Implemented
+**Input**: Existing source analysis: `src/os.sh`, `doc/os.md`, `test/os.bats`, and `example/os_ops.sh`
 
 ## Problem Statement *(mandatory)*
 
@@ -46,6 +45,21 @@ As a maintainer, I want architecture normalization so that downloads and packagi
 2. **Given** the runtime reports an ARM or 32-bit architecture, **When** the architecture helper runs, **Then** the helper returns the corresponding normalized target name
 
 ---
+
+### Example Workflow
+
+```bash
+# Select the right release artifact for the current host.
+asset="mytool_$(dybatpho::goos)_$(dybatpho::goarch).tar.gz"
+dybatpho::info "Downloading ${asset}"
+
+if dybatpho::is_macos; then
+  brew_prefix="$(dybatpho::command_path brew)"
+  dybatpho::info "Using Homebrew at ${brew_prefix}"
+elif dybatpho::is_linux; then
+  dybatpho::info "Using $(dybatpho::command_path apt-get dnf apk)"
+fi
+```
 
 ## Edge Cases
 
