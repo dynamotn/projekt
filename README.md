@@ -155,6 +155,7 @@ with a missing function. See [init.sh reference](doc/init.md) and
 | ------------------------------- | ----------------------------------------------------------------- |
 | [config.sh](doc/config.md)      | Config files + env vars with precedence and schema validation      |
 | [secret.sh](doc/secret.md)      | Read secrets safely, mask them in output, shred and wipe them      |
+| [safety.sh](doc/safety.md)      | Confirm-or-refuse guards for rm, overwrite, extract, system changes |
 
 ### 🛠 Dev workflow
 
@@ -162,6 +163,7 @@ with a missing function. See [init.sh reference](doc/init.md) and
 | ----------------------------- | -------------------------------------------------------- |
 | [git.sh](doc/git.md)          | Repo metadata, branches, tags, commits, remotes           |
 | [semver.sh](doc/semver.md)    | Parse, validate, compare and bump semantic versions       |
+| [testing.sh](doc/testing.md)  | File/JSON/YAML assertions, CLI snapshots, mocks, fixtures |
 
 ## 🗂 Directory Structure
 

@@ -302,3 +302,53 @@ function dybatpho::archive_list {
       ;;
   esac
 }
+
+#######################################
+# @description Return success when an archive entry stays inside the extraction directory.
+# @arg $1 string Entry name as reported by `dybatpho::archive_list`
+# @exitcode 0 The entry is a safe relative path
+# @exitcode 1 The entry is absolute, escapes through `..`, or uses a Windows drive path
+#######################################
+function __dybatpho_archive_entry_is_safe {
+  local entry
+  dybatpho::expect_args entry -- "$@"
+  # Treat backslashes as separators so Windows-style entries can't hide a traversal.
+  local normalized="${entry//\\//}"
+  case "${normalized}" in
+    /* | '~/'* | [a-zA-Z]:/*) return 1 ;;
+    .. | ../* | */../* | */..) return 1 ;;
+  esac
+  return 0
+}
+
+#######################################
+# @description List archive entries that would escape the extraction directory.
+# @arg $1 string Archive file path
+# @stdout One unsafe entry per line, empty when the archive is safe
+# @tip Use `dybatpho::safe_extract` to validate and extract in one step
+#######################################
+function dybatpho::archive_unsafe_entries {
+  local archive_path
+  dybatpho::expect_args archive_path -- "$@"
+  local entry
+  while IFS= read -r entry; do
+    [[ -n "${entry}" ]] || continue
+    if ! __dybatpho_archive_entry_is_safe "${entry}"; then
+      printf '%s\n' "${entry}"
+    fi
+  done < <(dybatpho::archive_list "${archive_path}")
+}
+
+#######################################
+# @description Return success when no archive entry escapes the extraction directory.
+# @arg $1 string Archive file path
+# @exitcode 0 Every entry is a safe relative path
+# @exitcode 1 At least one entry is absolute or traverses outside the destination
+#######################################
+function dybatpho::archive_is_safe {
+  local archive_path
+  dybatpho::expect_args archive_path -- "$@"
+  local unsafe_entries
+  unsafe_entries="$(dybatpho::archive_unsafe_entries "${archive_path}")" || return $?
+  [[ -z "${unsafe_entries}" ]]
+}

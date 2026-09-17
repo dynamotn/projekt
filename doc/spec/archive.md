@@ -90,12 +90,21 @@ dybatpho::archive_extract release.tar.gz /srv/app 1
 - **FR-006**: The extract helper MUST support a strip-components count for tar-based archives and zip archives.
 - **FR-007**: Single-file compressed outputs MUST only accept file sources for archive creation.
 - **FR-008**: The module MUST fail clearly for unsupported archive extensions.
+- **FR-009**: The module MUST expose an inspection helper
+  (`archive_unsafe_entries`) that lists archive entries which would escape the
+  extraction directory, and a predicate (`archive_is_safe`) that fails when an
+  archive contains at least one of them. An entry is unsafe when
+  it is absolute, equal to `..`, prefixed by `../`, traverses through `/../`,
+  uses backslash separators around a traversal, or carries a Windows drive
+  letter. Guarded extraction lives in `safety.md`.
 
 ### Key Entities *(include if feature involves data)*
 
 - **Archive Path**: A file path whose extension determines the archive backend and flags.
 - **Source Path**: The file or directory packaged into an archive.
 - **Destination Directory**: The directory receiving extracted archive contents.
+- **Unsafe Entry**: An archive member whose name would be written outside the
+  destination directory.
 
 ## Success Criteria *(mandatory)*
 
@@ -103,6 +112,8 @@ dybatpho::archive_extract release.tar.gz /srv/app 1
 
 - **SC-001**: Scripts can package, inspect, and extract common archive formats without embedding backend-specific flags.
 - **SC-002**: Archive workflows stay readable across build, backup, and release automation.
+- **SC-003**: An archive can be checked for path-traversal entries before it is
+  extracted.
 
 ## Integration Tests *(mandatory)*
 
@@ -114,6 +125,8 @@ dybatpho::archive_extract release.tar.gz /srv/app 1
 - **IT-006**: Extract a single-file compressed archive into a destination directory.
 - **IT-007**: List supported tar, zip, and single-file compressed archives.
 - **IT-008**: Reject unsupported archive extensions and invalid strip behavior.
+- **IT-009**: Report the traversal entries of a hostile archive with
+  `archive_unsafe_entries`, and confirm `archive_is_safe` accepts a benign one.
 
 ## Acceptance Criteria *(mandatory)*
 

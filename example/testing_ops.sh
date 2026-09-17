@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# @file testing_ops.sh
+# @brief Example showing the extended assertion, snapshot, mock, and fixture helpers
+# @description Verifies a small "release" script end to end without touching the
+#              network, the real filesystem layout, or the developer's environment.
+SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
+# shellcheck source=init.sh
+. "${SCRIPTDIR}/../init.sh" --modules testing network text
+
+dybatpho::register_common_handlers
+
+# Keep snapshots beside this example instead of the repository's test tree.
+dybatpho::fixture_dir EXAMPLE_ROOT
+export DYBATPHO_TEST_SNAPSHOT_DIR="${EXAMPLE_ROOT}/snapshots"
+
+# --- the script under test ---------------------------------------------------
+
+# A miniature release script: it reads configuration, calls an HTTP API, writes
+# a manifest, and reports what it did.
+function release_tool {
+  local version="${RELEASE_VERSION:?RELEASE_VERSION must be set}"
+  local out_dir="$1"
+
+  mkdir -p "${out_dir}"
+  dybatpho::curl_do "https://api.example.test/releases/${version}" "${out_dir}/release.json" \
+    || return 1
+
+  printf '{"version":"%s","channel":"%s"}\n' "${version}" "${RELEASE_CHANNEL}" \
+    > "${out_dir}/manifest.json"
+  ln -sfn "manifest.json" "${out_dir}/current.json"
+  chmod 600 "${out_dir}/manifest.json"
+
+  git tag "v${version}"
+  printf 'Released %s on %s\n' "${version}" "${RELEASE_CHANNEL}"
+}
+
+# --- fixtures ----------------------------------------------------------------
+
+dybatpho::header "FIXTURES"
+# Both fixtures register an exit trap, so nothing is left behind afterwards.
+# Declare the targets first: the helpers assign through a name reference.
+declare workdir expected_manifest settings
+dybatpho::fixture_dir workdir
+dybatpho::fixture_file expected_manifest '{"version":"1.5.0","channel":"stable"}' ".json"
+dybatpho::info "workdir:  ${workdir}"
+dybatpho::info "fixture:  ${expected_manifest}"
+
+# --- mocks -------------------------------------------------------------------
+
+dybatpho::header "MOCKS"
+# Environment: set inputs without leaking them into the surrounding shell.
+dybatpho::mock_env RELEASE_VERSION=1.5.0 RELEASE_CHANNEL=stable DYBATPHO_CURL_MAX_RETRIES=0
+
+# Command: `git tag` must not touch the real repository.
+dybatpho::mock_command git 0 ""
+
+# HTTP: serve a canned response instead of calling the network.
+dybatpho::mock_http "api.example.test/releases" 200 '{"artifact":"app-1.5.0.tgz"}' \
+  "Content-Type: application/json"
+
+dybatpho::success "Environment, git, and curl are mocked"
+
+# --- run the script under test ----------------------------------------------
+
+dybatpho::header "RUN"
+release_tool "${workdir}/dist"
+
+# --- assertions --------------------------------------------------------------
+
+dybatpho::header "FILE, DIRECTORY, AND SYMLINK ASSERTIONS"
+dybatpho::assert_dir "${workdir}/dist"
+dybatpho::assert_file "${workdir}/dist/manifest.json"
+dybatpho::assert_symlink "${workdir}/dist/current.json" "manifest.json"
+dybatpho::assert_file_mode "${workdir}/dist/manifest.json" 600
+dybatpho::assert_path_absent "${workdir}/dist/rollback.json"
+dybatpho::success "Layout on disk is correct"
+
+dybatpho::header "JSON ASSERTIONS"
+dybatpho::assert_json_valid "${workdir}/dist/manifest.json"
+dybatpho::assert_json_query "${workdir}/dist/manifest.json" '.version' "1.5.0"
+dybatpho::assert_json_has "${workdir}/dist/release.json" '.artifact'
+dybatpho::assert_json_query "${expected_manifest}" '.channel' "stable"
+dybatpho::success "Manifest and API response have the expected shape"
+
+dybatpho::header "YAML ASSERTIONS"
+dybatpho::fixture_file settings 'mode: production' ".yaml"
+dybatpho::assert_yaml_valid "${settings}"
+dybatpho::assert_yaml_query "${settings}" '.mode' "production"
+dybatpho::assert_yaml_has "${settings}" '.mode'
+dybatpho::success "YAML settings validated"
+
+dybatpho::header "MOCK ASSERTIONS"
+dybatpho::assert_http_called "api.example.test/releases/1.5.0"
+dybatpho::assert_mock_called git tag v1.5.0
+dybatpho::info "curl calls: $(dybatpho::mock_call_count curl), git calls: $(dybatpho::mock_call_count git)"
+dybatpho::success "The script called the API and tagged the release"
+
+dybatpho::header "SNAPSHOT TESTING"
+# Volatile values would otherwise change the snapshot on every run.
+dybatpho::snapshot_scrub "${workdir}" '<WORKDIR>'
+dybatpho::assert_cli_snapshot release-run -- release_tool "${workdir}/dist2"
+dybatpho::info "Recorded snapshot:"
+dybatpho::text_indent "$(cat "${DYBATPHO_TEST_SNAPSHOT_DIR}/release-run.snap")" "  "
+# Running again compares against the snapshot recorded a moment ago.
+dybatpho::assert_cli_snapshot release-run -- release_tool "${workdir}/dist2"
+dybatpho::success "CLI output is stable across runs"
+
+# --- failure reporting -------------------------------------------------------
+
+dybatpho::header "FAILURE REPORTING"
+# Assertions return 1 instead of exiting, so a failure can be handled inline.
+if dybatpho::assert_json_query "${workdir}/dist/manifest.json" '.version' "9.9.9"; then
+  dybatpho::error "Expected the mismatched version to be reported"
+else
+  dybatpho::warn "Mismatch reported as expected"
+fi
+dybatpho::info "Recorded assertion failures: ${DYBATPHO_TEST_FAILURES}"
+
+# --- teardown ----------------------------------------------------------------
+
+dybatpho::header "TEARDOWN"
+dybatpho::unmock_all
+dybatpho::info "RELEASE_VERSION after unmock: ${RELEASE_VERSION:-<unset>}"
+dybatpho::success "Testing helpers demo complete; fixtures are removed on exit"

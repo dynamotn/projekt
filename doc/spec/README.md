@@ -36,11 +36,13 @@ The goal is to capture the current product behavior of the library in a form tha
 - `git.md`
 - `table.md`
 - `text.md`
+- `testing.md`
 - `json.md`
 - `date.md`
 - `semver.md`
 - `notification.md`
 - `secret.md`
+- `safety.md`
 
 ## Source Mapping
 
@@ -65,6 +67,8 @@ The goal is to capture the current product behavior of the library in a form tha
 - `src/semver.sh` -> `semver.md`
 - `src/notification.sh` -> `notification.md`
 - `src/secret.sh` -> `secret.md`
+- `src/testing.sh` -> `testing.md`
+- `src/safety.sh` -> `safety.md`
 
 ## Notes
 

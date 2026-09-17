@@ -115,11 +115,13 @@ changed examples.
 | `notification.sh` | Webhook notifications and JSON payloads | `test/notification.bats`, `doc/notification.md`, `doc/spec/notification.md` |
 | `os.sh` | OS, architecture, and environment detection | `test/os.bats`, `doc/os.md`, `doc/spec/os.md` |
 | `process.sh` | Traps, cleanup, dry-run, and process lifecycle | `test/process.bats`, `doc/process.md`, `doc/spec/process.md` |
+| `safety.sh` | Guards for destructive operations: removal, overwrite, extraction, and system changes | `test/safety.bats`, `doc/safety.md`, `doc/spec/safety.md` |
 | `secret.sh` | Read, mask, and store secrets safely | `test/secret.bats`, `doc/secret.md`, `doc/spec/secret.md` |
 | `semver.sh` | Semantic version parsing, comparison, and validation | `test/semver.bats`, `doc/semver.md`, `doc/spec/semver.md` |
 | `string.sh` | Case conversion, matching, splitting, trimming, and predicates | `test/string.bats`, `doc/string.md`, `doc/spec/string.md` |
 | `table.sh` | Plain-text and Markdown table rendering | `test/table.bats`, `doc/table.md`, `doc/spec/table.md` |
 | `text.sh` | Multiline text processing, indentation, wrapping, and formatting | `test/text.bats`, `doc/text.md`, `doc/spec/text.md` |
+| `testing.sh` | Extended assertions, CLI snapshots, env/command/HTTP mocks, and self-cleaning fixtures | `test/testing.bats`, `doc/testing.md`, `doc/spec/testing.md` |
 
 ### Module registry
 
@@ -230,8 +232,10 @@ affect editor navigation.
   predictable and free of unexpected file writes or logging.
 - **System primitives** (`date`, `file`, `os`, `process`, `helpers`): prioritize
   GNU/BSD/BusyBox portability and return clear errors for invalid input.
-- **Security primitives** (`secret`): never log or export secret values, keep
-  the masking registry process-local, and validate file permissions before use.
+- **Security primitives** (`secret`, `safety`): never log or export secret
+  values, keep the masking registry process-local, and validate file
+  permissions before use. Guarded operations must validate the target path
+  first, require `--force` or a confirmation before acting, and honor `DRY_RUN`.
 - **Integration modules** (`git`, `network`, `notification`, `archive`, `config`,
   `json`): validate dependencies, quote paths/URLs/payloads, and do not hide
   external command failures.
@@ -241,6 +245,10 @@ affect editor navigation.
 - **Coordination modules** (`lock`): keep operations atomic and portable
   without `flock`, always report the holder on failure, and never leave a lock
   behind on the failure path.
+- **Testing module** (`testing`): assertions must report and return rather than
+  terminate, mocks must restore the prior state, and fixtures must clean
+  themselves up; changes here must be checked against the other module tests,
+  not only `test/testing.bats`.
 
 ## Bash conventions
 
@@ -400,6 +408,8 @@ to the module convention.
 | Logging/CLI | Separate stdout/stderr, filtering, strict mode, and machine-readable output |
 | JSON/YAML/notification | Escaping, malformed input, and unavailable dependencies |
 | Locking/coordination | Atomic acquire, stale reclaim, release on failure paths, and `DYBATPHO_LOCK_DIR` isolation in tests |
+| Destructive guards (`safety`) | Protected paths, `DYBATPHO_SAFE_ROOTS` confinement, declined and forced paths, `DRY_RUN`, short options, and `--` end-of-options |
+| Testing helpers | Passing and failing direction of every assertion, mock restore, snapshot create/match/diff, and fixture cleanup |
 | New module | `init.sh` registry entry and dependency edges, `doc/spec/<module>.md`, `doc/spec/README.md` entries, `test/<module>.bats`, and `example/<module>_ops.sh` |
 | Bootstrap/module loading | `test/init.bats`, a fresh shell per assertion, dependency order, cycle termination, and unknown-module failure. Spawn child shells from a script **file**, never `bash -c`: a `-c` shell has an empty `BASH_SOURCE`, which the kcov hook expands on every command and `set -u` then turns into a failure that only appears under `scripts/test.sh` |
 | Documentation/spec | Correct links/references and `git diff --check` |

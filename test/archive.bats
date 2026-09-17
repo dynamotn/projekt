@@ -342,3 +342,47 @@ setup() {
   assert_equal "$(cat "${destination}/bundle.txt")" "plain-data"
   unstub zstd
 }
+
+
+function _create_safe_test_archive {
+  local archive_path
+  dybatpho::expect_args archive_path -- "$@"
+  local source_dir="${BATS_TEST_TMPDIR}/payload"
+  mkdir -p "${source_dir}/bundle/nested"
+  printf 'hello\n' > "${source_dir}/bundle/nested/file.txt"
+  tar -czf "${archive_path}" -C "${source_dir}" bundle
+}
+
+function _create_traversal_test_archive {
+  local archive_path
+  dybatpho::expect_args archive_path -- "$@"
+  local source_dir="${BATS_TEST_TMPDIR}/evil"
+  mkdir -p "${source_dir}/bundle"
+  printf 'owned\n' > "${source_dir}/victim.txt"
+  (
+    cd "${source_dir}/bundle"
+    tar -czf "${archive_path}" -P ../victim.txt 2> /dev/null
+  )
+}
+
+@test "dybatpho::archive_unsafe_entries and archive_is_safe detect traversal entries" {
+  local safe_archive="${BATS_TEST_TMPDIR}/safe.tar.gz"
+  local evil_archive="${BATS_TEST_TMPDIR}/evil.tar.gz"
+  _create_safe_test_archive "${safe_archive}"
+  _create_traversal_test_archive "${evil_archive}"
+
+  assert_equal "$(dybatpho::archive_unsafe_entries "${safe_archive}")" ""
+  dybatpho::archive_is_safe "${safe_archive}"
+
+  assert_equal "$(dybatpho::archive_unsafe_entries "${evil_archive}" 2> /dev/null)" "../victim.txt"
+  run -1 dybatpho::archive_is_safe "${evil_archive}"
+}
+
+@test "__dybatpho_archive_entry_is_safe rejects absolute and Windows-style entries" {
+  __dybatpho_archive_entry_is_safe "bundle/nested/file.txt"
+  run -1 __dybatpho_archive_entry_is_safe "/etc/passwd"
+  run -1 __dybatpho_archive_entry_is_safe "C:/windows/system32"
+  run -1 __dybatpho_archive_entry_is_safe "bundle/../../escape"
+  run -1 __dybatpho_archive_entry_is_safe "bundle\\..\\escape"
+  run -1 __dybatpho_archive_entry_is_safe ".."
+}
