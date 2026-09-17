@@ -4,7 +4,7 @@
 # @description Demonstrates dybatpho::semver_valid, semver_parse, semver_compare, semver_release_type, semver_bump
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules semver
 
 dybatpho::register_common_handlers
 

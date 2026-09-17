@@ -4,7 +4,7 @@
 # @description Demonstrates dybatpho::table_print, table_align, table_box, table_markdown, and table_csv
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules table
 
 dybatpho::register_common_handlers
 

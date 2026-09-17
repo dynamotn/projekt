@@ -6,7 +6,7 @@
 #   no real HTTP requests are made when running this example.
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules notification
 
 dybatpho::register_common_handlers
 

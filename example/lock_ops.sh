@@ -5,7 +5,7 @@
 #              lock_info, and with_lock to prevent concurrent script runs
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules lock
 
 dybatpho::register_common_handlers
 

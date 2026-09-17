@@ -4,7 +4,7 @@
 # @description Demonstrates dybatpho::array_print, array_reverse, array_unique, array_compact, array_filter, array_map, array_reject, array_find, array_every, array_some, array_first, array_last, array_contains, array_index_of, array_join
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules array
 
 dybatpho::register_common_handlers
 

@@ -2,7 +2,7 @@
 # @file os_ops.sh
 # @brief Example showing platform and command capability detection.
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules os
 
 dybatpho::header "PLATFORM"
 dybatpho::print "platform: $(dybatpho::platform)"

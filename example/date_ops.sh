@@ -4,7 +4,7 @@
 # @description Demonstrates dybatpho::date_now, date_today, date_is_valid, date_parse, date_format, date_add_days, and date_diff_days
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules date
 
 dybatpho::register_common_handlers
 

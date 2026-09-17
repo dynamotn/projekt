@@ -6,7 +6,7 @@
 #   curl_request/curl_parse_response, curl_timeout, and circuit_breaker
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules network
 
 dybatpho::register_common_handlers
 

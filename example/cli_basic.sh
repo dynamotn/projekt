@@ -12,7 +12,7 @@
 #   bash example/cli_basic.sh --name Alice --count 3
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules cli
 
 dybatpho::register_common_handlers
 

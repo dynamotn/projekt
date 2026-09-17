@@ -2,7 +2,7 @@
 # @file config_ops.sh
 # @brief Example showing layered configuration and schema validation.
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules config
 
 dybatpho::register_common_handlers
 

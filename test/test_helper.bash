@@ -3,7 +3,10 @@ DYBATPHO_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
 . "${DYBATPHO_DIR}/test/lib/assert/load.bash"
 . "${DYBATPHO_DIR}/test/lib/file/load.bash"
 . "${DYBATPHO_DIR}/test/lib/mock/stub.bash"
-. "${DYBATPHO_DIR}/init.sh"
+# The module tests reach across the whole library, so the helper asks for every
+# module. A script under test that cares about a narrower module set sources
+# `init.sh` itself in a fresh shell, the way `test/init.bats` does.
+. "${DYBATPHO_DIR}/init.sh" --modules all
 
 bats_require_minimum_version 1.5.0
 

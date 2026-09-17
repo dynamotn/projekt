@@ -4,7 +4,7 @@
 # @description Demonstrates dybatpho::json_query, json_has, json_pretty, json_to_yaml, yaml_query, yaml_has, yaml_pretty, and yaml_to_json
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules json
 
 dybatpho::register_common_handlers
 

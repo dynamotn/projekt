@@ -14,8 +14,10 @@ This document describes the repository workflow and conventions to preserve.
 - `init.sh` — required entrypoint; source it before using the library.
 - `test/` — Bats tests for each module, such as `test/cli.bats`.
 - `example/` — complete, runnable usage examples for every public module.
-- `doc/` — API documentation generated from source comments.
+- `doc/` — API documentation generated from source comments, including
+  `doc/init.md` for the bootstrap's own public functions.
 - `doc/spec/` — Spec Kit-style feature specifications.
+- `CHANGELOG.md` — user-visible history, [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 - `scripts/test.sh` — full test and coverage runner.
 - `.mise.toml` — standard tasks such as `mise run test` and `mise run doc`.
 
@@ -119,9 +121,108 @@ changed examples.
 | `table.sh` | Plain-text and Markdown table rendering | `test/table.bats`, `doc/table.md`, `doc/spec/table.md` |
 | `text.sh` | Multiline text processing, indentation, wrapping, and formatting | `test/text.bats`, `doc/text.md`, `doc/spec/text.md` |
 
-`init.sh` loads modules according to their dependencies. Do not source a module
-in isolation when it uses helpers from another module unless the source header
-documents the dependency and isolated tests provide the required setup.
+### Module registry
+
+`init.sh` owns the registry and loads modules according to their dependencies.
+Sourcing it with no argument loads the core modules only; `--modules` or
+`DYBATPHO_MODULES` names anything else, `--modules all` asks for the whole
+library, and every module set is widened at run time by `dybatpho::load`.
+Because the default is narrow, a script that uses an optional module has to say
+so: every `example/*.sh` declares its own module set, and `test/test_helper.bash`
+asks for `all` on behalf of the module tests. Do not source a module in isolation when it uses
+helpers from another module unless the source header documents the dependency
+and isolated tests provide the required setup.
+
+`__dybatpho_source_module` derives a module's file from its name, so
+`src/<name>.sh` is the only naming rule: a file whose basename differs from the
+registered name cannot be loaded, and `init.sh` needs no per-module entry for it.
+
+A new module in `src/` is not reachable until it is registered in `init.sh`:
+
+1. Add the name to `DYBATPHO_OPTIONAL_MODULES`. `DYBATPHO_CORE_MODULES` is
+   reserved for the modules the rest of the library calls unconditionally.
+   Registering the name is what makes the module loadable; leaving it out means
+   `dybatpho::load <name>` reports it as unknown even though the file exists.
+2. Add an entry to `__dybatpho_module_deps` for every **optional** module it
+   calls; core modules are implicit. Cycles are allowed because calls resolve at
+   run time, but each edge must reflect a real call. A missing edge does not
+   fail at load time — it fails later, when a function from the unloaded module
+   turns out to be undefined.
+3. Extend `test/init.bats` when the module adds a dependency edge worth pinning.
+   The suite already fails when a registered module has no file under `src/`,
+   and when the registry and `src/` drift apart.
+4. Give the module's example an explicit `--modules` line, and add the module to
+   any other script that needs it. Nothing loads implicitly any more.
+
+The registry and `src/` must list the same modules. The check is:
+
+```bash
+diff <(bash -c '. ./init.sh; dybatpho::module_list all' | sort) \
+  <(ls src/*.sh | xargs -n1 basename | sed 's/\.sh$//' | sort)
+```
+
+It must print nothing. Any output is a module that exists but cannot be loaded,
+or a registered name with no file behind it.
+
+Verify the dependency table against the real call graph rather than by eye.
+**Match internal helpers too**: `table.sh` reaches `text.sh` only through
+`__text_read_lines`, and an edge found by reading `dybatpho::` calls alone would
+miss it.
+
+```bash
+declare -A OWNER
+for s in src/*.sh; do
+  m="$(basename "${s}" .sh)"
+  while read -r fn; do OWNER["${fn}"]="${m}"; done < <(
+    sed -n 's/^function \([A-Za-z_][A-Za-z_0-9:]*\).*/\1/p' "${s}")
+done
+CORE=" string logging helpers process file secret "
+for s in src/*.sh; do
+  m="$(basename "${s}" .sh)"; opt=""
+  for fn in $(grep -oE '\b(dybatpho::[a-z_0-9]+|__[a-z_0-9]+)' "${s}" | sort -u); do
+    o="${OWNER[${fn}]-}"
+    [[ -n "${o}" && "${o}" != "${m}" && "${CORE}" != *" ${o} "* ]] || continue
+    [[ " ${opt} " == *" ${o} "* ]] || opt="${opt} ${o}"
+  done
+  [[ -n "${opt}" ]] && printf '%-14s -> %s\n' "${m}" "${opt# }"
+done
+```
+
+Every line it prints must appear in `__dybatpho_module_deps`. Loading each module
+on its own is the behavioral version of the same check:
+
+```bash
+for m in $(bash -c '. ./init.sh; dybatpho::module_list optional'); do
+  bash -c ". ./init.sh --modules ${m}" || echo "BROKEN: ${m}"
+done
+```
+
+The loaded set is deliberately process-local: only `dybatpho::` functions are
+exported, so a child shell that sources `init.sh` again has to source the module
+files itself. Never export `DYBATPHO_LOADED_MODULES` or seed it from the
+environment.
+
+Editor support depends entirely on two bash-language-server settings, both
+recorded in `.vscode/settings.json`. `init.sh` resolves module paths at run time
+and carries `# shellcheck source=/dev/null`, so no tool can follow a module from
+it; symbol navigation comes from indexing the workspace, not from sourcing:
+
+| Setting | Why |
+| --- | --- |
+| `bashIde.globPattern` = `**/*@(.sh\|.inc\|.bash\|.command)` | Several clients, including nvim-lspconfig, ship `*@(...)`, which matches the workspace root only, leaving everything under `src/` unindexed. |
+| `bashIde.includeAllWorkspaceSymbols` = `true` | Modules do not source one another, and bash-language-server follows neither a computed path nor the `. "${SCRIPTDIR}/../init.sh"` form the examples use. |
+
+With either one at its default, no `dybatpho::` function resolves anywhere in the
+repository — including inside `init.sh` itself: go-to-definition fails and
+completion offers only the functions defined in the open file.
+
+VS Code reads `.vscode/settings.json` natively. Neovim needs a plugin that feeds
+project files into the LSP configuration; this repository is set up for
+[codesettings.nvim](https://github.com/mrjones2014/codesettings.nvim), which
+reads `.vscode/settings.json`, `codesettings.json`, or `lspsettings.json` and
+merges them into the server config. Any other editor has to set the same two
+values itself. Nothing in the repository depends on them at run time: they only
+affect editor navigation.
 
 ### Principles by module group
 
@@ -299,7 +400,8 @@ to the module convention.
 | Logging/CLI | Separate stdout/stderr, filtering, strict mode, and machine-readable output |
 | JSON/YAML/notification | Escaping, malformed input, and unavailable dependencies |
 | Locking/coordination | Atomic acquire, stale reclaim, release on failure paths, and `DYBATPHO_LOCK_DIR` isolation in tests |
-| New module | `doc/spec/<module>.md`, `doc/spec/README.md` entries, `test/<module>.bats`, and `example/<module>_ops.sh` |
+| New module | `init.sh` registry entry and dependency edges, `doc/spec/<module>.md`, `doc/spec/README.md` entries, `test/<module>.bats`, and `example/<module>_ops.sh` |
+| Bootstrap/module loading | `test/init.bats`, a fresh shell per assertion, dependency order, cycle termination, and unknown-module failure. Spawn child shells from a script **file**, never `bash -c`: a `-c` shell has an empty `BASH_SOURCE`, which the kcov hook expands on every command and `set -u` then turns into a failure that only appears under `scripts/test.sh` |
 | Documentation/spec | Correct links/references and `git diff --check` |
 
 ## Completion checklist
@@ -311,6 +413,11 @@ to the module convention.
 5. Add or update a complete example for every changed public module.
 6. Add or update `doc/spec/<module>.md` for every changed public module, and
    confirm the missing-spec check above prints nothing.
-7. Run targeted tests, `bash -n example/*.sh`, changed examples, and
+7. Add an entry under `## [Unreleased]` in `CHANGELOG.md` for anything a
+   consumer would notice: a new module or public function, a changed contract,
+   a fixed bug, or a security guard. Mark a contract change **BREAKING** and
+   show the migration. Do not list fixes to work that is itself still
+   unreleased — those never reached a consumer.
+8. Run targeted tests, `bash -n example/*.sh`, changed examples, and
    `git diff --check`.
-8. Review the final diff and remove temporary artifacts.
+9. Review the final diff and remove temporary artifacts.

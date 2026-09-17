@@ -13,7 +13,7 @@
 ## ✨ From 200 lines of boilerplate to this
 
 ```sh
-. dybatpho/init.sh
+. dybatpho/init.sh --modules git semver
 dybatpho::register_common_handlers # strict mode, error trap, signal cleanup
 
 dybatpho::git_is_clean "." || dybatpho::die "Commit your changes first"
@@ -32,7 +32,8 @@ No dependency manager, no runtime, no build step — just Bash ≥ 4 and the fil
 
 ## 🚀 Why dybatpho?
 
-- **Batteries included** — 19 modules covering the things every script ends up rewriting: logs, arguments, retries, temp files, traps.
+- **Batteries included** — 22 modules covering the things every script ends up rewriting: logs, arguments, retries, temp files, traps.
+- **Load what you need** — the core modules by default, anything else by name, with dependencies resolved for you.
 - **Safe by default** — strict mode, error handlers, signal cleanup and secret masking are wired in from `init.sh`.
 - **Portable** — works on GNU/Linux and macOS/BSD, with the flag differences handled for you.
 - **Tested** — full unit-test suite with coverage tracking on every commit.
@@ -71,7 +72,7 @@ and use handy Bash functions freely and flexibly.
 **2. Source it before anything else:**
 
 ```sh
-# Loads every module and enables strict mode
+# Loads the core modules and enables strict mode
 . < path-to-dybatpho > /init.sh
 dybatpho::register_err_handler
 dybatpho::info "Greetings from dybatpho!"
@@ -80,6 +81,30 @@ dybatpho::info "Greetings from dybatpho!"
 > Requires **Bash ≥ 4**. `init.sh` must be *sourced*, not executed.
 > See the [example scripts](example/) — one per module — or real-world usage in
 > [my dotfiles](https://github.com/dynamotn/dotfiles).
+
+**3. Name the modules you need:**
+
+Sourcing `init.sh` with no argument loads only the core modules — `string`,
+`logging`, `helpers`, `process`, `file` and `secret`. Everything else is asked
+for by name, and dybatpho resolves the dependencies between modules for you:
+
+```sh
+. < path > /init.sh --modules git semver          # argument form
+DYBATPHO_MODULES="git semver" . < path > /init.sh # environment form
+. < path > /init.sh --modules all                 # the whole library
+```
+
+Every module set includes the core modules, and can be widened at any point:
+
+```sh
+dybatpho::load notification  # brings in its network dependency too
+dybatpho::module_loaded json # branch on what is loaded
+dybatpho::module_list all    # core + optional module names
+```
+
+An unknown module name stops the script at bootstrap instead of failing later
+with a missing function. See [init.sh reference](doc/init.md) and
+[example/init_modules.sh](example/init_modules.sh).
 
 ## 📚 Modules
 
@@ -149,6 +174,7 @@ dybatpho::info "Greetings from dybatpho!"
 ├── scripts/        # Helper scripts (test, doc generation, etc.)
 ├── src/            # Source code of modules
 ├── test/           # Unit tests
+├── CHANGELOG.md    # User-visible history
 └── init.sh         # Initialization script, **must be sourced first**
 ```
 

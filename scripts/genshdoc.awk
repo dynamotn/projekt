@@ -5,6 +5,7 @@ BEGIN {
 	module_brief = ""
 	header_done = 0
 	header_count = 0
+	header_seen_file = 0
 	pending_count = 0
 	fn_count = 0
 	function_declaration = ""
@@ -13,8 +14,20 @@ BEGIN {
 
 {
 	if (! header_done) {
+		# The file header ends at the first blank line that follows it. Without
+		# this, a file whose first statement sits far below the header, such as
+		# `init.sh`, would absorb unrelated comment blocks into the last module
+		# tag it saw.
+		if ($0 ~ /^[[:space:]]*$/ && header_seen_file) {
+			header_done = 1
+			parse_header()
+			next
+		}
 		if ($0 ~ /^#!/ || $0 ~ /^[[:space:]]*#/ || $0 ~ /^[[:space:]]*$/) {
 			header_lines[++header_count] = $0
+			if ($0 ~ /^[[:space:]]*#[[:space:]]*@(file|name)[[:space:]]+/) {
+				header_seen_file = 1
+			}
 			next
 		}
 		header_done = 1
@@ -188,6 +201,10 @@ function render_link(text, url)
 
 function render_source_link()
 {
+	# Modules live in `src/`; `init.sh` sits at the repository root.
+	if (module_file == "init.sh") {
+		return "[" module_file "](../" module_file ")"
+	}
 	return "[src/" module_file "](../src/" module_file ")"
 }
 

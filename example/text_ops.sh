@@ -4,7 +4,7 @@
 # @description Demonstrates dybatpho::text_indent, text_dedent, text_strip_ansi, text_bullet_list, and text_columns
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules text
 
 dybatpho::register_common_handlers
 

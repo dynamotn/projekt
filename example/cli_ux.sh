@@ -17,7 +17,7 @@
 #   bash example/cli_ux.sh --help
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules cli
 
 dybatpho::register_common_handlers
 

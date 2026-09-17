@@ -4,7 +4,7 @@
 # @description Demonstrates dybatpho::archive_create, archive_extract, and archive_list across tar-based and single-file compressed formats
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules archive
 
 dybatpho::register_common_handlers
 

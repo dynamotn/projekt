@@ -9,7 +9,9 @@ dybatpho::require "gawk"
 if (($#)); then
   sources=("$@")
 else
-  sources=("${DYBATPHO_DIR}/src/"*.sh)
+  # `init.sh` ships public functions of its own, so it is documented alongside
+  # the modules it loads.
+  sources=("${DYBATPHO_DIR}/init.sh" "${DYBATPHO_DIR}/src/"*.sh)
 fi
 
 for src in "${sources[@]}"; do

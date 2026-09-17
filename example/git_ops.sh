@@ -8,7 +8,7 @@
 #              and git_tags_containing
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh"
+. "${SCRIPTDIR}/../init.sh" --modules git
 
 dybatpho::register_common_handlers
 
