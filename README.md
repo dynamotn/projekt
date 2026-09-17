@@ -138,7 +138,7 @@ with a missing function. See [init.sh reference](doc/init.md) and
 
 | Module                          | What you get                                     |
 | ------------------------------- | ------------------------------------------------ |
-| [file.sh](doc/file.md)          | File handling, temp files, safe writes            |
+| [file.sh](doc/file.md)          | Paths, temp files, atomic rewrites, idempotent lines, checksums, upward search |
 | [archive.sh](doc/archive.md)    | Create, extract and list archives                 |
 | [os.sh](doc/os.md)              | Platform/distro detection, package managers       |
 

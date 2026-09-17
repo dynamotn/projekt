@@ -1,4 +1,4 @@
-# Feature Specification: File Preview and Temporary Resource Management
+# Feature Specification: File Contents, Preview, and Temporary Resource Management
 
 **Feature Branch**: `[reverse-spec-file]`
 **Status**: Implemented
@@ -7,6 +7,10 @@
 ## Problem Statement *(mandatory)*
 
 Shell automation often needs quick file inspection, path decomposition, path joining, path normalization, relative path calculation, extension inspection and rewriting, absolute-path checks, and temporary file or directory creation with reliable cleanup. Ad hoc implementations increase the chance of leaked paths, naming collisions, inconsistent file previews, and repeated path-splitting snippets.
+
+Two more gaps sit next to these. Locating the root of the project a script was invoked inside means walking up the directory tree by hand, and creating a directory before writing into it means repeating a `mkdir -p` guard at every call site.
+
+Rewriting the contents of a file is just as common and more dangerous. A script that redirects into a file truncates it before the new contents are written, so an interrupted run destroys the original; `sed -i` takes a different argument on GNU and BSD; appending a line to a dotfile duplicates it on the second run; and reading a size, checksum, or modification time means picking between incompatible `stat` and checksum tools per platform.
 
 ## Business Value *(mandatory)*
 
@@ -18,6 +22,11 @@ Shell automation often needs quick file inspection, path decomposition, path joi
 - Support safe path assembly without repeated slash-cleanup snippets in calling scripts.
 - Support textual path cleanup for repeated separators and dot-segments without requiring filesystem access.
 - Support lightweight path inspection and extension rewriting without external commands.
+- Make rewriting a file safe by default, so that an interrupted script cannot leave a truncated file behind.
+- Let a script that maintains a dotfile run repeatedly without duplicating what it added.
+- Read file metadata identically on GNU, BusyBox, and BSD systems.
+- Edit a dotfile that is symlinked into a repository without detaching the link from it.
+- Locate a project root from any directory inside it.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -111,6 +120,103 @@ As a script author, I want a helper that cleans repeated separators plus `.` and
 
 ---
 
+### User Story 7 - Rewrite a file without risking its contents (Priority: P1)
+
+As a script author, I want to replace what a file contains in one step so that a reader never sees a half-written file and an interrupted run leaves the original intact.
+
+**Why this priority**: A truncated configuration file breaks the system the script was meant to configure, and the failure surfaces long after the script exits.
+
+**Independent Test**: Write new contents over an existing file, then verify the contents, that the file's mode survived, and that no staging file is left behind.
+
+**Acceptance Scenarios**:
+
+1. **Given** an existing file with mode 640, **When** the atomic-write helper replaces its contents, **Then** the new contents are in place and the mode is still 640
+2. **Given** a rewrite helper fails part way, **When** the failure is reported, **Then** the original file still holds its previous contents and no staging file remains
+3. **Given** a pattern to substitute, **When** the replace helper runs on GNU or BSD, **Then** the substitution is applied the same way without an `-i` argument
+
+---
+
+### User Story 8 - Keep a line in a dotfile exactly once (Priority: P1)
+
+As a dotfiles author, I want to guarantee a line is present or absent so that running my bootstrap script twice leaves the same result as running it once.
+
+**Why this priority**: Bootstrap scripts are re-run by design; a helper that appends unconditionally corrupts the file it maintains.
+
+**Independent Test**: Call the ensure-line helper twice with the same line and verify the line appears exactly once, then call the remove-line helper twice and verify it is gone and no error is raised.
+
+**Acceptance Scenarios**:
+
+1. **Given** a file that already contains the exact line, **When** the ensure-line helper runs again, **Then** the file is unchanged
+2. **Given** a file whose last line has no trailing newline, **When** the ensure-line helper appends, **Then** the new line is a separate line
+3. **Given** a file that does not contain the line, **When** the remove-line helper runs, **Then** it reports success and changes nothing
+
+---
+
+### User Story 9 - Read file metadata portably (Priority: P2)
+
+As a script author, I want size, checksum, and age of a file from one helper each so that my script behaves the same on GNU, BusyBox, and BSD.
+
+**Why this priority**: These reads are simple individually, but each one needs a different tool per platform, which is exactly the duplication the library exists to remove.
+
+**Independent Test**: Read the size, checksum, and age of a known file and compare against independently computed values.
+
+**Acceptance Scenarios**:
+
+1. **Given** a file of known contents, **When** the hash helper runs, **Then** the checksum matches the reference value for the requested algorithm
+2. **Given** a file modified in the past, **When** the age helper runs, **Then** it reports the elapsed seconds since its modification time
+3. **Given** a file about to be edited, **When** the backup helper runs, **Then** it copies the file under a new name and prints that path
+
+---
+
+### User Story 10 - Edit a dotfile that is a symlink (Priority: P1)
+
+As a dotfiles author, I want to edit a path that is a symlink into my repository and have the repository file change, so that my edit is tracked rather than silently detached.
+
+**Why this priority**: Replacing the symlink looks like success. The damage only surfaces later, when the repository turns out not to contain the change and the next deployment reverts it.
+
+**Independent Test**: Point a symlink at a file in another directory, rewrite the symlink's path, then verify the path is still a symlink and the file it points at holds the new contents.
+
+**Acceptance Scenarios**:
+
+1. **Given** a path that is a symlink, **When** any writing helper runs on it, **Then** the link is preserved and the file it points at is the one rewritten
+2. **Given** a chain of symlinks or a relative symlink, **When** a writing helper runs, **Then** the file at the end of the chain is rewritten
+3. **Given** a symlink loop, **When** a writing helper runs, **Then** the helper reports the loop instead of following it forever
+4. **Given** a caller that wants the old behavior, **When** symlink following is disabled, **Then** the helper replaces the symlink with a regular file
+
+---
+
+### User Story 11 - Find the project root from anywhere inside it (Priority: P1)
+
+As a tool author, I want to search upward for a marker such as `.git` so that my script behaves the same whichever subdirectory it was invoked from.
+
+**Why this priority**: Nearly every repository-aware script needs this, and each one otherwise reimplements the same upward walk.
+
+**Independent Test**: Search for a marker from a nested directory and verify the marker's path is printed, then search for a name that does not exist and verify failure without output.
+
+**Acceptance Scenarios**:
+
+1. **Given** a marker in an ancestor directory, **When** the search helper runs from a nested directory, **Then** it prints the absolute path of the marker
+2. **Given** a marker that is a directory rather than a file, **When** the search helper runs, **Then** it is found just the same
+3. **Given** no matching entry up to the filesystem root, **When** the search helper runs, **Then** it reports failure and prints nothing
+
+---
+
+### User Story 12 - Create a directory before writing into it (Priority: P2)
+
+As a script author, I want one helper that creates a directory tree and reports its path so that I do not repeat a `mkdir -p` guard before every write.
+
+**Why this priority**: Small individually, but it appears before nearly every write, and pairs with the atomic writers, which require the destination directory to exist.
+
+**Independent Test**: Create a nested directory with a mode, call the helper again, and verify the directory, its mode, and the printed path are unchanged.
+
+**Acceptance Scenarios**:
+
+1. **Given** a nested path that does not exist, **When** the helper runs, **Then** every missing parent is created and the path is printed
+2. **Given** a directory that already exists, **When** the helper runs again with a mode, **Then** the mode is applied and nothing else changes
+3. **Given** a path that exists as a file, **When** the helper runs, **Then** it reports the conflict instead of failing obscurely later
+
+---
+
 ### Example Workflow
 
 ```bash
@@ -162,6 +268,22 @@ dybatpho::show_file "${report_file}"
 - **FR-018**: The module MUST provide a helper that detects any final extension or compares the final extension to an expected value.
 - **FR-019**: The module MUST provide a helper that rewrites or removes the final extension of a path.
 - **FR-020**: The module MUST provide a helper that returns the relative path from a base path to a target path without filesystem access.
+- **FR-021**: Every helper that changes a file MUST write through a staging file in the destination's directory and rename it into place, so that the destination is never observed partially written.
+- **FR-022**: A rewrite that fails MUST leave the destination unchanged and MUST NOT leave a staging file behind.
+- **FR-023**: A rewrite MUST preserve the destination's mode, and MUST preserve its owner when the process has the privilege to set it.
+- **FR-024**: The module MUST provide a substitution helper that applies a basic regular expression in place without depending on the `sed -i` argument, which differs between GNU and BSD.
+- **FR-025**: The module MUST provide ensure-line and remove-line helpers that compare whole lines exactly and whose repeated application produces the same result as a single application.
+- **FR-026**: The ensure-line helper MUST create the file when it is missing, and MUST NOT join its line onto a final line that has no trailing newline.
+- **FR-027**: The remove-line helper MUST report success when the file or the line does not exist, because the requested end state already holds.
+- **FR-028**: The module MUST report the size, modification age in seconds, and checksum of a file, selecting an available tool per platform.
+- **FR-029**: The checksum helper MUST support `md5`, `sha1`, `sha256`, and `sha512`, default to `sha256`, and reject any other algorithm.
+- **FR-030**: The backup helper MUST copy a file under a timestamped name, MUST NOT overwrite an existing backup, and MUST print the path it created.
+- **FR-031**: Every helper that changes a file MUST honor `DRY_RUN` by reporting the intended change and leaving the filesystem untouched.
+- **FR-032**: Every helper that changes a file MUST resolve a symlink destination to the file it points at, so that the link is preserved rather than replaced, and MUST follow chains and relative links.
+- **FR-033**: Symlink resolution MUST stop with an error on a loop rather than following it indefinitely, and MUST be disableable so that a caller can replace the link instead.
+- **FR-034**: Metadata helpers MUST report the file a symlink points at rather than the link itself.
+- **FR-035**: The module MUST provide a helper that searches a directory and its ancestors for a named entry, matching files and directories alike, printing the absolute path of the first match and reporting failure without output when the filesystem root is reached.
+- **FR-036**: The module MUST provide a helper that creates a directory and its missing parents, applies an optional mode whether or not the directory already existed, prints the resulting path, and rejects a path that exists as something other than a directory.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -183,6 +305,12 @@ dybatpho::show_file "${report_file}"
 - **SC-005**: Consumers can compose paths with one helper call instead of hand-written slash normalization.
 - **SC-006**: Consumers can normalize path strings without touching the filesystem or writing custom dot-segment cleanup logic.
 - **SC-007**: File previews remain available whether or not optional viewer tooling is installed.
+- **SC-008**: A script interrupted mid-rewrite leaves the target file with its previous contents, never empty or partial.
+- **SC-009**: A dotfiles script that adds lines can be re-run any number of times without changing the result of the first run.
+- **SC-010**: Consumers read size, checksum, and age without writing per-platform branches.
+- **SC-011**: Editing a symlinked dotfile changes the file in the repository it points at, so the edit is tracked.
+- **SC-012**: A script locates its project root from any directory inside it with one helper call.
+- **SC-013**: A script can create a directory before writing without guarding the call.
 
 ## Integration Tests *(mandatory)*
 
@@ -194,6 +322,20 @@ dybatpho::show_file "${report_file}"
 - **IT-006**: Validate path-join behavior for absolute, relative, and empty-fragment inputs.
 - **IT-007**: Validate path-normalize behavior for absolute, relative, empty, and parent-traversal inputs.
 - **IT-008**: Preview a file with and without `bat` available and verify numbered output still appears.
+- **IT-009**: Rewrite an existing file with the atomic-write helper and verify the contents, the preserved mode, and that the file was replaced by rename rather than truncation.
+- **IT-010**: Run the substitution helper with patterns that contain `/`, with a back reference, and with an invalid expression, verifying the failure leaves the original intact and removes the staging file.
+- **IT-011**: Call the ensure-line helper twice and verify one occurrence, including on a file whose last line has no trailing newline and on a file that does not exist yet.
+- **IT-012**: Call the remove-line helper twice, on a file it empties, and on a missing file, verifying success every time.
+- **IT-013**: Compare hash output against reference checksums for each supported algorithm, and reject an unknown algorithm.
+- **IT-014**: Verify size and age for known files, including an empty file and a modification time in the future.
+- **IT-015**: Back up a file twice and verify both copies exist under distinct names with the original mode.
+- **IT-016**: Run every writing helper under `DRY_RUN` and verify the file, its backups, and the staging directory are untouched.
+- **IT-017**: Rewrite through a symlink, a chain of symlinks, and a relative symlink, verifying the link survives and the target changes.
+- **IT-018**: Rewrite a symlink with following disabled and verify the link is replaced by a regular file while its former target is untouched.
+- **IT-019**: Run a writing helper on a symlink loop and verify it reports the loop.
+- **IT-020**: Read size and age through a symlink and verify they match the target rather than the link.
+- **IT-021**: Search upward for a marker from a nested directory, for a directory marker, from the default starting directory, and for a name that does not exist.
+- **IT-022**: Create a nested directory with a mode, call again with a different mode, and attempt the helper on a path that exists as a file.
 
 ## Acceptance Criteria *(mandatory)*
 

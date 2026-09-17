@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @file file_ops.sh
 # @brief Example showing file utilities
-# @description Demonstrates dybatpho::create_temp, show_file, path_basename, path_dirname, path_extname, path_stem, path_join, path_normalize, path_is_abs, path_has_ext, path_change_ext, path_relative, and temp cleanup behavior
+# @description Demonstrates dybatpho::create_temp, show_file, path_basename, path_dirname, path_extname, path_stem, path_join, path_normalize, path_is_abs, path_has_ext, path_change_ext, path_relative, file_write_atomic, file_replace, file_ensure_line, file_remove_line, file_hash, file_size, file_age_seconds, file_backup, find_up, ensure_dir, and temp cleanup behavior
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
 . "${SCRIPTDIR}/../init.sh"
@@ -94,6 +94,142 @@ function _demo_path_checks {
   dybatpho::info "Relative to /tmp: $(dybatpho::path_relative "${path}" "/tmp")"
 }
 
+function _demo_file_contents {
+  dybatpho::header "FILE CONTENTS"
+  # A throwaway copy of a dotfile, so the demo never touches a real one.
+  local WORKDIR
+  dybatpho::create_temp WORKDIR "/"
+  local config="${WORKDIR}/app.conf"
+
+  # `file_write_atomic` takes its content on standard input and swaps the file
+  # into place, so a reader never sees a half-written config.
+  dybatpho::file_write_atomic "${config}" << 'EOF'
+debug = true
+port = 8080
+EOF
+  chmod 640 "${config}"
+  dybatpho::info "Wrote ${config}"
+  dybatpho::show_file "${config}"
+
+  # Keep a copy before editing, and report where it went.
+  local backup
+  backup="$(dybatpho::file_backup "${config}")"
+  dybatpho::info "Backup kept at $(dybatpho::path_basename "${backup}")"
+
+  # A portable in-place edit: no `sed -i`, whose argument differs on BSD.
+  dybatpho::file_replace "${config}" '^debug = true$' 'debug = false'
+  dybatpho::info "After replace:"
+  dybatpho::show_file "${config}"
+
+  dybatpho::info "Mode survived the rewrite: $(stat -c %a "${config}" 2> /dev/null || stat -f %Lp "${config}")"
+}
+
+function _demo_file_lines {
+  dybatpho::header "IDEMPOTENT LINES"
+  local WORKDIR
+  dybatpho::create_temp WORKDIR "/"
+  local rc="${WORKDIR}/bashrc"
+  printf 'export PATH="${HOME}/bin:${PATH}"\n' > "${rc}"
+
+  # Running the same script twice must not duplicate the line, which is what
+  # makes these usable in a dotfiles bootstrap.
+  dybatpho::file_ensure_line "${rc}" 'export EDITOR=nvim'
+  dybatpho::file_ensure_line "${rc}" 'export EDITOR=nvim'
+  dybatpho::info "EDITOR line count after two calls: $(grep -cxF 'export EDITOR=nvim' "${rc}")"
+
+  dybatpho::file_remove_line "${rc}" 'export EDITOR=nvim'
+  dybatpho::file_remove_line "${rc}" 'export EDITOR=nvim'
+  dybatpho::info "After removing it twice:"
+  dybatpho::show_file "${rc}"
+}
+
+function _demo_file_metadata {
+  dybatpho::header "FILE METADATA"
+  local WORKDIR
+  dybatpho::create_temp WORKDIR "/"
+  local payload="${WORKDIR}/release.txt"
+  printf 'dybatpho release payload\n' > "${payload}"
+
+  dybatpho::info "Size    : $(dybatpho::file_size "${payload}") bytes"
+  dybatpho::info "SHA-256 : $(dybatpho::file_hash "${payload}")"
+  dybatpho::info "MD5     : $(dybatpho::file_hash "${payload}" md5)"
+  dybatpho::info "Age     : $(dybatpho::file_age_seconds "${payload}")s since last modification"
+
+  local age
+  age="$(dybatpho::file_age_seconds "${payload}")"
+  if ((age > 3600)); then
+    dybatpho::warn "Cache is stale"
+  else
+    dybatpho::info "Cache is fresh enough to reuse"
+  fi
+}
+
+function _demo_dry_run {
+  dybatpho::header "DRY RUN"
+  local WORKDIR
+  dybatpho::create_temp WORKDIR "/"
+  local config="${WORKDIR}/guarded.conf"
+  printf 'keep = 1\n' > "${config}"
+
+  # Every writer honors DRY_RUN, so a script can be rehearsed before it runs.
+  DRY_RUN=true dybatpho::file_replace "${config}" 'keep' 'gone'
+  DRY_RUN=true dybatpho::file_ensure_line "${config}" 'added'
+  dybatpho::info "File is untouched: $(cat "${config}")"
+}
+
+function _demo_find_up {
+  dybatpho::header "FIND UP"
+  local WORKDIR
+  dybatpho::create_temp WORKDIR "/"
+  mkdir -p "${WORKDIR}/project/src/deep"
+  : > "${WORKDIR}/project/.projectrc"
+
+  # Locating the project root from wherever the caller happens to stand.
+  local marker
+  if marker="$(dybatpho::find_up ".projectrc" "${WORKDIR}/project/src/deep")"; then
+    dybatpho::info "Marker : ${marker}"
+    dybatpho::info "Root   : $(dybatpho::path_dirname "${marker}")"
+  fi
+
+  if dybatpho::find_up "definitely-not-here" "${WORKDIR}" > /dev/null; then
+    dybatpho::warn "Unexpected match"
+  else
+    dybatpho::info "A missing marker reports failure instead of printing a path"
+  fi
+}
+
+function _demo_ensure_dir {
+  dybatpho::header "ENSURE DIR"
+  local WORKDIR
+  dybatpho::create_temp WORKDIR "/"
+
+  # `ensure_dir` prints the path, so it composes with the writers directly.
+  local cache
+  cache="$(dybatpho::ensure_dir "${WORKDIR}/cache/myapp" 700)"
+  printf 'last run: ok\n' | dybatpho::file_write_atomic "${cache}/state"
+  dybatpho::info "Cache dir : ${cache} (mode $(stat -c %a "${cache}" 2> /dev/null || stat -f %Lp "${cache}"))"
+  dybatpho::info "State file: $(cat "${cache}/state")"
+
+  # Calling it again is a no-op, so scripts can call it before every write.
+  dybatpho::ensure_dir "${WORKDIR}/cache/myapp" 700 > /dev/null
+  dybatpho::info "Second call changed nothing"
+}
+
+function _demo_symlinked_dotfile {
+  dybatpho::header "SYMLINKED DOTFILE"
+  local WORKDIR
+  dybatpho::create_temp WORKDIR "/"
+  mkdir -p "${WORKDIR}/dotfiles"
+  printf 'export EDITOR=vi\n' > "${WORKDIR}/dotfiles/bashrc"
+  ln -s "${WORKDIR}/dotfiles/bashrc" "${WORKDIR}/.bashrc"
+
+  # The writers follow the link, so editing the dotfile edits the file in the
+  # repository it points at rather than detaching the link from it.
+  dybatpho::file_replace "${WORKDIR}/.bashrc" 'EDITOR=vi' 'EDITOR=nvim'
+  dybatpho::info "~/.bashrc is still a symlink: $([[ -L "${WORKDIR}/.bashrc" ]] && echo yes || echo no)"
+  dybatpho::info "Repository copy now holds  : $(cat "${WORKDIR}/dotfiles/bashrc")"
+}
+
 function _main {
   _demo_temp_file
   _demo_temp_dir
@@ -102,6 +238,13 @@ function _main {
   _demo_path_join
   _demo_path_normalize
   _demo_path_checks
+  _demo_file_contents
+  _demo_file_lines
+  _demo_file_metadata
+  _demo_dry_run
+  _demo_find_up
+  _demo_ensure_dir
+  _demo_symlinked_dotfile
   dybatpho::success "File operations demo complete"
 }
 
