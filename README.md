@@ -32,7 +32,7 @@ No dependency manager, no runtime, no build step — just Bash ≥ 4 and the fil
 
 ## 🚀 Why dybatpho?
 
-- **Batteries included** — 22 modules covering the things every script ends up rewriting: logs, arguments, retries, temp files, traps.
+- **Batteries included** — modules covering the things every script ends up rewriting: logs, arguments, retries, temp files, traps.
 - **Load what you need** — the core modules by default, anything else by name, with dependencies resolved for you.
 - **Safe by default** — strict mode, error handlers, signal cleanup and secret masking are wired in from `init.sh`.
 - **Portable** — works on GNU/Linux and macOS/BSD, with the flag differences handled for you.

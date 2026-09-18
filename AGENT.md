@@ -263,6 +263,49 @@ affect editor navigation.
   themselves up; changes here must be checked against the other module tests,
   not only `test/testing.bats`.
 
+## Changelog requirements
+
+**Every change a consumer could notice MUST land in `CHANGELOG.md` under
+`## [Unreleased]` in the same change. A change that adds, alters, or removes
+public behavior without its changelog entry is incomplete and must not be
+reported as done.** This is not conditional on the size of the change, and it is
+never deferred to release time.
+
+An entry is required for:
+
+- a new module, public function, option, or CLI attribute;
+- a changed contract: renamed or removed function, new required argument,
+  different default, different output, different exit code;
+- a fixed bug that reached a consumer;
+- a new or tightened security guard, or any change to what `safety`, `secret`,
+  or a destructive operation refuses.
+
+No entry is required for changes invisible from outside the repository: tests,
+examples, specs, generated documentation, refactors that keep every contract,
+and fixes to work that is itself still unreleased — those never reached a
+consumer, so amend the original `## [Unreleased]` entry instead of adding a
+"fixed" one beside it.
+
+Write entries the way the existing ones are written:
+
+- Keep a Changelog sections only — `### Added`, `### Changed`, `### Deprecated`,
+  `### Removed`, `### Fixed`, `### Security` — in that order, created on demand.
+- Lead with the module or function in bold, then what a consumer can now do,
+  in prose rather than a commit subject.
+- Name the public functions involved so the entry is searchable.
+- Mark a contract change **BREAKING** and show the migration: the old call and
+  the new one.
+- Do not reference commit hashes, branch names, or internal helpers.
+
+Confirm the entry exists before finishing:
+
+```bash
+git diff --stat HEAD -- CHANGELOG.md
+```
+
+It must show `CHANGELOG.md` whenever the same diff touches `src/` in a way that
+changes public behavior.
+
 ## Bash conventions
 
 - Use Bash 4 or newer and always source `init.sh`.
@@ -429,6 +472,7 @@ to the module convention.
 | New module | `init.sh` registry entry and dependency edges, `doc/spec/<module>.md`, `doc/spec/README.md` entries, `test/<module>.bats`, and `example/<module>_ops.sh` |
 | Bootstrap/module loading | `test/init.bats`, a fresh shell per assertion, dependency order, cycle termination, and unknown-module failure. Spawn child shells from a script **file**, never `bash -c`: a `-c` shell has an empty `BASH_SOURCE`, which the kcov hook expands on every command and `set -u` then turns into a failure that only appears under `scripts/test.sh` |
 | Documentation/spec | Correct links/references and `git diff --check` |
+| Any public behavior | `CHANGELOG.md` entry under `## [Unreleased]`, in the same change |
 
 ## Completion checklist
 
@@ -439,11 +483,10 @@ to the module convention.
 5. Add or update a complete example for every changed public module.
 6. Add or update `doc/spec/<module>.md` for every changed public module, and
    confirm the missing-spec check above prints nothing.
-7. Add an entry under `## [Unreleased]` in `CHANGELOG.md` for anything a
-   consumer would notice: a new module or public function, a changed contract,
-   a fixed bug, or a security guard. Mark a contract change **BREAKING** and
-   show the migration. Do not list fixes to work that is itself still
-   unreleased — those never reached a consumer.
+7. **Mandatory** — add an entry under `## [Unreleased]` in `CHANGELOG.md` for
+   anything a consumer would notice, following the Changelog requirements
+   above, and confirm `git diff --stat HEAD -- CHANGELOG.md` shows the file.
+   A public-behavior change without its entry is not done.
 8. Run targeted tests, `bash -n example/*.sh`, changed examples, and
    `git diff --check`.
 9. Review the final diff and remove temporary artifacts.
