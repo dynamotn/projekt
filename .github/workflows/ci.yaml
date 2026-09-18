@@ -5,6 +5,8 @@ on: [push, pull_request, workflow_dispatch]
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     container: kcov/kcov
     steps:
       - name: "Install dependencies"
@@ -36,7 +38,7 @@ jobs:
           done
 
       - name: "Coveralls"
-        uses: coverallsapp/github-action@main
+        uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           format: "cobertura"
@@ -45,6 +47,8 @@ jobs:
   portable:
     name: "Portable smoke tests (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
