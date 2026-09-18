@@ -111,6 +111,7 @@ changed examples.
 | `json.sh` | Query, validate, pretty-print, and convert JSON/YAML | `test/json.bats`, `doc/json.md`, `doc/spec/json.md` |
 | `lock.sh` | Portable `mkdir`-based process locks, waiting, stale reclaim, and `with_lock` | `test/lock.bats`, `doc/lock.md`, `doc/spec/lock.md` |
 | `logging.sh` | Log levels, text/JSON logging, banners, and Bash tracing | `test/logging.bats`, `doc/logging.md`, `doc/spec/logging.md` |
+| `metrics.sh` | Timing, counters, and Prometheus text export, plus the retry/HTTP/error instrumentation | `test/metrics.bats`, `doc/metrics.md`, `doc/spec/metrics.md` |
 | `network.sh` | Curl wrappers, retries, JSON requests, and HTTP metadata | `test/network.bats`, `doc/network.md`, `doc/spec/network.md` |
 | `notification.sh` | Webhook notifications and JSON payloads | `test/notification.bats`, `doc/notification.md`, `doc/spec/notification.md` |
 | `os.sh` | OS, architecture, and environment detection | `test/os.bats`, `doc/os.md`, `doc/spec/os.md` |
@@ -190,7 +191,14 @@ for s in src/*.sh; do
 done
 ```
 
-Every line it prints must appear in `__dybatpho_module_deps`. Loading each module
+Every line it prints must appear in `__dybatpho_module_deps`, **except a call
+guarded by `declare -F`**. Such a call is an optional hook, not a dependency: it
+does nothing unless the other module happens to be loaded, so recording it as an
+edge would drag that module in and, for a core module, create a forbidden
+dependency on an optional one. Today this applies to the `metrics` hooks in
+`helpers`, `logging`, and `network`, which is why the snippet reports
+`helpers -> metrics` while `__dybatpho_module_deps` says nothing about it. Use
+the same `declare -F` guard for any future hook of this kind. Loading each module
 on its own is the behavioral version of the same check:
 
 ```bash
@@ -242,6 +250,11 @@ affect editor navigation.
 - **Presentation modules** (`logging`, `cli`): reserve stdout for pipeable or
   capturable data and stderr for diagnostics; preserve text output when adding
   machine-readable output.
+- **Observability module** (`metrics`): recording must never change what a
+  script does, so a timing helper returns the command's exit code unchanged and
+  the hooks in `helpers`, `logging`, and `network` stay inert unless the module
+  is loaded. Validate before recording, and never inside a command substitution,
+  where a rejection cannot reach the caller.
 - **Coordination modules** (`lock`): keep operations atomic and portable
   without `flock`, always report the holder on failure, and never leave a lock
   behind on the failure path.

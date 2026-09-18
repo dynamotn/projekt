@@ -158,6 +158,10 @@ function dybatpho::curl_do {
   local header_file
   header_file=$(mktemp) || dybatpho::die "Unable to create temporary HTTP header file"
   # Keep the body path owned by the caller; only response headers are temporary.
+  local __dybatpho_http_started=""
+  if declare -F dybatpho::metrics_observe_ms > /dev/null; then
+    __dybatpho_http_started="$(__log_now_ms)"
+  fi
   while :; do
     local curl_args=(-fsSL -D "${header_file}" -w '%{http_code}' -o "${output}")
     [[ -n "${DYBATPHO_CURL_CONNECT_TIMEOUT}" ]] && curl_args+=(--connect-timeout "${DYBATPHO_CURL_CONNECT_TIMEOUT}")
@@ -203,9 +207,20 @@ function dybatpho::curl_do {
       ((delay += RANDOM % (DYBATPHO_CURL_RETRY_BASE_DELAY + 1)))
       ((delay > DYBATPHO_CURL_RETRY_MAX_DELAY)) && delay="${DYBATPHO_CURL_RETRY_MAX_DELAY}"
     fi
+    if declare -F dybatpho::metrics_counter_inc > /dev/null; then
+      dybatpho::metrics_counter_inc dybatpho_http_retries_total
+    fi
     dybatpho::progress "Retrying in ${delay} seconds (${attempt}/${DYBATPHO_CURL_MAX_RETRIES})..."
     sleep "${delay}" || true
   done
+
+  # Record how long the request took, including every retry, so that the metric
+  # reflects what the script actually waited for.
+  if [[ -n "${__dybatpho_http_started}" ]]; then
+    dybatpho::metrics_observe_ms dybatpho_http_request_duration_seconds \
+      "$(($(__log_now_ms) - __dybatpho_http_started))" "status=${code}"
+    dybatpho::metrics_counter_inc dybatpho_http_requests_total 1 "status=${code}"
+  fi
 
   # Return exit code based on HTTP status code
   case "${code}" in

@@ -62,6 +62,12 @@ function __dybatpho_log {
 
   dybatpho::compare_log_level "${show_log_level}" || return 0
 
+  # Counting logged messages is how the metrics module reports the error rate of
+  # a run. The hook stays silent unless that optional module is loaded.
+  if declare -F dybatpho::metrics_counter_inc > /dev/null; then
+    dybatpho::metrics_counter_inc dybatpho_log_messages_total 1 "level=${show_log_level}"
+  fi
+
   #######################################
   # @description Render the current log message with ANSI color unless `NO_COLOR` is set.
   # @noargs

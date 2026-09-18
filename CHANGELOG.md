@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`metrics` module** — measure a script and export the result to Prometheus.
+  `dybatpho::metrics_time` wraps a command, records how long it took and whether
+  it failed, and returns its exit code unchanged; `metrics_timer_start` and
+  `metrics_timer_stop` cover a region rather than one command;
+  `metrics_counter_inc`, `metrics_gauge_set`, and `metrics_observe_ms` record
+  directly. `metrics_render` produces the Prometheus text exposition format and
+  `metrics_write` saves it atomically, which is what the node exporter's textfile
+  collector requires.
+
+  Loading the module also turns on instrumentation the library was already in a
+  position to record: retries and exhausted retries from `dybatpho::retry`,
+  request duration and final status from `dybatpho::curl_do`, and logged messages
+  by level. A script that does not load the module is unaffected.
+
+  ```sh
+  . dybatpho/init.sh --modules metrics
+  dybatpho::metrics_time backup_duration_seconds target=db -- pg_dump -Fc mydb -f /backup/db.dump
+  dybatpho::metrics_write /var/lib/node_exporter/textfile_collector/backup.prom
+  ```
+
 ## [2.0.0] - 2026-09-17
 
 ### Added
@@ -128,4 +152,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dybatpho::safe_extract` validates an archive before extracting it. This blocks
   path-traversal entries such as `../../etc/passwd` in an untrusted archive.
 
+[Unreleased]: https://github.com/dynamotn/dybatpho/compare/v2.0.0...HEAD
 [2.0.0]: https://github.com/dynamotn/dybatpho/releases/tag/v2.0.0

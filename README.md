@@ -164,6 +164,7 @@ with a missing function. See [init.sh reference](doc/init.md) and
 | [git.sh](doc/git.md)          | Repo metadata, branches, tags, commits, remotes           |
 | [semver.sh](doc/semver.md)    | Parse, validate, compare and bump semantic versions       |
 | [testing.sh](doc/testing.md)  | File/JSON/YAML assertions, CLI snapshots, mocks, fixtures |
+| [metrics.sh](doc/metrics.md)  | Command timing, counters, retry/HTTP/error stats, Prometheus export |
 
 ## 🗂 Directory Structure
 

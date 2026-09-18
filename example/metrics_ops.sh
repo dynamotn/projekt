@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# @file metrics_ops.sh
+# @brief Example showing timing, counters and Prometheus export
+# @description Demonstrates dybatpho::metrics_time, metrics_timer_start/stop,
+#   metrics_counter_inc, metrics_gauge_set, metrics_observe_ms, metrics_get,
+#   metrics_render, metrics_write, and the retry/HTTP/error instrumentation that
+#   loading this module turns on
+SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
+. "${SCRIPTDIR}/../init.sh" --modules metrics
+
+dybatpho::register_common_handlers
+
+function _demo_timing {
+  dybatpho::header "TIMING A COMMAND"
+
+  # `metrics_time` runs the command, records how long it took, and passes the
+  # exit code on, so it can wrap a step without changing what the script does.
+  dybatpho::metrics_time build_duration_seconds stage=compile -- sleep 0.05
+  dybatpho::info "Compile stage took ${DYBATPHO_METRICS_LAST_MS}ms"
+
+  # A failing step is still timed, and also counted as a failure.
+  dybatpho::metrics_time build_duration_seconds stage=link -- false || true
+  dybatpho::info "Link stage failed after ${DYBATPHO_METRICS_LAST_MS}ms"
+  dybatpho::info "Failures so far: $(dybatpho::metrics_get counter build_failures_total stage=link)"
+
+  # A timer suits a region that is not a single command.
+  dybatpho::metrics_timer_start deploy_duration_seconds
+  sleep 0.02
+  dybatpho::metrics_timer_stop deploy_duration_seconds target=staging
+  dybatpho::info "Deploy took ${DYBATPHO_METRICS_LAST_MS}ms"
+}
+
+function _demo_counters {
+  dybatpho::header "COUNTERS AND GAUGES"
+
+  dybatpho::metrics_help artifacts_total "Artifacts published by this run"
+  dybatpho::metrics_counter_inc artifacts_total 1 kind=tarball
+  dybatpho::metrics_counter_inc artifacts_total 2 kind=checksum
+  dybatpho::metrics_gauge_set queue_depth 7
+
+  dybatpho::info "Tarballs  : $(dybatpho::metrics_get counter artifacts_total kind=tarball)"
+  dybatpho::info "Checksums : $(dybatpho::metrics_get counter artifacts_total kind=checksum)"
+}
+
+function _demo_automatic {
+  dybatpho::header "AUTOMATIC INSTRUMENTATION"
+  dybatpho::info "Loading the metrics module is enough; these need no extra calls"
+
+  # Retries and logged errors are counted by the library itself.
+  dybatpho::retry 2 "false" > /dev/null 2>&1 || true
+  dybatpho::error "a failure worth counting" 2> /dev/null
+
+  dybatpho::info "Retries      : $(dybatpho::metrics_get counter dybatpho_retry_attempts_total)"
+  dybatpho::info "Gave up      : $(dybatpho::metrics_get counter dybatpho_retry_exhausted_total)"
+  dybatpho::info "Errors logged: $(dybatpho::metrics_get counter dybatpho_log_messages_total level=error)"
+}
+
+function _demo_export {
+  dybatpho::header "PROMETHEUS EXPORT"
+
+  # The node exporter's textfile collector reads whatever it finds whenever it
+  # scrapes, so the file is written atomically.
+  local WORKDIR
+  dybatpho::create_temp WORKDIR "/"
+  local prom="${WORKDIR}/dybatpho.prom"
+  dybatpho::metrics_write "${prom}"
+  dybatpho::info "Wrote ${prom}"
+  dybatpho::show_file "${prom}"
+  dybatpho::info "In production this would live in the textfile collector directory"
+}
+
+function _main {
+  _demo_timing
+  _demo_counters
+  _demo_automatic
+  _demo_export
+  dybatpho::success "Metrics demo complete"
+}
+
+_main "$@"

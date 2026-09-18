@@ -43,6 +43,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `notification.md`
 - `secret.md`
 - `safety.md`
+- `metrics.md`
 
 ## Source Mapping
 
@@ -69,6 +70,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `src/secret.sh` -> `secret.md`
 - `src/testing.sh` -> `testing.md`
 - `src/safety.sh` -> `safety.md`
+- `src/metrics.sh` -> `metrics.md`
 
 ## Notes
 

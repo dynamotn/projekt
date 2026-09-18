@@ -372,10 +372,16 @@ function dybatpho::retry {
     count="$((count + 1))"
     if [ "${count}" -le "${retries}" ]; then
       delay="$((2 * count))"
+      if declare -F dybatpho::metrics_counter_inc > /dev/null; then
+        dybatpho::metrics_counter_inc dybatpho_retry_attempts_total
+      fi
       dybatpho::progress "Retrying in ${delay} seconds (${count}/${retries})..."
       sleep "${delay}" || true
     else
       # Out of retries :(
+      if declare -F dybatpho::metrics_counter_inc > /dev/null; then
+        dybatpho::metrics_counter_inc dybatpho_retry_exhausted_total
+      fi
       dybatpho::warn "No more retries left to run ${1:-${command}}."
       return "${exit_code}"
     fi
