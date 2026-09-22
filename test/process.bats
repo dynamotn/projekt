@@ -136,8 +136,15 @@ setup() {
 @test 'dybatpho::cleanup_file_on_exit removes a path containing spaces' {
   local target="${BATS_TEST_TMPDIR}/dir with space"
   mkdir -p "${target}"
-  bash -c ". '${DYBATPHO_DIR}/init.sh'
-    dybatpho::cleanup_file_on_exit '${target}'"
+  # A `bash -c` shell has an empty `BASH_SOURCE`, which the kcov hook expands on
+  # every command and `set -u` then turns into a failure that shows up only
+  # under `scripts/test.sh --coverage`. Spawn from a script file instead.
+  local script="${BATS_TEST_TMPDIR}/cleanup_spaces.sh"
+  cat > "${script}" << 'SCRIPT'
+. "${1}/init.sh"
+dybatpho::cleanup_file_on_exit "${2}"
+SCRIPT
+  bash "${script}" "${DYBATPHO_DIR}" "${target}"
   assert_dir_not_exist "${target}"
 }
 
@@ -146,10 +153,14 @@ setup() {
   touch "${first}" "${second}"
   # Every registration used to append its own command, so the trap grew with
   # each temporary file. It is now a single call into the path registry.
-  run bash -c ". '${DYBATPHO_DIR}/init.sh'
-    dybatpho::cleanup_file_on_exit '${first}'
-    dybatpho::cleanup_file_on_exit '${second}'
-    trap -p EXIT"
+  local script="${BATS_TEST_TMPDIR}/cleanup_one_trap.sh"
+  cat > "${script}" << 'SCRIPT'
+. "${1}/init.sh"
+dybatpho::cleanup_file_on_exit "${2}"
+dybatpho::cleanup_file_on_exit "${3}"
+trap -p EXIT
+SCRIPT
+  run bash "${script}" "${DYBATPHO_DIR}" "${first}" "${second}"
   assert_success
   assert_equal "$(printf '%s\n' "${output}" | grep -c '__dybatpho_cleanup_run')" "1"
 }
@@ -159,10 +170,17 @@ setup() {
   touch "${outer}"
   # The subshell inherits the registry, so it must remove only what it
   # registered itself; the parent still needs `outer`.
-  run bash -c ". '${DYBATPHO_DIR}/init.sh'
-    dybatpho::cleanup_file_on_exit '${outer}'
-    (:)
-    [[ -e '${outer}' ]] || { echo 'removed too early'; exit 1; }"
+  local script="${BATS_TEST_TMPDIR}/cleanup_other_shell.sh"
+  cat > "${script}" << 'SCRIPT'
+. "${1}/init.sh"
+dybatpho::cleanup_file_on_exit "${2}"
+(:)
+[[ -e "${2}" ]] || {
+  echo 'removed too early'
+  exit 1
+}
+SCRIPT
+  run bash "${script}" "${DYBATPHO_DIR}" "${outer}"
   assert_success
   assert_file_not_exist "${outer}"
 }

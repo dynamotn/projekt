@@ -847,11 +847,15 @@ SCRIPT
   # Each registration used to overwrite the previous cleanup trap, so all but
   # one temporary file survived the shell that made them.
   local probe
-  probe="$(bash -c '. "${0}/init.sh"
-    dybatpho::create_temp first ".txt" "multi"
-    dybatpho::create_temp second ".txt" "multi"
-    dybatpho::create_temp third ".txt" "multi"
-    printf "%s\n%s\n%s\n" "${first}" "${second}" "${third}"' "${DYBATPHO_DIR}")"
+  local script="${BATS_TEST_TMPDIR}/multi_temp.sh"
+  cat > "${script}" << 'SCRIPT'
+. "${1}/init.sh"
+dybatpho::create_temp first ".txt" "multi"
+dybatpho::create_temp second ".txt" "multi"
+dybatpho::create_temp third ".txt" "multi"
+printf "%s\n%s\n%s\n" "${first}" "${second}" "${third}"
+SCRIPT
+  probe="$(bash "${script}" "${DYBATPHO_DIR}")"
   local leftover
   while IFS= read -r leftover; do
     [[ -n "${leftover}" ]] || continue
