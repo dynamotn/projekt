@@ -132,6 +132,20 @@ The bundle carries no dependency on a `src/` directory: copy the one file, sourc
 it, and the bundled functions work. Inside it, `dybatpho::load` succeeds for a
 bundled module and names the regeneration command for anything else.
 
+## 🚀 Releasing
+
+Maintainers cut a release with `scripts/release.sh`. It stamps `VERSION`,
+promotes the `Unreleased` section of `CHANGELOG.md` to the new version,
+regenerates `doc/`, commits, tags, builds the all-modules bundle with its
+checksum file, pushes, and publishes the GitHub release with the changelog entry
+as its notes:
+
+```sh
+scripts/release.sh --dry-run     # every check, no writes
+scripts/release.sh               # version derived from the commits
+scripts/release.sh --version 3.0.0 --sign
+```
+
 ## 📚 Modules
 
 ### 🧱 Core scripting
@@ -211,7 +225,7 @@ bundled module and names the regeneration command for anything else.
 │   ├── *.md        # Usage guides & reference for each module
 │   └── spec/       # Module specifications and design docs
 ├── example/        # Example scripts for users
-├── scripts/        # Helper scripts (test, doc generation, bundling, etc.)
+├── scripts/        # Helper scripts (test, doc generation, bundling, releasing)
 ├── src/            # Source code of modules
 ├── test/           # Unit tests
 ├── CHANGELOG.md    # User-visible history

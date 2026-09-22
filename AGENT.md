@@ -21,8 +21,11 @@ This document describes the repository workflow and conventions to preserve.
 - `scripts/test.sh` — test runner; `--coverage` adds the kcov report.
 - `scripts/bundle.sh` — flatten a module selection into one vendorable file;
   covered by `test/bundle.bats` and specified in `doc/spec/doctor.md`.
-- `VERSION` — the version this copy reports through `dybatpho::version`; bump it
-  in the same change that tags a release.
+- `scripts/release.sh` — cut a release: stamp `VERSION` and `CHANGELOG.md`,
+  regenerate `doc/`, commit, tag, and publish the GitHub release. Run it with
+  `--dry-run` first.
+- `VERSION` — the version this copy reports through `dybatpho::version`;
+  `scripts/release.sh` stamps it in the same commit that tags the release.
 - `.mise.toml` — standard tasks such as `mise run test` and `mise run doc`.
 
 ## Module scope
@@ -337,6 +340,31 @@ git diff --stat HEAD -- CHANGELOG.md
 
 It must show `CHANGELOG.md` whenever the same diff touches `src/` in a way that
 changes public behavior.
+
+## Releasing
+
+`scripts/release.sh` is the only supported way to cut a release, because the
+tag, `VERSION`, `CHANGELOG.md`, and `doc/` have to agree and doing that by hand
+is where they drift apart. It stamps the version, promotes `## [Unreleased]` to
+`## [<version>] - <date>` with a fresh empty `Unreleased` above it, rewrites the
+comparison links, regenerates `doc/`, commits `chore(release): v<version>`, tags
+it annotated with the changelog entry, builds the all-modules bundle and its
+checksum file, pushes, and creates the GitHub release with the same entry as the
+release notes.
+
+```bash
+scripts/release.sh --dry-run   # every check and computation, no writes
+scripts/release.sh             # version derived from the commits
+scripts/release.sh --version 3.0.0
+```
+
+The version comes from the commits through `dybatpho::release_next_version`,
+with one override: an `Unreleased` section that marks a change **BREAKING**
+forces a major release even when no commit subject carried `!` or a
+`BREAKING CHANGE:` footer. The release notes are always the handwritten
+changelog entry, never a generated commit list — which is the other reason the
+changelog rule above is not negotiable: an entry missing at release time is an
+entry missing from the published notes.
 
 ## Bash conventions
 

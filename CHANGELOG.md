@@ -43,6 +43,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drops a leading `v`, caches into `DYBATPHO_VERSION`, and honors that variable
   when it is already set.
 
+- **`scripts/release.sh`** — cuts a release in one command. It refuses to start
+  on a dirty tree or an existing tag, resolves the version from the commits
+  through `dybatpho::release_next_version` (or from `--version` / `--bump`),
+  stamps `VERSION`, promotes `## [Unreleased]` in `CHANGELOG.md` to
+  `## [<version>] - <date>` with a fresh empty `Unreleased` above it, rewrites
+  the comparison links, regenerates `doc/`, commits `chore(release): v<version>`
+  and tags it annotated with the changelog entry, builds the all-modules bundle
+  with a `SHA256SUMS` file beside it, pushes, and creates the GitHub release
+  with that same entry as its notes. The notes are always the handwritten
+  changelog, never a generated commit list, and an `Unreleased` section that
+  marks a change **BREAKING** forces a major release even when no commit subject
+  carried `!`. `--dry-run` performs every check and prints every command without
+  writing anything, and `--no-push` / `--no-github` / `--no-bundle` / `--sign`
+  cover the rest of the release policy.
+
+  ```sh
+  scripts/release.sh --dry-run
+  scripts/release.sh --version 3.0.0 --sign
+  ```
+
 - **`scripts/bundle.sh`** — flattens a module selection into a single
   `dybatpho.bundle.sh` to vendor into another repository or bake into a
   container image. The selection is the same `--modules` used everywhere else
