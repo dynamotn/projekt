@@ -347,7 +347,12 @@ function __dybatpho_release_run {
   dybatpho::dry_run git -C "${DYBATPHO_DIR}" add -A -- \
     "${VERSION_FILE}" "${CHANGELOG_FILE}" "${DYBATPHO_DIR}/doc"
   dybatpho::dry_run git -C "${DYBATPHO_DIR}" commit -m "chore(release): ${_tag}"
-  dybatpho::dry_run git -C "${DYBATPHO_DIR}" tag -a "${_tag}" -F "${_notes}"
+  # The tag message leads with the version, so `git tag -n1` and every tool that
+  # shows a tag's first line name the release rather than its first bullet.
+  local _message
+  dybatpho::create_temp _message ".md" "release-tag"
+  { printf '%s\n\n' "${_tag}"; cat "${_notes}"; } > "${_message}"
+  dybatpho::dry_run git -C "${DYBATPHO_DIR}" tag -a "${_tag}" -F "${_message}"
 
   if dybatpho::is true "${BUNDLE}"; then
     local _artifact
