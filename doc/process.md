@@ -21,6 +21,7 @@ composition, deferred cleanup, and dry-run execution.
 | **`DYBATPHO_USED_ERR_HANDLER`** | bool | Internal flag set after `dybatpho::register_err_handler` |
 | **`DYBATPHO_USED_KILLED_HANDLER`** | bool | Internal flag set after `dybatpho::register_killed_handler` |
 | **`DRY_RUN`** | string | When true-like, `dybatpho::dry_run` prints commands instead of executing them |
+| **`DYBATPHO_CLEANUP_PATHS`** | array | Paths registered by `dybatpho::cleanup_file_on_exit`, each as `<pid>:<path>` |
 
 ### 🚀 Highlights
 
@@ -32,6 +33,7 @@ composition, deferred cleanup, and dry-run execution.
 - [`dybatpho::killed_process_handler`](#dybatphokilled_process_handler) — Handle SIGINT or SIGTERM received by the current process.
 - [`dybatpho::trap`](#dybatphotrap) — Append a command to one or more trap handlers without discarding existing traps.
 - [`__dybatpho_process_gen_finalize_command`](#__dybatpho_process_gen_finalize_command) — Read the current trap command registered for a signal.
+- [`__dybatpho_cleanup_run`](#__dybatpho_cleanup_run) — Remove every path registered by `dybatpho::cleanup_file_on_exit` from the current shell. Paths registered by another shell are left alone, so a subshell exiting does not delete the temporary files its parent still needs.
 - [`dybatpho::cleanup_file_on_exit`](#dybatphocleanup_file_on_exit) — Register a file or directory to be removed when the current shell exits.
 - [`dybatpho::dry_run`](#dybatphodry_run) — Print a shell command instead of executing it when `DRY_RUN` is enabled.
 
@@ -168,6 +170,22 @@ Read the current trap command registered for a signal.
 
 ---
 
+### `__dybatpho_cleanup_run`
+
+Remove every path registered by `dybatpho::cleanup_file_on_exit`
+  from the current shell. Paths registered by another shell are left alone, so
+  a subshell exiting does not delete the temporary files its parent still
+  needs.
+
+_Function has no arguments._
+
+**🚦 Exit codes**
+
+- `0`: Always, so a failed removal cannot change the shell's exit status
+
+
+---
+
 ### `dybatpho::cleanup_file_on_exit`
 
 Register a file or directory to be removed when the current shell exits.
@@ -177,6 +195,10 @@ Register a file or directory to be removed when the current shell exits.
 | Name | Type | Description |
 | --- | --- | --- |
 | `$1` | string | File or directory path |
+
+**📝 Notes**
+
+- Paths are collected in `DYBATPHO_CLEANUP_PATHS` and removed by a single trap installed on first use, rather than one trap command per path: a script that creates many temporary files would otherwise build a trap string that grows with every one of them.
 
 
 ---

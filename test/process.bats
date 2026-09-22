@@ -133,15 +133,38 @@ setup() {
   [[ ! -e "${dirpath}" ]]
 }
 
-@test 'dybatpho::cleanup_file_on_exit generates quoted cleanup commands' {
+@test 'dybatpho::cleanup_file_on_exit removes a path containing spaces' {
   local target="${BATS_TEST_TMPDIR}/dir with space"
-  dybatpho::cleanup_file_on_exit "${target}"
-  run trap -p EXIT
+  mkdir -p "${target}"
+  bash -c ". '${DYBATPHO_DIR}/init.sh'
+    dybatpho::cleanup_file_on_exit '${target}'"
+  assert_dir_not_exist "${target}"
+}
+
+@test 'dybatpho::cleanup_file_on_exit installs one trap for many paths' {
+  local first="${BATS_TEST_TMPDIR}/first" second="${BATS_TEST_TMPDIR}/second"
+  touch "${first}" "${second}"
+  # Every registration used to append its own command, so the trap grew with
+  # each temporary file. It is now a single call into the path registry.
+  run bash -c ". '${DYBATPHO_DIR}/init.sh'
+    dybatpho::cleanup_file_on_exit '${first}'
+    dybatpho::cleanup_file_on_exit '${second}'
+    trap -p EXIT"
   assert_success
-  local quoted_target
-  quoted_target=$(printf '%q' "${target}")
-  assert_output --partial "> /dev/null 2>&1"
-  assert_output --partial "[[ -e ${quoted_target} ]] && rm -rf ${quoted_target} > /dev/null 2>&1"
+  assert_equal "$(printf '%s\n' "${output}" | grep -c '__dybatpho_cleanup_run')" "1"
+}
+
+@test 'dybatpho::cleanup_file_on_exit leaves paths registered by another shell alone' {
+  local outer="${BATS_TEST_TMPDIR}/outer"
+  touch "${outer}"
+  # The subshell inherits the registry, so it must remove only what it
+  # registered itself; the parent still needs `outer`.
+  run bash -c ". '${DYBATPHO_DIR}/init.sh'
+    dybatpho::cleanup_file_on_exit '${outer}'
+    (:)
+    [[ -e '${outer}' ]] || { echo 'removed too early'; exit 1; }"
+  assert_success
+  assert_file_not_exist "${outer}"
 }
 
 @test "dybatpho::dry_run with DRY_RUN=true should print dry run message and not execute command" {

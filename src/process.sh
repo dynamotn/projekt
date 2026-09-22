@@ -16,6 +16,10 @@ DYBATPHO_USED_KILLED_HANDLER=false
 # @env DRY_RUN string When true-like, `dybatpho::dry_run` prints commands instead of executing them
 DRY_RUN="${DRY_RUN:-}"
 export DRY_RUN
+# @env DYBATPHO_CLEANUP_PATHS array Paths registered by `dybatpho::cleanup_file_on_exit`, each as `<pid>:<path>`
+declare -ga DYBATPHO_CLEANUP_PATHS=()
+# Shell that already owns the cleanup trap, so it is installed exactly once.
+__dybatpho_cleanup_trap_pid=""
 
 #######################################
 # @description Log a fatal message and stop the current script or process.
@@ -141,22 +145,50 @@ function dybatpho::trap {
 }
 
 #######################################
+# @description Remove every path registered by `dybatpho::cleanup_file_on_exit`
+#   from the current shell. Paths registered by another shell are left alone, so
+#   a subshell exiting does not delete the temporary files its parent still
+#   needs.
+# @noargs
+# @exitcode 0 Always, so a failed removal cannot change the shell's exit status
+#######################################
+function __dybatpho_cleanup_run {
+  local entry pid path
+  local -a remaining=()
+  for entry in ${DYBATPHO_CLEANUP_PATHS[@]+"${DYBATPHO_CLEANUP_PATHS[@]}"}; do
+    pid="${entry%%:*}"
+    path="${entry#*:}"
+    if [[ "${pid}" == "${BASHPID}" ]]; then
+      [[ -e "${path}" ]] && rm -rf -- "${path}" > /dev/null 2>&1
+    else
+      remaining+=("${entry}")
+    fi
+  done
+  DYBATPHO_CLEANUP_PATHS=(${remaining[@]+"${remaining[@]}"})
+  return 0
+}
+
+#######################################
 # @description Register a file or directory to be removed when the current shell exits.
 # @arg $1 string File or directory path
 # @tip `dybatpho::create_temp` already uses this internally, so call it directly only for custom temporary paths
+# @note Paths are collected in `DYBATPHO_CLEANUP_PATHS` and removed by a single
+#   trap installed on first use, rather than one trap command per path: a script
+#   that creates many temporary files would otherwise build a trap string that
+#   grows with every one of them.
 #######################################
 function dybatpho::cleanup_file_on_exit {
   local filepath
   dybatpho::expect_args filepath -- "$@"
 
-  local pid="${BASHPID}"
-  local quoted_filepath
+  DYBATPHO_CLEANUP_PATHS+=("${BASHPID}:${filepath}")
+
+  # One trap per shell. A subshell inherits the registry but not ownership of
+  # the trap, so it installs its own and removes only what it registered.
+  [[ "${__dybatpho_cleanup_trap_pid}" == "${BASHPID}" ]] && return 0
+  __dybatpho_cleanup_trap_pid="${BASHPID}"
+
   local running_under_bats_test=false source_file
-  printf -v quoted_filepath '%q' "${filepath}"
-
-  local cleanup_command
-  cleanup_command="[[ \"\${BASHPID}\" == ${pid} ]] && [[ -e ${quoted_filepath} ]] && rm -rf ${quoted_filepath} > /dev/null 2>&1"
-
   for source_file in "${BASH_SOURCE[@]}"; do
     if [[ "${source_file}" == *.bats ]] || [[ "${source_file}" == */bats-core/* ]]; then
       running_under_bats_test=true
@@ -164,11 +196,15 @@ function dybatpho::cleanup_file_on_exit {
     fi
   done
 
-  # Bats manages its own EXIT trap in the test shell, so keep the single-trap behavior there.
   if [[ "${running_under_bats_test}" == true ]]; then
-    trap "${cleanup_command}" EXIT HUP INT TERM
+    # Deliberately replacing rather than composing. A Bats test shell carries
+    # `bats_teardown_trap` on EXIT, and every command substitution inherits it;
+    # composing would run Bats' teardown — and report a test result — once per
+    # subshell. Bats re-arms its own trap after the test body anyway, so nothing
+    # of Bats' is lost by dropping it here.
+    trap '__dybatpho_cleanup_run' EXIT HUP INT TERM
   else
-    dybatpho::trap "${cleanup_command}" EXIT HUP INT TERM # kcov(skip) - tests always run under bats
+    dybatpho::trap '__dybatpho_cleanup_run' EXIT HUP INT TERM # kcov(skip) - tests always run under bats
   fi
 }
 

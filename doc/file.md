@@ -362,6 +362,10 @@ mkdir -p "${TMPDIR_VAR}/subdir"
 | `$3` | string | Name prefix, default is `temp` |
 | `$4` | string | Parent directory, default is `${TMPDIR:-/tmp}` |
 
+**📝 Notes**
+
+- With no explicit parent directory, the path is created under `TMPDIR`, or under the Bats temporary directory when running as a test. Bats re-arms its own `EXIT` trap after each test body, which discards the cleanup trap registered here, so a file left in `TMPDIR` would survive the run; Bats removes its own directory instead.
+
 
 ---
 

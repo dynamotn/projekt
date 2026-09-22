@@ -773,7 +773,6 @@ EOF
   local workdir
   dybatpho::create_temp_dir workdir "spec"
   assert [ -d "${workdir}" ]
-  assert_output --partial "" # keep bats happy about an unused run slot
   printf 'x\n' > "${workdir}/file"
   assert [ -f "${workdir}/file" ]
   # The name carries the requested prefix, which is what makes it findable.
@@ -800,4 +799,40 @@ EOF
     dybatpho::create_temp_dir workdir "gone"
     printf "%s\n" "${workdir}"' "${DYBATPHO_DIR}")"
   refute [ -d "${probe}" ]
+}
+
+@test "dybatpho::create_temp keeps test temporaries out of TMPDIR" {
+  # Bats re-arms its own EXIT trap after each test body, which discards the
+  # cleanup trap create_temp registers, so anything left in TMPDIR outlives the
+  # whole run. Everything therefore goes to the directory Bats cleans up itself.
+  local file dir
+  dybatpho::create_temp file ".txt" "tmplocation"
+  dybatpho::create_temp dir "/" "tmplocation"
+  assert_equal "${file##"${BATS_TEST_TMPDIR}"/}" "$(dybatpho::path_basename "${file}")"
+  assert_equal "${dir##"${BATS_TEST_TMPDIR}"/}" "$(dybatpho::path_basename "${dir}")"
+  assert_file_exist "${file}"
+  assert_dir_exist "${dir}"
+}
+
+@test "dybatpho::create_temp still honours an explicit parent directory" {
+  local parent="${BATS_TEST_TMPDIR}/explicit" file
+  mkdir -p "${parent}"
+  dybatpho::create_temp file ".txt" "tmplocation" "${parent}"
+  assert_equal "$(dybatpho::path_dirname "${file}")" "${parent}"
+}
+
+@test "dybatpho::create_temp removes every temporary a script made, not just the last" {
+  # Each registration used to overwrite the previous cleanup trap, so all but
+  # one temporary file survived the shell that made them.
+  local probe
+  probe="$(bash -c '. "${0}/init.sh"
+    dybatpho::create_temp first ".txt" "multi"
+    dybatpho::create_temp second ".txt" "multi"
+    dybatpho::create_temp third ".txt" "multi"
+    printf "%s\n%s\n%s\n" "${first}" "${second}" "${third}"' "${DYBATPHO_DIR}")"
+  local leftover
+  while IFS= read -r leftover; do
+    [[ -n "${leftover}" ]] || continue
+    refute [ -e "${leftover}" ]
+  done <<< "${probe}"
 }

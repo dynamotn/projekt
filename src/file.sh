@@ -343,6 +343,11 @@ function dybatpho::path_relative {
 # @arg $4 string Parent directory, default is `${TMPDIR:-/tmp}`
 # @tip Pass `/` or an empty extension to create a directory instead of a file
 # @tip The created path is automatically registered for cleanup on script exit
+# @note With no explicit parent directory, the path is created under
+#   `TMPDIR`, or under the Bats temporary directory when running as a test.
+#   Bats re-arms its own `EXIT` trap after each test body, which discards the
+#   cleanup trap registered here, so a file left in `TMPDIR` would survive the
+#   run; Bats removes its own directory instead.
 #######################################
 function dybatpho::create_temp {
   local path_var extension
@@ -354,7 +359,18 @@ function dybatpho::create_temp {
   fi
 
   # Ensure existed parent folder
-  local parent_folder=${2:-${TMPDIR:-/tmp}}
+  local parent_folder="${2-}"
+  if [[ -z "${parent_folder}" ]]; then
+    parent_folder="${TMPDIR:-/tmp}"
+    # Bats re-arms its own EXIT trap after each test body, which discards the
+    # cleanup trap registered here, so a temporary file left in /tmp would
+    # outlive the run. Bats removes its own temporary directory instead, and
+    # that is exactly the lifetime a file created by a test should have.
+    local bats_folder="${BATS_TEST_TMPDIR:-${BATS_FILE_TMPDIR:-${BATS_RUN_TMPDIR:-}}}"
+    if [[ -n "${bats_folder}" ]] && dybatpho::is dir "${bats_folder}"; then
+      parent_folder="${bats_folder}"
+    fi
+  fi
   if ! dybatpho::is dir "${parent_folder}"; then
     dybatpho::die "Folder ${parent_folder} is not existed" # kcov(skip)
   fi
@@ -377,10 +393,10 @@ function dybatpho::create_temp {
   else
     # kcov(disabled)
     if dybatpho::is empty "${extension}"; then
-      temp_path="/tmp/${filename_format}"
+      temp_path="${parent_folder%/}/${filename_format}"
       mkdir "${temp_path}"
     else
-      temp_path="/tmp/${filename_format}${extension}"
+      temp_path="${parent_folder%/}/${filename_format}${extension}"
       touch "${temp_path}"
     fi
     # kcov(enabled)

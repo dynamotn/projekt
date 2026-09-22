@@ -357,6 +357,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   retry. The hooks now test an internal helper of the module, which cannot cross
   a process boundary, so they stay inert exactly when recording is impossible
   and still record in a child that loads `metrics` itself.
+- **Temporary files no longer pile up in `/tmp` during a test run.** Bats
+  re-arms its own `EXIT` trap after each test body, which discarded the cleanup
+  trap `dybatpho::create_temp` had just registered, so virtually every temporary
+  file a test created survived the run — the suite left roughly a thousand
+  `/tmp/dybatpho_*` entries behind each time. With no explicit parent directory,
+  temporary paths are now created under the Bats temporary directory when
+  running as a test, which Bats removes itself and which is the right lifetime
+  for a file a test created. A full suite run now leaves nothing behind.
+
+- **`dybatpho::cleanup_file_on_exit` no longer grows the trap with every path.**
+  Each registration used to append its own `rm` command, so a script creating
+  many temporary files built a trap string that grew with each one. Paths are
+  now collected in `DYBATPHO_CLEANUP_PATHS` and removed by a single trap
+  installed on first use. A path registered by one shell is still never removed
+  by another, so a subshell exiting leaves its parent's temporary files intact.
+
+- **`dybatpho::create_temp` honours the requested parent directory when
+  `mktemp` is missing.** The fallback path hardcoded `/tmp`, ignoring both the
+  explicit fourth argument and `TMPDIR`.
+
 - **`cli`**: a persistent option declared on a command was listed twice in that
   command's own help, once replayed as an inherited definition and once from
   its own spec.
