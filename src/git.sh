@@ -302,3 +302,31 @@ function dybatpho::git_tags_containing {
   resolved="$(__dybatpho_git_resolve_commit "${repo_path}" "${2:-HEAD}")" || return $?
   __dybatpho_git "${repo_path}" tag --contains "${resolved}" | sort
 }
+
+#######################################
+# @description Return success when one commit is reachable from another.
+#   A release script asks this before acting: whether a tag is on the branch it
+#   is about to release, or whether a fix has already landed on the branch a
+#   backport is aimed at.
+# @example
+#   if dybatpho::git_is_ancestor "." "v1.2.0" "HEAD"; then
+#     dybatpho::info "v1.2.0 is already on this branch"
+#   fi
+#
+# @arg $1 string Repository path
+# @arg $2 string The commit-ish that may be the ancestor
+# @arg $3 string The commit-ish that may descend from it
+# @exitcode 0 The first commit is an ancestor of the second, or they are the same commit
+# @exitcode 1 It is not, or either commit-ish cannot be resolved
+# @tip A commit counts as its own ancestor, which is what `git merge-base` reports
+#   and what makes "has this landed yet" answer yes for the commit itself
+#######################################
+function dybatpho::git_is_ancestor {
+  local repo_path ancestor descendant resolved_ancestor resolved_descendant
+  dybatpho::expect_args repo_path ancestor descendant -- "$@"
+  repo_path="$(__dybatpho_git_repo_path "${repo_path}")" || return $?
+  resolved_ancestor="$(__dybatpho_git_resolve_commit "${repo_path}" "${ancestor}")" || return $?
+  resolved_descendant="$(__dybatpho_git_resolve_commit "${repo_path}" "${descendant}")" || return $?
+  __dybatpho_git "${repo_path}" merge-base --is-ancestor \
+    "${resolved_ancestor}" "${resolved_descendant}"
+}

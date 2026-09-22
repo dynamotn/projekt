@@ -296,3 +296,45 @@ SIGNER
   refute [ -e "${signature}" ]
   refute [ -d "${BATS_TEST_TMPDIR}/dist6" ]
 }
+
+@test "dybatpho::release_commit_parse separates type, scope, breaking and description" {
+  run -0 dybatpho::release_commit_parse "feat(api)!: drop the v1 endpoints"
+  assert_line --index 0 "feat"
+  assert_line --index 1 "api"
+  assert_line --index 2 "true"
+  assert_line --index 3 "drop the v1 endpoints"
+}
+
+@test "dybatpho::release_commit_parse reports an absent scope and marker" {
+  # Compared whole: an absent scope is an empty line, and Bats drops empty
+  # lines from the array that `assert_line` indexes into.
+  run -0 dybatpho::release_commit_parse "fix: handle empty input"
+  assert_output "$(printf 'fix\n\nfalse\nhandle empty input')"
+}
+
+@test "dybatpho::release_commit_parse reads a BREAKING CHANGE footer from the body" {
+  run -0 dybatpho::release_commit_parse "refactor: rework the loader" \
+    "$(printf 'Some detail.\n\nBREAKING CHANGE: the config key was renamed\n')"
+  # The description still comes from the subject, not from the footer.
+  assert_output "$(printf 'refactor\n\ntrue\nrework the loader')"
+}
+
+@test "dybatpho::release_commit_parse keeps an unconventional subject whole" {
+  run -0 dybatpho::release_commit_parse "Merge branch 'main' into topic"
+  assert_output "$(printf "other\n\nfalse\nMerge branch 'main' into topic")"
+}
+
+@test "dybatpho::release_commit_parse lowercases the type" {
+  run -0 dybatpho::release_commit_parse "FEAT(API): shout"
+  assert_line --index 0 "feat"
+  # The scope is left as written, because it names something in the project.
+  assert_line --index 1 "API"
+}
+
+@test "dybatpho::release_commit_type keeps reporting a breaking change as its own kind" {
+  # The older helper conflates the two on purpose; the parser is what a caller
+  # reaches for when it needs both the type and the breaking flag.
+  assert_equal "$(dybatpho::release_commit_type 'feat(api)!: x')" "breaking"
+  assert_equal "$(dybatpho::release_commit_type 'fix: y')" "fix"
+  assert_equal "$(dybatpho::release_commit_type 'nope')" "other"
+}

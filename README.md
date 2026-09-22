@@ -196,8 +196,8 @@ bundled module and names the regeneration command for anything else.
 
 | Module                        | What you get                                            |
 | ----------------------------- | -------------------------------------------------------- |
-| [git.sh](doc/git.md)          | Repo metadata, branches, tags, commits, remotes           |
-| [semver.sh](doc/semver.md)    | Parse, validate, compare and bump semantic versions       |
+| [git.sh](doc/git.md)          | Repo metadata, branches, tags, commits, remotes, reachability |
+| [semver.sh](doc/semver.md)    | Parse, validate, compare, bump, sort and range-match semantic versions |
 | [release.sh](doc/release.md)  | Version from commits, changelog, per-platform artifacts, checksums, signing |
 | [testing.sh](doc/testing.md)  | File/JSON/YAML assertions, CLI snapshots, mocks, fixtures |
 | [metrics.sh](doc/metrics.md)  | Command timing, counters, retry/HTTP/error stats, Prometheus export |

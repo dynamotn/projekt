@@ -124,6 +124,7 @@ dybatpho::release_sign "${sums}"
 ### Functional Requirements
 
 - **FR-001**: The module MUST classify a commit subject following Conventional Commits, and MUST treat a subject it does not recognize as one that calls for no release.
+- **FR-001a**: The module MUST also report a commit's type, scope, breaking flag, and description separately, so that a caller can group by type and still know the change was breaking, and every other helper MUST derive its answer from that one parser rather than restating the convention.
 - **FR-002**: A commit MUST be treated as breaking when its subject carries `!` before the colon or its message carries a `BREAKING CHANGE:` footer.
 - **FR-003**: The bump for a range MUST be the strongest its commits call for, and MUST NOT be weakened by a later, lesser commit.
 - **FR-004**: A range whose commits call for no release MUST report that to the caller rather than inventing a version.
@@ -160,6 +161,7 @@ dybatpho::release_sign "${sums}"
 ## Integration Tests *(mandatory)*
 
 - **IT-001**: Classify subjects of every kind, including a breaking marker, an upper-case type, and a subject following no convention.
+- **IT-001a**: Parse subjects into their parts, including an absent scope, a footer-declared breaking change, and a subject following no convention.
 - **IT-002**: Verify the bump for ranges containing patches, features, a later patch after a feature, and a breaking change.
 - **IT-003**: Verify that a `BREAKING CHANGE:` footer produces a major bump.
 - **IT-004**: Verify that a range of only non-releasing commits reports nothing to release.

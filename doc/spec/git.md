@@ -102,9 +102,28 @@ dybatpho::git_changed_files "${root}" "${base}"
 - The worktree contains both tracked and untracked changes.
 - A range is empty.
 
+### User Story - Ask whether a commit has landed (Priority: P2)
+
+As a release script, I want to know whether one commit is reachable from another so that I can tell an already-released tag from one that is not on this branch, before acting on it.
+
+**Why this priority**: Acting on the wrong answer ships a release from the wrong history, which is expensive to undo.
+
+**Independent Test**: Build a repository with a branch that diverges, and verify reachability in both directions.
+
+**Acceptance Scenarios**:
+
+1. **Given** an earlier commit and a later one on the same branch, **When** reachability is asked, **Then** the earlier one is reported as an ancestor and the later one is not
+2. **Given** one commit, **When** it is compared with itself, **Then** it counts as its own ancestor, which is what "has this landed" should answer
+3. **Given** two branches that have diverged, **When** either tip is compared with the other, **Then** neither reaches the other
+4. **Given** a reference that cannot be resolved, **When** reachability is asked, **Then** the call fails rather than guessing
+
+---
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
+
+- **FR-A01**: The module MUST report whether one commit is reachable from another, treating a commit as its own ancestor, accepting tags and branch names as well as hashes, and failing when either reference cannot be resolved.
 
 - **FR-001**: All repository helpers MUST accept an optional repository path,
   defaulting to `.` where applicable.
@@ -153,6 +172,8 @@ dybatpho::git_changed_files "${root}" "${base}"
   automation.
 
 ## Integration Tests *(mandatory)*
+
+- **IT-A01**: Verify reachability along a branch, for a commit against itself, across two diverged branches, with a tag, and for an unresolvable reference.
 
 - **IT-001**: Resolve root, branch, detached HEAD, and default branch fallbacks.
 - **IT-002**: Read commit hash, short hash, subject, and author.

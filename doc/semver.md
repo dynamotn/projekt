@@ -4,7 +4,7 @@ Utilities for working with Semantic Versioning (semver)
 
 > 🧭 Source: [src/semver.sh](../src/semver.sh)
 >
-> Jump to: [Overview](#overview) · [See also](#see-also) · [Reference](#reference)
+> Jump to: [Overview](#overview) · [See also](#see-also) · [Tips](#tips) · [Reference](#reference)
 
 <a id="overview"></a>
 ## ✨ Overview
@@ -23,11 +23,29 @@ A leading `v` prefix (e.g. `v1.2.3`) is accepted and stripped automatically.
 - [`dybatpho::semver_compare`](#dybatphosemver_compare) — Compare two semver strings according to semver 2.0.0 precedence rules.
 - [`dybatpho::semver_bump`](#dybatphosemver_bump) — Bump a semver version by the specified part.
 - [`dybatpho::semver_release_type`](#dybatphosemver_release_type) — Detect the release type between two semver versions.
+- [`__dybatpho_semver_fill`](#__dybatpho_semver_fill) — Fill a partial version out to `major.minor.patch`. A range may name only part of a version, and `1.2` has to become `1.2.0` before it can be compared against anything.
+- [`__dybatpho_semver_specificity`](#__dybatpho_semver_specificity) — Print how many parts of a version a range actually named. `^1` and `^1.0.0` bound different ranges, so the caret and tilde rules need to know which parts were written down.
+- [`__dybatpho_semver_expand`](#__dybatpho_semver_expand) — Expand one range comparator into plain `<operator> <version>` bounds. Every shorthand a range may use — a caret, a tilde, a wildcard, a partial version — turns into one or two simple comparisons here, so that the matching itself only ever compares two complete versions. The bounds are appended to a caller-supplied array rather than printed: a command substitution would validate inside a subshell, where a rejected comparator could not stop the caller from reporting a match.
+- [`__dybatpho_semver_holds`](#__dybatpho_semver_holds) — Return success when a version satisfies one comparison.
+- [`dybatpho::semver_satisfies`](#dybatphosemver_satisfies) — Return success when a version satisfies a range. Ranges are written the way npm and Cargo write them: `^1.2.3` for anything compatible, `~1.2.3` for patch updates, plain comparisons such as `>=1.2.0`, partial versions and wildcards such as `1.2.x`, several comparators separated by spaces meaning all of them, and `||` meaning either.
+- [`dybatpho::semver_sort`](#dybatphosemver_sort) — Print versions in order, lowest first. Ordering follows the specification rather than string order, so `1.10.0` comes after `1.9.0` and a pre-release comes before the release it precedes.
+- [`dybatpho::semver_max`](#dybatphosemver_max) — Print the highest of a list of versions.
 
 <a id="see-also"></a>
 ## 🔗 See also
 
 - [https://semver.org/](#httpssemverorg)
+
+<a id="tips"></a>
+## 💡 Tips
+
+### `dybatpho::semver_satisfies`
+
+- A pre-release only satisfies a range that names a pre-release of the same `major.minor.patch`, so `^1.0.0` does not quietly accept `2.0.0-alpha`
+
+### `dybatpho::semver_sort`
+
+- A leading `v` is accepted and preserved, so a list of tags sorts as it is
 
 <a id="reference"></a>
 ## 📚 Reference
@@ -153,4 +171,198 @@ Detect the release type between two semver versions.
 
 - `0`: Always succeeds
 - `1`: Either argument is not a valid semver
+
+
+---
+
+### `__dybatpho_semver_fill`
+
+Fill a partial version out to `major.minor.patch`.
+  A range may name only part of a version, and `1.2` has to become `1.2.0`
+  before it can be compared against anything.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Partial version such as `1`, `1.2`, or `1.2.3` |
+
+**📤 Output on stdout**
+
+- The version with its missing parts set to zero
+
+
+---
+
+### `__dybatpho_semver_specificity`
+
+Print how many parts of a version a range actually named.
+  `^1` and `^1.0.0` bound different ranges, so the caret and tilde rules need
+  to know which parts were written down.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Version or partial version |
+
+**📤 Output on stdout**
+
+- `1`, `2`, or `3`
+
+
+---
+
+### `__dybatpho_semver_expand`
+
+Expand one range comparator into plain `<operator> <version>` bounds.
+  Every shorthand a range may use — a caret, a tilde, a wildcard, a partial
+  version — turns into one or two simple comparisons here, so that the
+  matching itself only ever compares two complete versions.
+  The bounds are appended to a caller-supplied array rather than printed: a
+  command substitution would validate inside a subshell, where a rejected
+  comparator could not stop the caller from reporting a match.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the array the bounds are appended to |
+| `$2` | string | A single comparator such as `^1.2`, `>=1.0.0`, or `1.2.x` |
+
+**🧩 Variable sets**
+
+- **`The`**: named array, with one `<operator> <version>` entry per bound
+
+**🚦 Exit codes**
+
+- `1`: The comparator cannot be understood
+
+
+---
+
+### `__dybatpho_semver_holds`
+
+Return success when a version satisfies one comparison.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Version to test |
+| `$2` | string | Operator, one of `=`, `>`, `>=`, `<`, or `<=` |
+| `$3` | string | Version to compare against |
+
+**🚦 Exit codes**
+
+- `0`: The comparison holds
+- `1`: It does not
+
+
+---
+
+### `dybatpho::semver_satisfies`
+
+Return success when a version satisfies a range.
+  Ranges are written the way npm and Cargo write them: `^1.2.3` for anything
+  compatible, `~1.2.3` for patch updates, plain comparisons such as `>=1.2.0`,
+  partial versions and wildcards such as `1.2.x`, several comparators
+  separated by spaces meaning all of them, and `||` meaning either.
+
+**🧪 Examples**
+
+```bash
+dybatpho::semver_satisfies "1.4.2" "^1.2"        # yes
+dybatpho::semver_satisfies "2.0.0" "^1.2"        # no
+dybatpho::semver_satisfies "1.2.9" "~1.2.3"      # yes
+dybatpho::semver_satisfies "1.5.0" ">=1.2 <1.9"  # yes
+dybatpho::semver_satisfies "3.1.0" "^1.0 || ^3.0"
+
+```
+
+```bash
+dybatpho::semver_satisfies "$(jq -r .version package.json)" ">=18" \
+  || dybatpho::die "Node 18 or newer is required"
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Version to test |
+| `$2` | string | Range expression |
+
+**🚦 Exit codes**
+
+- `0`: The version satisfies the range
+- `1`: It does not
+
+
+---
+
+### `dybatpho::semver_sort`
+
+Print versions in order, lowest first.
+  Ordering follows the specification rather than string order, so `1.10.0`
+  comes after `1.9.0` and a pre-release comes before the release it precedes.
+
+**🧪 Example**
+
+```bash
+dybatpho::semver_sort 1.10.0 1.9.0 2.0.0-rc.1 2.0.0
+git tag --list 'v*' | dybatpho::semver_sort
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$@` | string | Versions to sort, or none to read them from standard input |
+
+**📥 Input on stdin**
+
+- One version per line, when no argument is given
+
+**📤 Output on stdout**
+
+- The versions, one per line, lowest first
+
+**🚦 Exit codes**
+
+- `1`: One of the inputs is not a valid version
+
+
+---
+
+### `dybatpho::semver_max`
+
+Print the highest of a list of versions.
+
+**🧪 Example**
+
+```bash
+latest="$(dybatpho::semver_max 1.10.0 1.9.0 2.0.0-rc.1)"
+latest="$(git tag --list 'v*' | dybatpho::semver_max)"
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$@` | string | Versions to compare, or none to read them from standard input |
+
+**📥 Input on stdin**
+
+- One version per line, when no argument is given
+
+**📤 Output on stdout**
+
+- The highest version, as it was written
+
+**🚦 Exit codes**
+
+- `1`: No version was given, or one of them is not valid
 

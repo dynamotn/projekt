@@ -100,9 +100,50 @@ fi
 - An unsupported bump part is supplied.
 - Bumping drops source pre-release/build metadata unless replacements are given.
 
+### User Story - Check a version against a range (Priority: P1)
+
+As a script author, I want to ask whether a version satisfies a range so that a dependency check reads as the requirement itself rather than as a chain of comparisons.
+
+**Why this priority**: Comparing two versions is already possible; expressing "at least 18" or "compatible with 1.2" is what a real check needs, and hand-rolling it from comparisons is where the mistakes are.
+
+**Independent Test**: Test versions against caret, tilde, comparison, wildcard, and alternative ranges, and verify the pre-release rule.
+
+**Acceptance Scenarios**:
+
+1. **Given** a caret range, **When** a version is tested, **Then** only changes that leave the leftmost non-zero part alone satisfy it
+2. **Given** a tilde range, **When** a version is tested, **Then** only patch-level changes satisfy it
+3. **Given** several comparators separated by spaces, **When** a version is tested, **Then** all of them must hold
+4. **Given** alternatives separated by `||`, **When** a version is tested, **Then** satisfying any one of them is enough
+5. **Given** a pre-release version, **When** it is tested against a range that names no pre-release of the same release, **Then** it does not satisfy the range
+
+---
+
+### User Story - Order a list of versions (Priority: P2)
+
+As a release script, I want a list of versions ordered as versions so that the newest tag is the newest release rather than the last one alphabetically.
+
+**Why this priority**: Without it every caller reimplements the ordering, usually with `sort` and usually wrong for pre-releases.
+
+**Independent Test**: Sort a list whose string order differs from its version order, including pre-releases, and take the maximum.
+
+**Acceptance Scenarios**:
+
+1. **Given** versions whose string order differs from their version order, **When** they are sorted, **Then** the version order wins
+2. **Given** a pre-release and the release it precedes, **When** they are sorted, **Then** the pre-release comes first
+3. **Given** a list on standard input, **When** it is sorted, **Then** any leading `v` is preserved so a list of tags stays usable
+
+---
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
+
+- **FR-R01**: The module MUST report whether a version satisfies a range written with carets, tildes, comparison operators, partial versions, wildcards, space-separated comparators meaning all of them, and `||` meaning any of them.
+- **FR-R02**: A caret range MUST allow only changes that leave the leftmost non-zero part unchanged, so that `^0.2.3` stops at `0.3.0` and `^0.0.3` stops at `0.0.4`.
+- **FR-R03**: A tilde range MUST allow patch-level changes, and MUST widen to minor-level when only the major was named.
+- **FR-R04**: A pre-release MUST satisfy a range only when the range names a pre-release of the same `major.minor.patch`, so that a range below the next major does not quietly accept its pre-release.
+- **FR-R05**: A range that cannot be understood MUST stop the caller rather than reporting a result, and MUST NOT be validated inside a command substitution, where the rejection could not reach the caller.
+- **FR-R06**: The module MUST order versions by the specification's rules, accepting the list as arguments or on standard input, preserving a leading `v`, and MUST report the highest of them.
 
 - **FR-001**: The module MUST validate versions against its supported SemVer
   grammar with an optional leading `v`.
@@ -144,6 +185,13 @@ fi
   pre-release changes, build-only changes, and equality.
 
 ## Integration Tests *(mandatory)*
+
+- **IT-R01**: Test caret ranges above and below 1.0, tilde ranges at each specificity, plain comparisons, partial versions, and wildcards.
+- **IT-R02**: Test several comparators together, and alternatives separated by `||`.
+- **IT-R03**: Verify a pre-release is refused by a range that never named one, and accepted by a range that names one of the same release.
+- **IT-R04**: Verify an invalid version and an invalid range both stop the caller.
+- **IT-R05**: Sort lists whose string order differs from their version order, including pre-releases, from arguments and from standard input, and verify the maximum.
+- **IT-R06**: Verify the sort agrees with the comparison helper for every adjacent pair of its result.
 
 - **IT-001**: Validate canonical, `v`-prefixed, pre-release, build, and invalid
   versions.

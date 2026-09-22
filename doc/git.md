@@ -35,6 +35,7 @@ information, listing changed files, and querying commit/tag relationships.
 - [`dybatpho::git_changed_files`](#dybatphogit_changed_files) — List changed files relative to a base ref, including untracked.
 - [`dybatpho::git_latest_tag`](#dybatphogit_latest_tag) — Print the highest version tag in a repository. Tags are ordered the way versions compare, not the way strings do, so `v10` sorts above `v9` and the newest release is the first line.
 - [`dybatpho::git_tags_containing`](#dybatphogit_tags_containing) — List tags that contain a commit.
+- [`dybatpho::git_is_ancestor`](#dybatphogit_is_ancestor) — Return success when one commit is reachable from another. A release script asks this before acting: whether a tag is on the branch it is about to release, or whether a fix has already landed on the branch a backport is aimed at.
 
 <a id="tips"></a>
 ## 💡 Tips
@@ -46,6 +47,10 @@ information, listing changed files, and querying commit/tag relationships.
 ### `dybatpho::git_default_branch`
 
 - Prefers `origin/HEAD`, then local `main`/`master`, then current branch
+
+### `dybatpho::git_is_ancestor`
+
+- A commit counts as its own ancestor, which is what `git merge-base` reports and what makes "has this landed yet" answer yes for the commit itself
 
 <a id="reference"></a>
 ## 📚 Reference
@@ -404,4 +409,36 @@ List tags that contain a commit.
 **📤 Output on stdout**
 
 - One tag per line, sorted
+
+
+---
+
+### `dybatpho::git_is_ancestor`
+
+Return success when one commit is reachable from another.
+  A release script asks this before acting: whether a tag is on the branch it
+  is about to release, or whether a fix has already landed on the branch a
+  backport is aimed at.
+
+**🧪 Example**
+
+```bash
+if dybatpho::git_is_ancestor "." "v1.2.0" "HEAD"; then
+  dybatpho::info "v1.2.0 is already on this branch"
+fi
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Repository path |
+| `$2` | string | The commit-ish that may be the ancestor |
+| `$3` | string | The commit-ish that may descend from it |
+
+**🚦 Exit codes**
+
+- `0`: The first commit is an ancestor of the second, or they are the same commit
+- `1`: It is not, or either commit-ish cannot be resolved
 

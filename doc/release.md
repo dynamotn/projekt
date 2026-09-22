@@ -34,6 +34,7 @@ creating a GitHub release stays with the caller, who owns those credentials.
 
 ### 🚀 Highlights
 
+- [`dybatpho::release_commit_parse`](#dybatphorelease_commit_parse) — Break a commit message into the parts Conventional Commits defines. `dybatpho::release_commit_type` answers only "what kind of change is this", and reports a breaking change as its own kind, which loses the type. This reports every part separately, so a caller can group by type and still know that the change was breaking.
 - [`dybatpho::release_commit_type`](#dybatphorelease_commit_type) — Classify one commit subject as Conventional Commits does.
 - [`dybatpho::release_bump_type`](#dybatphorelease_bump_type) — Decide how far the version should move, from the commits in a range. A commit is breaking when its subject carries `!` or its body carries a `BREAKING CHANGE:` footer, which is the other spelling the convention allows.
 - [`dybatpho::release_next_version`](#dybatphorelease_next_version) — Print the version a release from these commits should carry.
@@ -50,6 +51,10 @@ creating a GitHub release stays with the caller, who owns those credentials.
 
 <a id="tips"></a>
 ## 💡 Tips
+
+### `dybatpho::release_commit_parse`
+
+- A subject that follows no convention reports the type `other` and keeps the whole subject as its description
 
 ### `dybatpho::release_next_version`
 
@@ -69,6 +74,46 @@ creating a GitHub release stays with the caller, who owns those credentials.
 
 <a id="reference"></a>
 ## 📚 Reference
+
+### `dybatpho::release_commit_parse`
+
+Break a commit message into the parts Conventional Commits defines.
+  `dybatpho::release_commit_type` answers only "what kind of change is this",
+  and reports a breaking change as its own kind, which loses the type. This
+  reports every part separately, so a caller can group by type and still know
+  that the change was breaking.
+
+**🧪 Examples**
+
+```bash
+read -r type scope breaking description < <(
+  dybatpho::release_commit_parse "feat(api)!: drop the v1 endpoints" | paste -sd' ' -
+)
+
+```
+
+```bash
+dybatpho::release_commit_parse "fix: handle empty input"
+# fix
+# false
+# handle empty input
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Commit subject line |
+| `$2` | string | Optional commit body, searched for a `BREAKING CHANGE:` footer |
+
+**📤 Output on stdout**
+
+- Four lines: type, scope (empty if none), `true` or `false` for
+  breaking, and the description with the type prefix removed
+
+
+---
 
 ### `dybatpho::release_commit_type`
 

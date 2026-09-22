@@ -425,3 +425,59 @@ function _append_git_commit {
   run -1 dybatpho::git_latest_tag "${repo_path}" 'release-*'
   assert_output ""
 }
+
+@test "dybatpho::git_is_ancestor answers whether a commit has landed" {
+  local repo_path
+  repo_path="$(_new_git_repo_path)"
+  _create_git_repo "${repo_path}" main
+  local first
+  first="$(dybatpho::git_commit_hash "${repo_path}")"
+  _append_git_commit "${repo_path}" "second"
+  local second
+  second="$(dybatpho::git_commit_hash "${repo_path}")"
+
+  dybatpho::git_is_ancestor "${repo_path}" "${first}" "${second}"
+  run ! dybatpho::git_is_ancestor "${repo_path}" "${second}" "${first}"
+}
+
+@test "dybatpho::git_is_ancestor counts a commit as its own ancestor" {
+  local repo_path
+  repo_path="$(_new_git_repo_path)"
+  _create_git_repo "${repo_path}" main
+  # This is what makes "has this landed yet" answer yes for the commit itself.
+  dybatpho::git_is_ancestor "${repo_path}" HEAD HEAD
+}
+
+@test "dybatpho::git_is_ancestor works with tags and branch names" {
+  local repo_path
+  repo_path="$(_new_git_repo_path)"
+  _create_git_repo "${repo_path}" main
+  git -C "${repo_path}" tag v1.0.0
+  _append_git_commit "${repo_path}" "after the tag"
+  dybatpho::git_is_ancestor "${repo_path}" v1.0.0 HEAD
+  run ! dybatpho::git_is_ancestor "${repo_path}" HEAD v1.0.0
+}
+
+@test "dybatpho::git_is_ancestor separates unrelated branches" {
+  local repo_path
+  repo_path="$(_new_git_repo_path)"
+  _create_git_repo "${repo_path}" main
+  git -C "${repo_path}" checkout -q -b side
+  _append_git_commit "${repo_path}" "only on side"
+  local side
+  side="$(dybatpho::git_commit_hash "${repo_path}")"
+  git -C "${repo_path}" checkout -q main
+  _append_git_commit "${repo_path}" "only on main"
+
+  # Neither branch tip reaches the other once they have diverged.
+  run ! dybatpho::git_is_ancestor "${repo_path}" "${side}" HEAD
+  run ! dybatpho::git_is_ancestor "${repo_path}" HEAD "${side}"
+}
+
+@test "dybatpho::git_is_ancestor reports an unresolvable commit" {
+  local repo_path
+  repo_path="$(_new_git_repo_path)"
+  _create_git_repo "${repo_path}" main
+  run ! dybatpho::git_is_ancestor "${repo_path}" "no-such-ref" HEAD
+  run ! dybatpho::git_is_ancestor "${repo_path}" HEAD "no-such-ref"
+}

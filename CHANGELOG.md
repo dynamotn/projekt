@@ -58,6 +58,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   ```sh
   scripts/bundle.sh --modules "logging git semver" --output dist/dybatpho.sh
+- **Version ranges, ordering, and the last links of the release chain.**
+  `dybatpho::semver_satisfies` answers whether a version fits a range written
+  the way npm and Cargo write them: `^1.2` for anything compatible, `~1.2.3` for
+  patch updates, plain comparisons such as `>=18`, partial versions and
+  wildcards such as `1.2.x`, several comparators meaning all of them, and `||`
+  meaning either. A pre-release only satisfies a range that names a pre-release
+  of the same release, so `^1.0.0` does not quietly accept `2.0.0-alpha`.
+
+  `dybatpho::semver_sort` and `dybatpho::semver_max` order versions by the
+  specification rather than as strings, reading the list from arguments or
+  standard input and preserving a leading `v`, so a list of tags stays usable.
+
+  `dybatpho::git_is_ancestor` reports whether one commit is reachable from
+  another, which is how a release script tells an already-released tag from one
+  that is not on this branch.
+
+  `dybatpho::release_commit_parse` breaks a commit into its type, scope,
+  breaking flag, and description. `release_commit_type` reports a breaking
+  change as its own kind, which loses the type; the parser reports both, and the
+  bump and changelog helpers now derive their answers from it instead of each
+  restating the convention.
+
+  ```sh
+  dybatpho::semver_satisfies "$(node --version | tr -d v)" ">=18" \
+    || dybatpho::die "Node 18 or newer is required"
   ```
 
 - **XDG directories and more filesystem helpers in the `file` module.**

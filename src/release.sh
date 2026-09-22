@@ -27,6 +27,55 @@ DYBATPHO_RELEASE_SIGN_CMD="${DYBATPHO_RELEASE_SIGN_CMD:-}"
 DYBATPHO_RELEASE_GPG_KEY="${DYBATPHO_RELEASE_GPG_KEY:-}"
 
 #######################################
+# @description Break a commit message into the parts Conventional Commits defines.
+#   `dybatpho::release_commit_type` answers only "what kind of change is this",
+#   and reports a breaking change as its own kind, which loses the type. This
+#   reports every part separately, so a caller can group by type and still know
+#   that the change was breaking.
+# @example
+#   read -r type scope breaking description < <(
+#     dybatpho::release_commit_parse "feat(api)!: drop the v1 endpoints" | paste -sd' ' -
+#   )
+#
+# @example
+#   dybatpho::release_commit_parse "fix: handle empty input"
+#   # fix
+#   #
+#   # false
+#   # handle empty input
+#
+# @arg $1 string Commit subject line
+# @arg $2 string Optional commit body, searched for a `BREAKING CHANGE:` footer
+# @stdout Four lines: type, scope (empty if none), `true` or `false` for
+#   breaking, and the description with the type prefix removed
+# @tip A subject that follows no convention reports the type `other` and keeps
+#   the whole subject as its description
+#######################################
+function dybatpho::release_commit_parse {
+  local subject body type="other" scope="" breaking="false" description
+  dybatpho::expect_args subject -- "$@"
+  body="${2-}"
+  description="${subject}"
+
+  # `type(scope)!: summary`, where the scope and the breaking marker are optional.
+  if [[ "${subject}" =~ ^([a-zA-Z]+)(\(([^\)]*)\))?(!)?:[[:space:]]*(.*)$ ]]; then
+    type="$(dybatpho::lower "${BASH_REMATCH[1]}")"
+    scope="${BASH_REMATCH[3]}"
+    [[ -n "${BASH_REMATCH[4]}" ]] && breaking="true"
+    description="${BASH_REMATCH[5]}"
+  fi
+
+  # The convention allows a footer instead of the `!` marker, and the footer
+  # lives in the body rather than in the subject.
+  if [[ "${breaking}" == "false" ]] \
+    && printf '%s\n' "${body}" | grep -q '^BREAKING[ -]CHANGE:'; then
+    breaking="true"
+  fi
+
+  printf '%s\n%s\n%s\n%s\n' "${type}" "${scope}" "${breaking}" "${description}"
+}
+
+#######################################
 # @description Classify one commit subject as Conventional Commits does.
 # @example
 #   dybatpho::release_commit_type "feat(api)!: drop v1 endpoints"  # breaking
@@ -36,19 +85,16 @@ DYBATPHO_RELEASE_GPG_KEY="${DYBATPHO_RELEASE_GPG_KEY:-}"
 # @stdout One of `breaking`, `feat`, `fix`, `perf`, the declared type, or `other`
 #######################################
 function dybatpho::release_commit_type {
-  local subject type
+  local subject parsed type breaking
   dybatpho::expect_args subject -- "$@"
-  # `type(scope)!: summary`, where the scope and the breaking marker are optional.
-  if [[ "${subject}" =~ ^([a-zA-Z]+)(\([^\)]*\))?(!)?: ]]; then
-    type="$(dybatpho::lower "${BASH_REMATCH[1]}")"
-    if [[ -n "${BASH_REMATCH[3]}" ]]; then
-      printf 'breaking\n'
-      return 0
-    fi
+  parsed="$(dybatpho::release_commit_parse "${subject}")"
+  type="$(printf '%s\n' "${parsed}" | sed -n '1p')"
+  breaking="$(printf '%s\n' "${parsed}" | sed -n '3p')"
+  if [[ "${breaking}" == "true" ]]; then
+    printf 'breaking\n'
+  else
     printf '%s\n' "${type}"
-    return 0
   fi
-  printf 'other\n'
 }
 
 #######################################
@@ -65,7 +111,7 @@ function dybatpho::release_commit_type {
 # @exitcode 1 No commit in the range calls for a release
 #######################################
 function dybatpho::release_bump_type {
-  local repo_path base_ref head_ref sha subject type bump=""
+  local repo_path base_ref head_ref sha message parsed type breaking bump=""
   dybatpho::expect_args repo_path base_ref -- "$@"
   head_ref="${3:-HEAD}"
 
@@ -74,19 +120,18 @@ function dybatpho::release_bump_type {
   # that case reads the whole history instead.
   while read -r sha; do
     [[ -n "${sha}" ]] || continue
-    subject="$(dybatpho::git_commit_subject "${repo_path}" "${sha}")"
-    type="$(dybatpho::release_commit_type "${subject}")"
-    # The footer spelling of a breaking change lives in the body, not the subject.
-    if [[ "${type}" != "breaking" ]] \
-      && __dybatpho_git "${repo_path}" log -1 --format=%B "${sha}" \
-      | grep -q '^BREAKING[ -]CHANGE:'; then
-      type="breaking"
+    # The whole message is read once: the breaking marker may be in the subject
+    # or in a footer in the body.
+    message="$(__dybatpho_git "${repo_path}" log -1 --format=%B "${sha}")"
+    parsed="$(dybatpho::release_commit_parse \
+      "$(printf '%s\n' "${message}" | sed -n '1p')" "${message}")"
+    type="$(printf '%s\n' "${parsed}" | sed -n '1p')"
+    breaking="$(printf '%s\n' "${parsed}" | sed -n '3p')"
+    if [[ "${breaking}" == "true" ]]; then
+      printf 'major\n'
+      return 0
     fi
     case "${type}" in
-      breaking)
-        printf 'major\n'
-        return 0
-        ;;
       feat) bump="minor" ;;
       fix | perf) [[ "${bump}" == "minor" ]] || bump="patch" ;;
     esac
@@ -157,7 +202,8 @@ function dybatpho::release_next_version {
 #   `chore`, are left out: they are part of the history, not of the release notes
 #######################################
 function dybatpho::release_changelog {
-  local repo_path base_ref head_ref version sha subject type scope
+  local repo_path base_ref head_ref version sha type scope
+  local message parsed is_breaking description entry
   dybatpho::expect_args repo_path base_ref -- "$@"
   head_ref="${3:-HEAD}"
   version="${4:-Unreleased}"
@@ -165,24 +211,23 @@ function dybatpho::release_changelog {
   local -a breaking=() features=() fixes=()
   while read -r sha; do
     [[ -n "${sha}" ]] || continue
-    subject="$(dybatpho::git_commit_subject "${repo_path}" "${sha}")"
-    type="$(dybatpho::release_commit_type "${subject}")"
-    if [[ "${type}" != "breaking" ]] \
-      && __dybatpho_git "${repo_path}" log -1 --format=%B "${sha}" \
-      | grep -q '^BREAKING[ -]CHANGE:'; then
-      type="breaking"
+    message="$(__dybatpho_git "${repo_path}" log -1 --format=%B "${sha}")"
+    parsed="$(dybatpho::release_commit_parse \
+      "$(printf '%s\n' "${message}" | sed -n '1p')" "${message}")"
+    type="$(printf '%s\n' "${parsed}" | sed -n '1p')"
+    scope="$(printf '%s\n' "${parsed}" | sed -n '2p')"
+    is_breaking="$(printf '%s\n' "${parsed}" | sed -n '3p')"
+    description="$(printf '%s\n' "${parsed}" | sed -n '4p')"
+    # The scope says where the change landed and is worth keeping; the type
+    # prefix is dropped, because the heading already conveys it.
+    entry="- ${scope:+**${scope}**: }${description}"
+    if [[ "${is_breaking}" == "true" ]]; then
+      breaking+=("${entry}")
+      continue
     fi
-    # Keep the scope, which says where the change landed, and drop the type
-    # prefix, which the heading already conveys.
-    scope=""
-    if [[ "${subject}" =~ ^[a-zA-Z]+\(([^\)]*)\) ]]; then
-      scope="**${BASH_REMATCH[1]}**: "
-    fi
-    subject="${subject#*: }"
     case "${type}" in
-      breaking) breaking+=("- ${scope}${subject}") ;;
-      feat) features+=("- ${scope}${subject}") ;;
-      fix | perf) fixes+=("- ${scope}${subject}") ;;
+      feat) features+=("${entry}") ;;
+      fix | perf) fixes+=("${entry}") ;;
     esac
   done < <(if [[ -n "${base_ref}" ]]; then
     dybatpho::git_commits_between "${repo_path}" "${base_ref}" "${head_ref}"

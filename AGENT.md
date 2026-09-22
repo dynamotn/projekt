@@ -119,7 +119,7 @@ changed examples.
 | `date.sh` | Portable date/time parsing, formatting, and calculations | `test/date.bats`, `doc/date.md`, `doc/spec/date.md` |
 | `doctor.sh` | Environment report: Bash version, library version, and the external commands the loaded modules declare | `test/doctor.bats`, `doc/doctor.md`, `doc/spec/doctor.md` |
 | `file.sh` | Path and XDG helpers, upward search, directory creation, temporary files, atomic content rewrites, checksums, and metadata | `test/file.bats`, `doc/file.md`, `doc/spec/file.md` |
-| `git.sh` | Safe repository, branch, commit, and Git operations | `test/git.bats`, `doc/git.md`, `doc/spec/git.md` |
+| `git.sh` | Safe repository, branch, commit, reachability, and Git operations | `test/git.bats`, `doc/git.md`, `doc/spec/git.md` |
 | `helpers.sh` | Argument validation, command lookup, retry, and common helpers | `test/helpers.bats`, `doc/helpers.md`, `doc/spec/helpers.md` |
 | `json.sh` | Query, validate, pretty-print, and convert JSON/YAML | `test/json.bats`, `doc/json.md`, `doc/spec/json.md` |
 | `lock.sh` | Portable `mkdir`-based process locks, waiting, stale reclaim, and `with_lock` | `test/lock.bats`, `doc/lock.md`, `doc/spec/lock.md` |
@@ -134,7 +134,7 @@ changed examples.
 | `release.sh` | Version bumping from commits, changelog generation, per-platform packaging, checksums, and signing | `test/release.bats`, `doc/release.md`, `doc/spec/release.md` |
 | `safety.sh` | Guards for destructive operations: removal, overwrite, extraction, and system changes | `test/safety.bats`, `doc/safety.md`, `doc/spec/safety.md` |
 | `secret.sh` | Read, mask, and store secrets safely | `test/secret.bats`, `doc/secret.md`, `doc/spec/secret.md` |
-| `semver.sh` | Semantic version parsing, comparison, and validation | `test/semver.bats`, `doc/semver.md`, `doc/spec/semver.md` |
+| `semver.sh` | Semantic version parsing, comparison, ranges, ordering, and validation | `test/semver.bats`, `doc/semver.md`, `doc/spec/semver.md` |
 | `string.sh` | Case conversion, matching, splitting, trimming, and predicates | `test/string.bats`, `doc/string.md`, `doc/spec/string.md` |
 | `table.sh` | Plain-text and Markdown table rendering | `test/table.bats`, `doc/table.md`, `doc/spec/table.md` |
 | `text.sh` | Multiline text processing, indentation, wrapping, and formatting | `test/text.bats`, `doc/text.md`, `doc/spec/text.md` |
@@ -355,6 +355,12 @@ changes public behavior.
 - Quote variables that may contain whitespace or special characters.
 - Do not silently swallow errors; return clear failures following repository
   conventions.
+- Never validate inside a command substitution. `dybatpho::die` only ends the
+  subshell that `$(...)` creates, so the caller carries on with an empty value
+  and reports success. A helper that validates must return its result through a
+  nameref parameter instead, the way `dybatpho::create_temp` does. This has
+  already caught `metrics`, `parallel`, and `semver`; the symptom is a function
+  that prints a fatal error and still exits zero.
 - Validate and quote every option or variable inserted into generated shell code.
 
 ## CLI change workflow

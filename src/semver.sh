@@ -246,3 +246,306 @@ function dybatpho::semver_release_type {
     printf 'equal\n'
   fi
 }
+
+#######################################
+# @description Fill a partial version out to `major.minor.patch`.
+#   A range may name only part of a version, and `1.2` has to become `1.2.0`
+#   before it can be compared against anything.
+# @arg $1 string Partial version such as `1`, `1.2`, or `1.2.3`
+# @stdout The version with its missing parts set to zero
+#######################################
+function __dybatpho_semver_fill {
+  local version major minor patch
+  dybatpho::expect_args version -- "$@"
+  IFS='.' read -r major minor patch <<< "${version}"
+  printf '%s.%s.%s\n' "${major:-0}" "${minor:-0}" "${patch:-0}"
+}
+
+#######################################
+# @description Print how many parts of a version a range actually named.
+#   `^1` and `^1.0.0` bound different ranges, so the caret and tilde rules need
+#   to know which parts were written down.
+# @arg $1 string Version or partial version
+# @stdout `1`, `2`, or `3`
+#######################################
+function __dybatpho_semver_specificity {
+  local version core
+  dybatpho::expect_args version -- "$@"
+  core="${version%%[-+]*}"
+  case "${core}" in
+    *.*.*) printf '3\n' ;;
+    *.*) printf '2\n' ;;
+    *) printf '1\n' ;;
+  esac
+}
+
+#######################################
+# @description Expand one range comparator into plain `<operator> <version>` bounds.
+#   Every shorthand a range may use — a caret, a tilde, a wildcard, a partial
+#   version — turns into one or two simple comparisons here, so that the
+#   matching itself only ever compares two complete versions.
+#   The bounds are appended to a caller-supplied array rather than printed: a
+#   command substitution would validate inside a subshell, where a rejected
+#   comparator could not stop the caller from reporting a match.
+# @arg $1 string Name of the array the bounds are appended to
+# @arg $2 string A single comparator such as `^1.2`, `>=1.0.0`, or `1.2.x`
+# @set The named array, with one `<operator> <version>` entry per bound
+# @exitcode 1 The comparator cannot be understood
+#######################################
+function __dybatpho_semver_expand {
+  local -n __bounds_out="$1"
+  shift
+  local token operator core filled major minor patch parts
+  dybatpho::expect_args token -- "$@"
+
+  # A wildcard accepts anything, which is the same as having no lower bound.
+  case "${token}" in
+    '' | '*' | 'x' | 'X' | '*.*' | 'x.x' | 'X.X')
+      __bounds_out+=(">= 0.0.0")
+      return 0
+      ;;
+  esac
+
+  # Trailing wildcards say "any value here", which is exactly what leaving the
+  # part off means, so they are stripped down to a partial version.
+  token="${token%.[xX*]}"
+  token="${token%.[xX*]}"
+
+  operator=""
+  case "${token}" in
+    '>='* | '<='*)
+      operator="${token:0:2}"
+      core="${token:2}"
+      ;;
+    '>'* | '<'* | '='* | '^'* | '~'*)
+      operator="${token:0:1}"
+      core="${token:1}"
+      ;;
+    *) core="${token}" ;;
+  esac
+  core="${core# }"
+  core="${core#v}"
+  [[ -n "${core}" ]] || {
+    __bounds_out+=(">= 0.0.0")
+    return 0
+  }
+
+  parts="$(__dybatpho_semver_specificity "${core}")"
+  filled="$(__dybatpho_semver_fill "${core}")"
+  # The caller is named rather than indexed: this runs inside a command
+  # substitution, where the call stack is one frame shorter than it looks.
+  dybatpho::semver_valid "${filled}" \
+    || dybatpho::die "${FUNCNAME[1]-${FUNCNAME[0]}}: Not a usable version in range: '${token}'"
+  IFS='.' read -r major minor patch <<< "${filled%%[-+]*}"
+
+  case "${operator}" in
+    '>' | '>=' | '<' | '<=')
+      __bounds_out+=("${operator} ${filled}")
+      ;;
+    '=')
+      __bounds_out+=("= ${filled}")
+      ;;
+    '^')
+      # A caret allows changes that do not alter the leftmost non-zero part,
+      # which is what "compatible" means once a project is below 1.0.
+      __bounds_out+=(">= ${filled}")
+      if ((major > 0)) || ((parts == 1)); then
+        __bounds_out+=("< $((major + 1)).0.0")
+      elif ((minor > 0)) || ((parts == 2)); then
+        __bounds_out+=("< ${major}.$((minor + 1)).0")
+      else
+        __bounds_out+=("< ${major}.${minor}.$((patch + 1))")
+      fi
+      ;;
+    '~')
+      __bounds_out+=(">= ${filled}")
+      if ((parts == 1)); then
+        __bounds_out+=("< $((major + 1)).0.0")
+      else
+        __bounds_out+=("< ${major}.$((minor + 1)).0")
+      fi
+      ;;
+    *)
+      # A bare version is exact only when it is complete; a partial one covers
+      # everything it leaves unsaid.
+      if ((parts == 3)); then
+        __bounds_out+=("= ${filled}")
+      elif ((parts == 2)); then
+        __bounds_out+=(">= ${filled}")
+        __bounds_out+=("< ${major}.$((minor + 1)).0")
+      else
+        __bounds_out+=(">= ${filled}")
+        __bounds_out+=("< $((major + 1)).0.0")
+      fi
+      ;;
+  esac
+}
+
+#######################################
+# @description Return success when a version satisfies one comparison.
+# @arg $1 string Version to test
+# @arg $2 string Operator, one of `=`, `>`, `>=`, `<`, or `<=`
+# @arg $3 string Version to compare against
+# @exitcode 0 The comparison holds
+# @exitcode 1 It does not
+#######################################
+function __dybatpho_semver_holds {
+  local version operator bound result
+  dybatpho::expect_args version operator bound -- "$@"
+  result="$(dybatpho::semver_compare "${version}" "${bound}")"
+  case "${operator}" in
+    '=') ((result == 0)) ;;
+    '>') ((result > 0)) ;;
+    '>=') ((result >= 0)) ;;
+    '<') ((result < 0)) ;;
+    '<=') ((result <= 0)) ;;
+    *) return 1 ;; # kcov(skip)
+  esac
+}
+
+#######################################
+# @description Return success when a version satisfies a range.
+#   Ranges are written the way npm and Cargo write them: `^1.2.3` for anything
+#   compatible, `~1.2.3` for patch updates, plain comparisons such as `>=1.2.0`,
+#   partial versions and wildcards such as `1.2.x`, several comparators
+#   separated by spaces meaning all of them, and `||` meaning either.
+# @example
+#   dybatpho::semver_satisfies "1.4.2" "^1.2"        # yes
+#   dybatpho::semver_satisfies "2.0.0" "^1.2"        # no
+#   dybatpho::semver_satisfies "1.2.9" "~1.2.3"      # yes
+#   dybatpho::semver_satisfies "1.5.0" ">=1.2 <1.9"  # yes
+#   dybatpho::semver_satisfies "3.1.0" "^1.0 || ^3.0"
+#
+# @example
+#   dybatpho::semver_satisfies "$(jq -r .version package.json)" ">=18" \
+#     || dybatpho::die "Node 18 or newer is required"
+#
+# @arg $1 string Version to test
+# @arg $2 string Range expression
+# @exitcode 0 The version satisfies the range
+# @exitcode 1 It does not
+# @tip A pre-release only satisfies a range that names a pre-release of the same
+#   `major.minor.patch`, so `^1.0.0` does not quietly accept `2.0.0-alpha`
+#######################################
+function dybatpho::semver_satisfies {
+  local version range alternative token bound operator
+  dybatpho::expect_args version range -- "$@"
+  version="${version#v}"
+  dybatpho::semver_valid "${version}" \
+    || dybatpho::die "${FUNCNAME[0]}: Not a valid version: '${version}'"
+
+  local prerelease
+  prerelease="$(dybatpho::semver_parse "${version}" | sed -n '4p')"
+  local core="${version%%[-+]*}"
+
+  # `||` separates alternatives; satisfying any one of them is enough.
+  local -a alternatives=()
+  local rest="${range}"
+  while [[ "${rest}" == *"||"* ]]; do
+    alternatives+=("${rest%%||*}")
+    rest="${rest#*||}"
+  done
+  alternatives+=("${rest}")
+
+  for alternative in "${alternatives[@]}"; do
+    local satisfied=true
+    local prerelease_allowed=true
+    if [[ -n "${prerelease}" ]]; then
+      # A pre-release is only in scope when the range asked for one on the very
+      # same release, which keeps it out of ranges that never mentioned it.
+      prerelease_allowed=false
+    fi
+
+    # Whitespace separates comparators that must all hold.
+    local -a tokens=()
+    read -r -a tokens <<< "${alternative}"
+    ((${#tokens[@]})) || tokens=("*")
+
+    for token in "${tokens[@]}"; do
+      if [[ -n "${prerelease}" && "${token}" == *-* ]]; then
+        local token_core="${token#[<>=^~]}"
+        token_core="${token_core#[=]}"
+        token_core="${token_core#v}"
+        [[ "${token_core%%[-+]*}" == "${core}" ]] && prerelease_allowed=true
+      fi
+      local -a bounds=()
+      __dybatpho_semver_expand bounds "${token}"
+      local entry
+      for entry in ${bounds[@]+"${bounds[@]}"}; do
+        read -r operator bound <<< "${entry}"
+        __dybatpho_semver_holds "${version}" "${operator}" "${bound}" || satisfied=false
+      done
+    done
+
+    [[ "${satisfied}" == true && "${prerelease_allowed}" == true ]] && return 0
+  done
+  return 1
+}
+
+#######################################
+# @description Print versions in order, lowest first.
+#   Ordering follows the specification rather than string order, so `1.10.0`
+#   comes after `1.9.0` and a pre-release comes before the release it precedes.
+# @example
+#   dybatpho::semver_sort 1.10.0 1.9.0 2.0.0-rc.1 2.0.0
+#   git tag --list 'v*' | dybatpho::semver_sort
+#
+# @arg $@ string Versions to sort, or none to read them from standard input
+# @stdin One version per line, when no argument is given
+# @stdout The versions, one per line, lowest first
+# @exitcode 1 One of the inputs is not a valid version
+# @tip A leading `v` is accepted and preserved, so a list of tags sorts as it is
+#######################################
+function dybatpho::semver_sort {
+  local -a versions=()
+  if (($#)); then
+    versions=("$@")
+  else
+    local line
+    while IFS= read -r line; do
+      [[ -n "${line}" ]] && versions+=("${line}")
+    done
+  fi
+  ((${#versions[@]})) || return 0
+
+  local version
+  for version in "${versions[@]}"; do
+    dybatpho::semver_valid "${version#v}" \
+      || dybatpho::die "${FUNCNAME[0]}: Not a valid version: '${version}'"
+  done
+
+  # An insertion sort keeps the comparison in `dybatpho::semver_compare`, which
+  # already knows the specification's ordering rules, rather than reimplementing
+  # them for `sort`.
+  local index position candidate
+  for ((index = 1; index < ${#versions[@]}; index++)); do
+    candidate="${versions[index]}"
+    position=$((index - 1))
+    while ((position >= 0)) \
+      && (($(dybatpho::semver_compare "${versions[position]#v}" "${candidate#v}") > 0)); do
+      versions[position + 1]="${versions[position]}"
+      position=$((position - 1))
+    done
+    versions[position + 1]="${candidate}"
+  done
+  printf '%s\n' "${versions[@]}"
+}
+
+#######################################
+# @description Print the highest of a list of versions.
+# @example
+#   latest="$(dybatpho::semver_max 1.10.0 1.9.0 2.0.0-rc.1)"
+#   latest="$(git tag --list 'v*' | dybatpho::semver_max)"
+#
+# @arg $@ string Versions to compare, or none to read them from standard input
+# @stdin One version per line, when no argument is given
+# @stdout The highest version, as it was written
+# @exitcode 1 No version was given, or one of them is not valid
+#######################################
+function dybatpho::semver_max {
+  local sorted
+  sorted="$(dybatpho::semver_sort "$@")"
+  [[ -n "${sorted}" ]] \
+    || dybatpho::die "${FUNCNAME[0]}: Expected at least one version"
+  printf '%s\n' "${sorted}" | tail -n 1
+}
