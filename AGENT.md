@@ -118,6 +118,7 @@ changed examples.
 | `notification.sh` | Webhook notifications and JSON payloads | `test/notification.bats`, `doc/notification.md`, `doc/spec/notification.md` |
 | `os.sh` | OS, architecture, and environment detection | `test/os.bats`, `doc/os.md`, `doc/spec/os.md` |
 | `process.sh` | Traps, cleanup, dry-run, and process lifecycle | `test/process.bats`, `doc/process.md`, `doc/spec/process.md` |
+| `parallel.sh` | Bounded worker pool with ordered output and per-job exit codes | `test/parallel.bats`, `doc/parallel.md`, `doc/spec/parallel.md` |
 | `pkg.sh` | Package manager detection and guarded dependency installation | `test/pkg.bats`, `doc/pkg.md`, `doc/spec/pkg.md` |
 | `release.sh` | Version bumping from commits, changelog generation, per-platform packaging, checksums, and signing | `test/release.bats`, `doc/release.md`, `doc/spec/release.md` |
 | `safety.sh` | Guards for destructive operations: removal, overwrite, extraction, and system changes | `test/safety.bats`, `doc/safety.md`, `doc/spec/safety.md` |
@@ -263,9 +264,11 @@ affect editor navigation.
   the hooks in `helpers`, `logging`, and `network` stay inert unless the module
   is loaded. Validate before recording, and never inside a command substitution,
   where a rejection cannot reach the caller.
-- **Coordination modules** (`lock`): keep operations atomic and portable
-  without `flock`, always report the holder on failure, and never leave a lock
-  behind on the failure path.
+- **Coordination modules** (`lock`, `parallel`): keep operations atomic and
+  portable without `flock`, always report the holder on failure, and never leave
+  a lock behind on the failure path. A pool must bound concurrency by what the
+  caller asked for, keep each job's output and exit code separate, and leave no
+  job running once the shell is interrupted.
 - **Testing module** (`testing`): assertions must report and return rather than
   terminate, mocks must restore the prior state, and fixtures must clean
   themselves up; changes here must be checked against the other module tests,
@@ -316,7 +319,10 @@ changes public behavior.
 
 ## Bash conventions
 
-- Use Bash 4 or newer and always source `init.sh`.
+- Use Bash 4.3 or newer and always source `init.sh`. That floor is not
+  negotiable: modules across the library return values through nameref
+  parameters (`local -n`), and the worker pool waits with `wait -n`, both of
+  which arrived in 4.3.
 - Keep compatibility with strict mode: `set -euo pipefail`.
 - Use two-space indentation, LF line endings, and a final newline.
 - Put public functions under the `dybatpho::` namespace.

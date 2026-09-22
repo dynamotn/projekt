@@ -28,7 +28,7 @@ done
 dybatpho::success "Release notes ready"
 ```
 
-No dependency manager, no runtime, no build step — just Bash ≥ 4 and the files in this repo.
+No dependency manager, no runtime, no build step — just Bash ≥ 4.3 and the files in this repo.
 
 ## 🚀 Why dybatpho?
 
@@ -78,7 +78,8 @@ dybatpho::register_err_handler
 dybatpho::info "Greetings from dybatpho!"
 ```
 
-> Requires **Bash ≥ 4**. `init.sh` must be *sourced*, not executed.
+> Requires **Bash ≥ 4.3**. `init.sh` must be *sourced*, not executed.
+> macOS ships Bash 3.2, so install a current one with `brew install bash`.
 > See the [example scripts](example/) — one per module — or real-world usage in
 > [my dotfiles](https://github.com/dynamotn/dotfiles).
 
@@ -116,6 +117,7 @@ with a missing function. See [init.sh reference](doc/init.md) and
 | [logging.sh](doc/logging.md)      | Levelled logs, boxed output, structured JSON logging                |
 | [process.sh](doc/process.md)      | Process management, traps, signal-safe cleanup                      |
 | [lock.sh](doc/lock.md)            | Portable file locking to serialize concurrent script runs           |
+| [parallel.sh](doc/parallel.md)  | Bounded worker pool: ordered output, per-job exit codes, fail-fast |
 
 ### 🔤 Data & text
 

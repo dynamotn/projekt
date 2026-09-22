@@ -23,11 +23,11 @@ As a script author, I want to source one initialization file and immediately use
 
 **Why this priority**: Bootstrap simplicity is the first requirement for any reusable shell library; if loading is fragile, every downstream workflow is affected.
 
-**Independent Test**: Source `init.sh` from a Bash v4+ shell and verify that representative functions from each module are callable in the current shell and exported to child shells where intended.
+**Independent Test**: Source `init.sh` from a Bash v4.3+ shell and verify that representative functions from each module are callable in the current shell and exported to child shells where intended.
 
 **Acceptance Scenarios**:
 
-1. **Given** a Bash v4+ shell is in a project using dybatpho, **When** the script sources `init.sh`, **Then** the shared environment and module functions become available for use
+1. **Given** a Bash v4.3+ shell is in a project using dybatpho, **When** the script sources `init.sh`, **Then** the shared environment and module functions become available for use
 2. **Given** a script uses child shell execution after sourcing dybatpho, **When** a child shell is started, **Then** named `dybatpho::` functions remain available where the library promises export support
 3. **Given** a consumer needs archive, Git, notification, or SemVer behavior,
    **When** the bootstrap completes, **Then** those modules are available through
@@ -92,7 +92,7 @@ dybatpho::lock_release "release"
 
 ## Edge Cases
 
-- Sourcing is attempted from a shell that is not Bash v4 or newer.
+- Sourcing is attempted from a shell that is not Bash v4.3 or newer.
 - A consumer executes `init.sh` directly instead of sourcing it.
 - Multiple modules are used in subshells, traps, or strict-mode scripts where environment and export behavior must remain predictable.
 - Optional external tools such as `curl`, `jq`, `yq`, archivers, or `python3`
@@ -134,7 +134,7 @@ dybatpho::lock_release "release"
 
 ## Integration Tests *(mandatory)*
 
-- **IT-001**: End-to-end bootstrap: source `init.sh` in a Bash v4+ shell and
+- **IT-001**: End-to-end bootstrap: source `init.sh` in a Bash v4.3+ shell and
   verify representative functions from all modules are available, including
   archive, config, Git, lock, notification, secret, and SemVer.
 - **IT-002**: Composite automation: validate inputs, create temp files, perform a network request, log progress, and clean up on shell exit using dybatpho utilities.

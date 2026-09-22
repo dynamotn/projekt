@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`parallel` module** — run independent work a few jobs at a time.
+  `dybatpho::parallel_map` runs one command over a list, passing each item as a
+  single value so an item with spaces or shell syntax is not re-parsed;
+  `dybatpho::parallel_run` runs different shell commands at once. Each job's
+  output is captured while it runs and replayed afterwards in submission order,
+  so a concurrent run reads like a serial one, and each job's exit code is kept
+  separately and readable through `parallel_status`, `parallel_count`, and
+  `parallel_failed`.
+
+  `DYBATPHO_PARALLEL_JOBS` sets the default width, `0` means one job per
+  processor, and `DYBATPHO_PARALLEL_FAILFAST` stops further jobs once one fails,
+  reporting the ones that never started as skipped rather than failed. The pool
+  gives each job its own process group, so an interrupted run ends the jobs
+  together with anything they started.
+
+  ```sh
+  . dybatpho/init.sh --modules parallel
+  dybatpho::parallel_map 8 check_host "${hosts[@]}" || true
+  for ((i = 0; i < $(dybatpho::parallel_count); i++)); do
+    [[ "$(dybatpho::parallel_status "${i}")" == 0 ]] || dybatpho::warn "${hosts[i]} is down"
+  done
+  ```
+
 - **`release` module** — cut a release from the commits since the last tag.
   `dybatpho::release_next_version` derives the version from
   [Conventional Commits](https://www.conventionalcommits.org) (a breaking change
@@ -111,7 +134,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `example/ai_ops.sh` and `example/agent_ops.sh`, both runnable with no API key.
 
+- **`pkg` module** — detect the machine's package manager and install
+  dependencies through it. `dybatpho::pkg_manager` reports one of `apt`, `brew`,
+  `apk`, `dnf`, `pacman`, or `emerge`, preferring the distribution manager over
+  Homebrew on Linux, and `DYBATPHO_PKG_MANAGER` overrides the detection.
+  `dybatpho::pkg_installed` and `dybatpho::pkg_missing` answer what is already
+  there, `dybatpho::pkg_name` resolves `<manager>:<package>` overrides so one
+  script names a dependency once, and `dybatpho::pkg_install_command` prints the
+  exact command a run would execute.
+
+  `dybatpho::pkg_install`, `dybatpho::pkg_update`, `dybatpho::pkg_ensure`, and
+  `dybatpho::pkg_require` are the mutating half, and none of them changes the
+  system quietly: each asks for confirmation unless `--force` or
+  `DYBATPHO_FORCE` approves it, refuses rather than guessing in a
+  non-interactive shell, and prints the command instead of running it under
+  `--dry-run` or `DRY_RUN`. Elevation follows `DYBATPHO_PKG_SUDO` and is never
+  added for Homebrew, and `DYBATPHO_PKG_ASSUME_YES=false` drops the managers'
+  non-interactive flags.
+
+  ```sh
+  . dybatpho/init.sh --modules pkg
+  dybatpho::pkg_install --dry-run ripgrep      # preview the command
+  dybatpho::pkg_ensure --force --update curl jq
+  dybatpho::pkg_require --force fd apt:fd-find emerge:sys-apps/fd
+  ```
+
 ### Changed
+
+- **BREAKING:** the minimum supported Bash is now 4.3, raised from 4.0.
+  `init.sh` refuses to load on anything older instead of failing later with a
+  confusing error.
+
+  The library already depended on 4.3 without saying so: modules across it
+  return values through nameref parameters (`local -n`, 43 uses at the time of
+  the change), and the worker pool waits with `wait -n`. Both arrived in Bash
+  4.3, so on 4.0 through 4.2 the library did not work — it just failed at the
+  first call rather than at load time.
+
+  Bash 4.3 was released in 2014 and every current distribution ships something
+  newer. macOS still ships 3.2, which was already too old; `brew install bash`
+  provides a current one.
 
 - **The test runner is roughly three times faster and reports one summary
   instead of a TAP transcript.** `test/test_helper.bash` parks Bats' `DEBUG`
@@ -159,33 +221,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   test, so it failed under coverage only. `scripts/test.sh` now fails a run when
   a file executes fewer tests than it declares, so a disappearing test cannot
   pass unnoticed again.
-
-- **`pkg` module** — detect the machine's package manager and install
-  dependencies through it. `dybatpho::pkg_manager` reports one of `apt`, `brew`,
-  `apk`, `dnf`, `pacman`, or `emerge`, preferring the distribution manager over
-  Homebrew on Linux, and `DYBATPHO_PKG_MANAGER` overrides the detection.
-  `dybatpho::pkg_installed` and `dybatpho::pkg_missing` answer what is already
-  there, `dybatpho::pkg_name` resolves `<manager>:<package>` overrides so one
-  script names a dependency once, and `dybatpho::pkg_install_command` prints the
-  exact command a run would execute.
-
-  `dybatpho::pkg_install`, `dybatpho::pkg_update`, `dybatpho::pkg_ensure`, and
-  `dybatpho::pkg_require` are the mutating half, and none of them changes the
-  system quietly: each asks for confirmation unless `--force` or
-  `DYBATPHO_FORCE` approves it, refuses rather than guessing in a
-  non-interactive shell, and prints the command instead of running it under
-  `--dry-run` or `DRY_RUN`. Elevation follows `DYBATPHO_PKG_SUDO` and is never
-  added for Homebrew, and `DYBATPHO_PKG_ASSUME_YES=false` drops the managers'
-  non-interactive flags.
-
-  ```sh
-  . dybatpho/init.sh --modules pkg
-  dybatpho::pkg_install --dry-run ripgrep      # preview the command
-  dybatpho::pkg_ensure --force --update curl jq
-  dybatpho::pkg_require --force fd apt:fd-find emerge:sys-apps/fd
-  ```
-
-### Fixed
 
 - `network` and `metrics` called `__log_now_ms`, which the internal-function
   rename had turned into `__dybatpho_log_now_ms`. Every timed `curl` call and

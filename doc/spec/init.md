@@ -28,7 +28,7 @@ As a script author, I want one bootstrap file so that I can enable the entire li
 
 **Acceptance Scenarios**:
 
-1. **Given** a Bash v4+ shell is running, **When** the script sources `init.sh`, **Then** the bootstrap exports the project root and loads the core modules in dependency order
+1. **Given** a Bash v4.3+ shell is running, **When** the script sources `init.sh`, **Then** the bootstrap exports the project root and loads the core modules in dependency order
 2. **Given** the consumer expects child shells to reuse dybatpho functions, **When** a child shell inherits the environment, **Then** exported `dybatpho::` functions remain callable
 3. **Given** the repository ships utility, notification, and SemVer modules,
    **When** the script asks for them by name or for `all`, **Then** those modules
@@ -110,7 +110,7 @@ fi
 
 ## Edge Cases
 
-- The current shell is not Bash v4+.
+- The current shell is older than Bash v4.3, including the Bash 3.2 that macOS ships.
 - The consumer runs the file directly instead of sourcing it.
 - Bootstrap runs under strict mode and must still load every requested module safely.
 - A module is sourced more than once in the same shell.
@@ -127,7 +127,7 @@ fi
 
 ### Functional Requirements
 
-- **FR-001**: The bootstrap MUST require Bash v4 or newer before loading library code.
+- **FR-001**: The bootstrap MUST require Bash v4.3 or newer before loading library code, because the library returns values through nameref parameters and waits with `wait -n`, neither of which exists earlier.
 - **FR-002**: The bootstrap MUST refuse direct execution and require sourcing.
 - **FR-003**: The bootstrap MUST enable the default strict and globbing shell options expected by the library.
 - **FR-004**: The bootstrap MUST set and export `DYBATPHO_DIR` to the repository root path.
@@ -196,7 +196,7 @@ fi
   function from each shipped module, including archive, config, Git, lock,
   notification, secret, and SemVer helpers.
 - **IT-002**: Execute `init.sh` directly and verify the session is rejected.
-- **IT-003**: Run under Bash v4+ strict mode and verify bootstrap completes without manual overrides.
+- **IT-003**: Run under Bash v4.3+ strict mode and verify bootstrap completes without manual overrides.
 - **IT-004**: Source `init.sh --modules semver` and verify the loaded set is the
   core modules plus `semver`, and that an unrequested module's functions are absent.
 - **IT-005**: Request the module set through `DYBATPHO_MODULES`, then through

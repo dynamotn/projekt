@@ -24,10 +24,12 @@
 # `bash -c/-lc` may expose an empty `BASH_SOURCE` array transiently.
 __dybatpho_init_source="${BASH_SOURCE[0]-}"
 
-# Require bash >= v4
-if ((BASH_VERSINFO[0] < 4)); then
+# Require bash >= v4.3. The library builds on two features that arrived in that
+# release: nameref variables (`local -n`), which many modules use to return a
+# value without a subshell, and `wait -n`, which the worker pool needs.
+if ((BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3))); then
   # kcov(disabled)
-  echo "dybatpho requires bash v4 or greater"
+  echo "dybatpho requires bash v4.3 or greater"
   echo "Current Bash Version: ${BASH_VERSION}"
   exit 1
   # kcov(enabled)
@@ -58,7 +60,7 @@ export DYBATPHO_DIR
 # @env DYBATPHO_CORE_MODULES string Modules that call each other and are always loaded
 DYBATPHO_CORE_MODULES="string logging helpers process file secret"
 # @env DYBATPHO_OPTIONAL_MODULES string Modules that are only loaded when requested
-DYBATPHO_OPTIONAL_MODULES="array text lock network date json config archive git table cli os notification semver testing safety metrics ai agent pkg release"
+DYBATPHO_OPTIONAL_MODULES="array text lock network date json config archive git table cli os notification semver testing safety metrics ai agent pkg release parallel"
 # The loaded set describes the current shell, so it is deliberately neither
 # exported nor seeded from the environment. A child shell that sources `init.sh`
 # again has to source the module files itself: only `dybatpho::` functions cross
