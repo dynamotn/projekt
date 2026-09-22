@@ -276,8 +276,10 @@ function __dybatpho_release_artifacts {
 
   dybatpho::ensure_dir "${DIST_DIR}" > /dev/null
   _bundle="${DIST_DIR}/dybatpho-${_version}.bundle.sh"
-  dybatpho::progress "Building ${_bundle}"
-  DYBATPHO_FORCE=true "${SCRIPT_DIR}/bundle.sh" --modules all --output "${_bundle}" > /dev/null
+  # Standard output here is the artifact list the caller reads, so progress and
+  # whatever the bundler prints both belong on standard error.
+  dybatpho::progress "Building ${_bundle}" >&2
+  DYBATPHO_FORCE=true "${SCRIPT_DIR}/bundle.sh" --modules all --output "${_bundle}" >&2
 
   # DRY_RUN leaves nothing on disk for the checksum step to read, and a checksum
   # over files that weren't built would be a lie rather than a rehearsal.
