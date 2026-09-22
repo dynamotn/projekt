@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-09-22
+
 ### Added
 
 - **`doctor` module — one report of what the environment is missing.**
@@ -609,5 +611,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dybatpho::safe_extract` validates an archive before extracting it. This blocks
   path-traversal entries such as `../../etc/passwd` in an untrusted archive.
 
-[Unreleased]: https://github.com/dynamotn/dybatpho/compare/v2.0.0...HEAD
+[Unreleased]: https///github.com:dynamotn/dybatpho/compare/v3.0.0...HEAD
+[3.0.0]: https///github.com:dynamotn/dybatpho/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/dynamotn/dybatpho/releases/tag/v2.0.0
