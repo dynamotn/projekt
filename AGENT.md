@@ -133,6 +133,7 @@ module calls `command curl` on purpose, which bypasses functions.
 | `file.sh` | Path and XDG helpers, upward search, directory creation, temporary files, atomic content rewrites, checksums, and metadata | `test/file.bats`, `doc/file.md`, `doc/spec/file.md` |
 | `git.sh` | Safe repository, branch, commit, reachability, and Git operations | `test/git.bats`, `doc/git.md`, `doc/spec/git.md` |
 | `helpers.sh` | Argument validation, command lookup, retry, and common helpers | `test/helpers.bats`, `doc/helpers.md`, `doc/spec/helpers.md` |
+| `i18n.sh` | Message catalogs, plural rules, and locale-aware numbers, money, sizes, dates, and text direction | `test/i18n.bats`, `doc/i18n.md`, `doc/spec/i18n.md` |
 | `json.sh` | Query, validate, pretty-print, and convert JSON/YAML | `test/json.bats`, `doc/json.md`, `doc/spec/json.md` |
 | `lock.sh` | Portable `mkdir`-based process locks, waiting, stale reclaim, and `with_lock` | `test/lock.bats`, `doc/lock.md`, `doc/spec/lock.md` |
 | `logging.sh` | Log levels, text/JSON logging, banners, and Bash tracing | `test/logging.bats`, `doc/logging.md`, `doc/spec/logging.md` |
@@ -292,6 +293,13 @@ affect editor navigation.
 - **Presentation modules** (`logging`, `cli`): reserve stdout for pipeable or
   capturable data and stderr for diagnostics; preserve text output when adding
   machine-readable output.
+- **Localization module** (`i18n`): never derive user-visible text from the
+  host's locale data — `date` answers in English when the requested locale was
+  never generated, and `printf '%f'` follows `LC_NUMERIC` — so names and
+  patterns come from the module's own tables and fractional values are built
+  from digit strings. A missing translation degrades to the key rather than
+  stopping a script, and the hook that translates the library's own diagnostics
+  stays inert unless it is explicitly turned on.
 - **Observability module** (`metrics`): recording must never change what a
   script does, so a timing helper returns the command's exit code unchanged and
   the hooks in `helpers`, `logging`, and `network` stay inert unless the module

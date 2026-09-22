@@ -53,6 +53,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `agent.md`
 - `pkg.md`
 - `doctor.md`
+- `i18n.md`
 
 ## Source Mapping
 
@@ -86,6 +87,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `src/agent.sh` -> `agent.md`
 - `src/pkg.sh` -> `pkg.md`
 - `src/doctor.sh` -> `doctor.md`
+- `src/i18n.sh` -> `i18n.md`
 
 ## Notes
 

@@ -68,6 +68,7 @@ run_example() {
 @test "example/file_ops.sh runs clean" { run_example "file_ops.sh"; }
 @test "example/git_ops.sh runs clean" { run_example "git_ops.sh"; }
 @test "example/helpers_ops.sh runs clean" { run_example "helpers_ops.sh"; }
+@test "example/i18n_ops.sh runs clean" { run_example "i18n_ops.sh"; }
 @test "example/init_modules.sh runs clean" { run_example "init_modules.sh"; }
 @test "example/json_ops.sh runs clean" { run_example "json_ops.sh"; }
 @test "example/lock_ops.sh runs clean" { run_example "lock_ops.sh"; }

@@ -345,6 +345,16 @@ function __dybatpho_log_inspect {
     indicator="bash:${BASH_LINENO[1]}" # kcov(skip)
   fi
   local color="${5:-}"
+  # dybatpho's own diagnostics can be translated too, using the English text as
+  # the message id the way gettext does, so that none of the several hundred
+  # call sites in the library has to be rewritten to use a key. The hook is
+  # inert unless the `i18n` module is loaded and translation of library messages
+  # was explicitly turned on, which keeps the default output byte for byte the
+  # same. Only the message is passed through it: the level label beside it is
+  # padded to a fixed width for the column separators and must not change.
+  if declare -F dybatpho::i18n_library_message > /dev/null; then
+    message="$(dybatpho::i18n_library_message "${message}")"
+  fi
   __dybatpho_log_write_file "${log_level}" "${indicator}" "${message}"
   if [[ "${LOG_FORMAT}" == "json" ]]; then
     __dybatpho_log_structured "${log_level}" "${indicator}" "${message}" "${color}"

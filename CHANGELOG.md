@@ -37,6 +37,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   after, and a first test fails when an example has no test at all, so a new
   example cannot be added and silently never run.
 
+- **`i18n` module** — speak the reader's language, and write values the way they
+  write them. `dybatpho::i18n_init` resolves the locale and loads its catalogs,
+  `dybatpho::i18n_t` translates a key and fills in its `{name}` placeholders,
+  `dybatpho::i18n_tc` does the same for a message qualified by a context, and
+  `dybatpho::i18n_tn` picks the plural form a count actually takes in the target
+  language, which is the part a hand-written `count == 1` check cannot get
+  right: Russian and Polish disagree at twenty one, Arabic has six forms, and
+  Vietnamese has one. `dybatpho::i18n_plural_form` exposes that rule on its own.
+  A lookup walks a fallback chain — `zh_Hant_TW`, `zh_Hant`, `zh_TW`, `zh`, then
+  the fallback locale — so a partly translated locale is backed by a more
+  general one, and an untranslated key renders as the key rather than stopping
+  the script unless `DYBATPHO_I18N_STRICT` says otherwise.
+
+  Catalogs are read from a dependency-free `key = value` format and from GNU
+  gettext `.po` files, found through `DYBATPHO_I18N_PATH` and the XDG and system
+  directories in either the gettext or a flat layout. Fuzzy, obsolete, and
+  untranslated `.po` entries are not treated as translations, and the
+  `Plural-Forms` expression in a header is read for its form count but never
+  evaluated, because a catalog is a file that arrives from a translation
+  platform. `dybatpho::i18n_extract` writes a template covering every key a
+  source tree refers to and names the call sites whose key it could not read,
+  and `dybatpho::i18n_lint` reports what a translation is missing — including a
+  `{placeholder}` that was renamed or dropped, which nothing else catches until
+  the message is rendered.
+
+  `dybatpho::i18n_number`, `i18n_number_plain`, `i18n_percent`,
+  `i18n_currency`, and `i18n_bytes` format values for a locale, and
+  `i18n_date`, `i18n_time`, `i18n_datetime`, `i18n_date_pattern`,
+  `i18n_month_name`, `i18n_weekday_name`, `i18n_relative`, and `i18n_duration`
+  do the same for time. Around twenty locales ship built in, and
+  `dybatpho::i18n_register_number`, `i18n_register_currency`,
+  `i18n_register_currency_layout`, `i18n_register_names`, `i18n_register_date`,
+  and `i18n_register_rtl` add more from a caller's own script. Two details are
+  deliberate: month names come from the module rather than from `LC_TIME`,
+  because `date` answers in English when the requested locale was never
+  generated on the machine, and fractional values are built from digit strings
+  rather than through `printf '%f'`, which follows `LC_NUMERIC` and would print
+  a different separator per machine — so the same script produces the same
+  output in a container and on a workstation, and integers wider than a machine
+  word are formatted exactly. `dybatpho::i18n_is_rtl`, `i18n_direction`,
+  `i18n_bidi_mark`, `i18n_bidi_isolate`, and `i18n_bidi_strip` cover text that
+  reads right to left.
+
+  Setting `DYBATPHO_I18N_TRANSLATE_LIBRARY` also routes dybatpho's own
+  diagnostics through the catalog, using each English message as its own message
+  id in the way gettext does. It is off by default, so output is unchanged
+  unless it is asked for.
+
+  ```sh
+  . dybatpho/init.sh --modules i18n
+  DYBATPHO_I18N_PATH="${PWD}/locale" dybatpho::i18n_init vi_VN
+  printf '%s\n' "$(dybatpho::i18n_tn deploy.files 1240)"
+  printf '%s\n' "$(dybatpho::i18n_currency 1234.5 VND vi_VN)"
+  dybatpho::i18n_lint --reference en vi_VN || exit 1
+  ```
+
 ### Changed
 
 - **Coverage runs use the whole runner.** `scripts/test.sh --coverage` spread
@@ -79,7 +135,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A dead `case` branch in `cli.sh`.** `aliases:--help,-h` could never match,
   because `aliases:--help,*` and `aliases:*,-h` both precede it. Behaviour is
   unchanged; the branch is gone.
-
 ## [3.0.0] - 2026-09-22
 
 ### Added

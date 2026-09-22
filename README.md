@@ -168,6 +168,7 @@ scripts/release.sh --version 3.0.0 --sign
 | [json.sh](doc/json.md)        | JSON and YAML reading/writing                       |
 | [table.sh](doc/table.md)      | Aligned plain-text and Markdown tables              |
 | [date.sh](doc/date.md)        | Dates, timestamps, day arithmetic — GNU and BSD     |
+| [i18n.sh](doc/i18n.md)        | Translations, plural rules, locale-aware numbers, money, sizes and dates |
 
 ### 🖥️ CLI building
 
