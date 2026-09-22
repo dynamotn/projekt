@@ -143,3 +143,69 @@ teardown() {
   run dybatpho::with_lock "with-lock-sep" 1 bash -c 'echo ran'
   assert_failure
 }
+
+@test "dybatpho::lock_field prints a recorded field and stays empty for a missing one" {
+  local lock_path
+  lock_path="$(dybatpho::lock_path "field-test")"
+  dybatpho::lock_acquire "field-test"
+
+  assert_equal "$(dybatpho::lock_field "${lock_path}" pid)" "$$"
+  assert_equal "$(dybatpho::lock_field "${lock_path}" host)" "$(dybatpho::lock_hostname)"
+  assert_equal "$(dybatpho::lock_field "${lock_path}" nonexistent)" ""
+
+  dybatpho::lock_release "field-test"
+}
+
+@test "dybatpho::lock_is_alive is true for the current process and false once reclaimed" {
+  local lock_path
+  lock_path="$(dybatpho::lock_path "alive-test")"
+  dybatpho::lock_acquire "alive-test"
+
+  run dybatpho::lock_is_alive "${lock_path}"
+  assert_success
+
+  dybatpho::lock_release "alive-test"
+
+  run dybatpho::lock_is_alive "${lock_path}"
+  assert_failure
+}
+
+@test "dybatpho::lock_is_alive is false for a dead pid but true for another host" {
+  local lock_path
+  lock_path="$(dybatpho::lock_path "alive-dead")"
+  mkdir "${lock_path}"
+  # 999999 is exceedingly unlikely to be a running pid in the test environment.
+  printf '%s' "999999" > "${lock_path}/pid"
+  printf '%s' "$(dybatpho::lock_hostname)" > "${lock_path}/host"
+
+  run dybatpho::lock_is_alive "${lock_path}"
+  assert_failure
+
+  # A lock recorded on another host can't be probed locally, so it counts as held.
+  printf '%s' "some-other-host" > "${lock_path}/host"
+  run dybatpho::lock_is_alive "${lock_path}"
+  assert_success
+
+  rm -rf "${lock_path}"
+}
+
+@test "dybatpho::lock_reclaim_stale removes a dead lock and leaves a live one alone" {
+  local stale_path live_path
+  stale_path="$(dybatpho::lock_path "reclaim-stale")"
+  mkdir "${stale_path}"
+  printf '%s' "999999" > "${stale_path}/pid"
+  printf '%s' "$(dybatpho::lock_hostname)" > "${stale_path}/host"
+
+  run --separate-stderr dybatpho::lock_reclaim_stale "${stale_path}"
+  assert_success
+  assert_stderr --partial "Reclaiming stale lock"
+  assert_dir_not_exist "${stale_path}"
+
+  live_path="$(dybatpho::lock_path "reclaim-live")"
+  dybatpho::lock_acquire "reclaim-live"
+  run dybatpho::lock_reclaim_stale "${live_path}"
+  assert_success
+  assert_dir_exist "${live_path}"
+
+  dybatpho::lock_release "reclaim-live"
+}

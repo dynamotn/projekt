@@ -402,27 +402,27 @@ _spec_test_deploy() {
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-@test "__agent_flatten_schema walks into subcommands" {
+@test "__dybatpho_agent_flatten_schema walks into subcommands" {
   local flattened
-  flattened=$(__agent_flatten_schema "$(dybatpho::generate_schema _spec_test_root mytool)")
+  flattened=$(__dybatpho_agent_flatten_schema "$(dybatpho::generate_schema _spec_test_root mytool)")
   assert_equal "$(dybatpho::json_get "${flattened}" 'length')" "2"
   assert_equal "$(dybatpho::json_eval "${flattened}" '.[1].path')" '["mytool","deploy"]'
 }
 
-@test "__agent_options_schema handles an empty option list" {
+@test "__dybatpho_agent_options_schema handles an empty option list" {
   local schema
-  schema=$(__agent_options_schema '[]')
+  schema=$(__dybatpho_agent_options_schema '[]')
   assert_equal "$(dybatpho::json_get "${schema}" '.type')" "object"
   assert_equal "$(dybatpho::json_eval "${schema}" '.properties')" "{}"
   assert_equal "$(dybatpho::json_eval "${schema}" '.required')" "[]"
 }
 
-@test "__agent_allowed matches whole words only" {
+@test "__dybatpho_agent_allowed matches whole words only" {
   DYBATPHO_AGENT_ALLOW="deploy rollback"
-  run __agent_allowed deploy
+  run __dybatpho_agent_allowed deploy
   assert_success
-  run __agent_allowed rollback
+  run __dybatpho_agent_allowed rollback
   assert_success
-  run __agent_allowed deplo
+  run __dybatpho_agent_allowed deplo
   assert_failure
 }

@@ -1847,3 +1847,26 @@ setup() {
   run_traced dybatpho::generate_help _spec_persist_once
   assert_equal "$(printf '%s\n' "${lines[@]}" | grep -c -- '--verbose')" "1"
 }
+
+@test "dybatpho::opts::validate_choice accepts a listed value and rejects anything else" {
+  run dybatpho::opts::validate_choice "json" "text,json,yaml"
+  assert_success
+
+  run dybatpho::opts::validate_choice "text" "text,json,yaml"
+  assert_success
+
+  run dybatpho::opts::validate_choice "xml" "text,json,yaml"
+  assert_failure
+
+  # A prefix of a listed value is not itself a valid choice.
+  run dybatpho::opts::validate_choice "js" "text,json,yaml"
+  assert_failure
+}
+
+@test "dybatpho::opts::validate_choice handles a single-entry list and an empty value" {
+  run dybatpho::opts::validate_choice "only" "only"
+  assert_success
+
+  run dybatpho::opts::validate_choice "" "text,json"
+  assert_failure
+}

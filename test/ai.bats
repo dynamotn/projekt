@@ -360,26 +360,26 @@ _test_tool() { printf 'tool output\n'; }
   assert_output ""
 }
 
-@test "__ai_tools_json renders the registry as tool definitions" {
+@test "__dybatpho_ai_tools_json renders the registry as tool definitions" {
   dybatpho::ai_tool_register lookup "Look something up" \
     '{"type":"object","properties":{"q":{"type":"string"}}}' _test_tool
   local tools
-  tools=$(__ai_tools_json)
+  tools=$(__dybatpho_ai_tools_json)
   assert_equal "$(dybatpho::json_get "${tools}" '.[0].name')" "lookup"
   assert_equal "$(dybatpho::json_get "${tools}" '.[0].description')" "Look something up"
   assert_equal "$(dybatpho::json_get "${tools}" '.[0].input_schema.properties.q.type')" "string"
 }
 
-@test "__ai_tool_invoke reports an unknown tool instead of failing" {
-  run_traced __ai_tool_invoke ghost '{}'
+@test "__dybatpho_ai_tool_invoke reports an unknown tool instead of failing" {
+  run_traced __dybatpho_ai_tool_invoke ghost '{}'
   assert_success
   assert_output --partial "no tool named ghost"
 }
 
-@test "__ai_tool_invoke returns a failing handler as an error result" {
+@test "__dybatpho_ai_tool_invoke returns a failing handler as an error result" {
   _failing_tool() { echo "boom"; return 3; }
   dybatpho::ai_tool_register failing "fails" '{"type":"object"}' _failing_tool
-  run_traced __ai_tool_invoke failing '{}'
+  run_traced __dybatpho_ai_tool_invoke failing '{}'
   assert_success
   assert_output --partial "exited with status 3"
 }
@@ -451,52 +451,52 @@ _test_tool() { printf 'tool output\n'; }
 # Payload builders
 # ---------------------------------------------------------------------------
 
-@test "__ai_payload_anthropic carries the system prompt and messages" {
+@test "__dybatpho_ai_payload_anthropic carries the system prompt and messages" {
   local conversation payload
-  conversation=$(__ai_conversation_build "be terse" user "hello")
-  payload=$(__ai_payload_anthropic "${conversation}" '[]')
+  conversation=$(__dybatpho_ai_conversation_build "be terse" user "hello")
+  payload=$(__dybatpho_ai_payload_anthropic "${conversation}" '[]')
   assert_equal "$(dybatpho::json_get "${payload}" '.system')" "be terse"
   assert_equal "$(dybatpho::json_get "${payload}" '.messages[0].content')" "hello"
   assert_equal "$(dybatpho::json_get "${payload}" '.max_tokens')" "${DYBATPHO_AI_MAX_TOKENS}"
 }
 
-@test "__ai_payload_anthropic omits an empty system prompt" {
+@test "__dybatpho_ai_payload_anthropic omits an empty system prompt" {
   local payload
-  payload=$(__ai_payload_anthropic "$(__ai_conversation_build "" user "hi")" '[]')
+  payload=$(__dybatpho_ai_payload_anthropic "$(__dybatpho_ai_conversation_build "" user "hi")" '[]')
   assert_equal "$(dybatpho::json_get "${payload}" 'has("system")')" "false"
 }
 
-@test "__ai_payload_anthropic adds effort when it is configured" {
+@test "__dybatpho_ai_payload_anthropic adds effort when it is configured" {
   DYBATPHO_AI_EFFORT=high
   local payload
-  payload=$(__ai_payload_anthropic "$(__ai_conversation_build "" user "hi")" '[]')
+  payload=$(__dybatpho_ai_payload_anthropic "$(__dybatpho_ai_conversation_build "" user "hi")" '[]')
   assert_equal "$(dybatpho::json_get "${payload}" '.output_config.effort')" "high"
 }
 
-@test "__ai_payload_anthropic adds a json schema output contract" {
+@test "__dybatpho_ai_payload_anthropic adds a json schema output contract" {
   local payload
-  payload=$(__ai_payload_anthropic "$(__ai_conversation_build "" user "hi")" '[]' '{"type":"object"}')
+  payload=$(__dybatpho_ai_payload_anthropic "$(__dybatpho_ai_conversation_build "" user "hi")" '[]' '{"type":"object"}')
   assert_equal "$(dybatpho::json_get "${payload}" '.output_config.format.type')" "json_schema"
 }
 
-@test "__ai_payload_openai folds the system prompt into the message list" {
+@test "__dybatpho_ai_payload_openai folds the system prompt into the message list" {
   local payload
-  payload=$(__ai_payload_openai "$(__ai_conversation_build "sys" user "hi")" '[]')
+  payload=$(__dybatpho_ai_payload_openai "$(__dybatpho_ai_conversation_build "sys" user "hi")" '[]')
   assert_equal "$(dybatpho::json_get "${payload}" '.messages[0].role')" "system"
   assert_equal "$(dybatpho::json_get "${payload}" '.messages[1].content')" "hi"
 }
 
-@test "__ai_payload_openai converts tools to the function shape" {
+@test "__dybatpho_ai_payload_openai converts tools to the function shape" {
   local tools payload
   tools='[{"name":"t","description":"d","input_schema":{"type":"object"}}]'
-  payload=$(__ai_payload_openai "$(__ai_conversation_build "" user "hi")" "${tools}")
+  payload=$(__dybatpho_ai_payload_openai "$(__dybatpho_ai_conversation_build "" user "hi")" "${tools}")
   assert_equal "$(dybatpho::json_get "${payload}" '.tools[0].type')" "function"
   assert_equal "$(dybatpho::json_get "${payload}" '.tools[0].function.name')" "t"
 }
 
-@test "__ai_payload_ollama disables streaming and keeps the model" {
+@test "__dybatpho_ai_payload_ollama disables streaming and keeps the model" {
   local payload
-  payload=$(__ai_payload_ollama "$(__ai_conversation_build "" user "hi")" '[]')
+  payload=$(__dybatpho_ai_payload_ollama "$(__dybatpho_ai_conversation_build "" user "hi")" '[]')
   assert_equal "$(dybatpho::json_get "${payload}" '.stream')" "false"
   assert_equal "$(dybatpho::json_get "${payload}" '.model')" "${DYBATPHO_AI_OLLAMA_MODEL}"
 }
@@ -544,8 +544,8 @@ _test_tool() { printf 'tool output\n'; }
 }
 
 @test "dybatpho::ai_usage prints last and total scopes" {
-  __ai_record_usage 10 20 "m" "end_turn"
-  __ai_record_usage 1 2 "m" "end_turn"
+  __dybatpho_ai_record_usage 10 20 "m" "end_turn"
+  __dybatpho_ai_record_usage 1 2 "m" "end_turn"
   run_traced dybatpho::ai_usage last
   assert_output --partial "input=1 output=2"
   run_traced dybatpho::ai_usage total
@@ -559,7 +559,7 @@ _test_tool() { printf 'tool output\n'; }
 }
 
 @test "dybatpho::ai_usage_reset zeroes the counters" {
-  __ai_record_usage 10 20 "m" "end_turn"
+  __dybatpho_ai_record_usage 10 20 "m" "end_turn"
   dybatpho::ai_usage_reset
   run_traced dybatpho::ai_usage total
   assert_output "calls=0 input=0 output=0"
@@ -587,10 +587,10 @@ _test_tool() { printf 'tool output\n'; }
   assert_output "reach me at <email>"
 }
 
-@test "__ai_redact passes text through when redaction is disabled" {
+@test "__dybatpho_ai_redact passes text through when redaction is disabled" {
   DYBATPHO_AI_REDACT=false
   dybatpho::secret_register "plain-secret"
-  assert_equal "$(__ai_redact "plain-secret stays")" "plain-secret stays"
+  assert_equal "$(__dybatpho_ai_redact "plain-secret stays")" "plain-secret stays"
 }
 
 # ---------------------------------------------------------------------------
@@ -610,4 +610,44 @@ _test_tool() { printf 'tool output\n'; }
   run_traced dybatpho::ai_json "q" '{"type":"object"}'
   assert_success
   assert_output "{}"
+}
+
+@test "dybatpho::ai_stream concatenates Anthropic content_block_delta events" {
+  local sse_file="${BATS_TEST_TMPDIR}/stream.sse"
+  {
+    printf 'event: content_block_delta\n'
+    printf 'data: {"type":"content_block_delta","delta":{"text":"Hello"}}\n'
+    printf '\n'
+    printf 'data: {"type":"content_block_delta","delta":{"text":" world"}}\n'
+    printf 'data: {"type":"message_stop"}\n'
+    printf 'data: [DONE]\n'
+  } > "${sse_file}"
+  stub_repeated curl ": cat '${sse_file}'"
+
+  run dybatpho::ai_stream "hi"
+  assert_success
+  assert_output "Hello world"
+}
+
+@test "dybatpho::ai_stream parses the bare JSON objects Ollama streams" {
+  DYBATPHO_AI_PROVIDER=ollama
+  local sse_file="${BATS_TEST_TMPDIR}/stream-ollama.sse"
+  {
+    printf '{"message":{"content":"one"}}\n'
+    printf '{"message":{"content":"-two"}}\n'
+  } > "${sse_file}"
+  stub_repeated curl ": cat '${sse_file}'"
+
+  run dybatpho::ai_stream "hi"
+  assert_success
+  assert_output "one-two"
+}
+
+@test "dybatpho::ai_stream makes no request under DRY_RUN" {
+  DRY_RUN=true
+  run_traced dybatpho::ai_stream "q"
+  assert_success
+  assert_output --partial "DRY RUN"
+  assert_output --partial "--no-buffer"
+  assert_equal "$(dybatpho::ai_usage_field calls)" "0"
 }

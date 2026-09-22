@@ -296,6 +296,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The repository contract is enforced by the test suite instead of a
+  checklist.** `test/conventions.bats` fails the suite when a module ships
+  without its `doc/`, `doc/spec/`, `test/` or `example/` counterpart, when it
+  isn't registered in `init.sh`, when its spec is missing from
+  `doc/spec/README.md`, when a public function is absent from its module
+  documentation or never named in its test file, or when a function escapes the
+  `dybatpho::` / `__dybatpho_` namespaces. The rules were already in `AGENT.md`;
+  they were prose a contributor had to remember, and drift had already happened.
+  Each check reports every violation at once rather than stopping at the first.
+
+- **Private functions in `ai` and `agent` now carry the mandatory `__dybatpho_`
+  prefix.** `src/ai.sh` and `src/agent.sh` defined 38 helpers as `__ai_*` and
+  `__agent_*` — names bare enough to collide with a helper defined by the
+  calling script, which is the reason the prefix is mandatory. They are private
+  and were never exported, so no consumer can be affected.
+
 - **`cli` help output now reads like a conventional command-line tool.** The
   usage line describes what the command actually accepts — `[OPTIONS]`, a
   `COMMAND` only when there are subcommands, and the declared positional
@@ -346,6 +362,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   down.
 
 ### Fixed
+
+- **Six public functions had no direct test.** `dybatpho::ai_stream`,
+  `dybatpho::opts::validate_choice`, `dybatpho::lock_field`,
+  `dybatpho::lock_is_alive`, `dybatpho::lock_reclaim_stale` and
+  `dybatpho::mock_calls` were only ever reached indirectly, so nothing pinned
+  their contracts. Each now has a test naming it directly.
 
 - **A dybatpho script run from a dybatpho shell no longer dies on its first log
   line.** The optional `metrics` hooks in `helpers`, `logging`, and `network`

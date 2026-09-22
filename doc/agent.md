@@ -43,22 +43,22 @@ The module provides five things:
 
 ### 🚀 Highlights
 
-- [`__agent_require_json`](#__agent_require_json) — Fail loudly when no JSON backend is installed.
-- [`__agent_marker_present`](#__agent_marker_present) — Return success when an agent runtime marker is present.
+- [`__dybatpho_agent_require_json`](#__dybatpho_agent_require_json) — Fail loudly when no JSON backend is installed.
+- [`__dybatpho_agent_marker_present`](#__dybatpho_agent_marker_present) — Return success when an agent runtime marker is present.
 - [`dybatpho::agent_mode`](#dybatphoagent_mode) — Print whether this run is being driven by an agent. `auto` looks for a known runtime marker; `on` and `off` skip detection.
 - [`dybatpho::agent_detect`](#dybatphoagent_detect) — Return success when an agent is driving this run.
 - [`dybatpho::agent_result`](#dybatphoagent_result) — Report the outcome of an operation in the caller's language. Agents get one JSON object on stdout; people get an aligned key/value line.
 - [`dybatpho::agent_error`](#dybatphoagent_error) — Report a failure with a machine-readable code and a fix hint.
 - [`dybatpho::agent_context`](#dybatphoagent_context) — Describe the environment an agent is operating in.
-- [`__agent_allowed`](#__agent_allowed) — Return success when an action appears in the agent allowlist.
+- [`__dybatpho_agent_allowed`](#__dybatpho_agent_allowed) — Return success when an action appears in the agent allowlist.
 - [`dybatpho::agent_confirm`](#dybatphoagent_confirm) — Gate an action behind confirmation, or behind an allowlist. A person is asked; an agent is checked against `DYBATPHO_AGENT_ALLOW` and refused when the action was not cleared in advance. Either way the decision is written to the audit log.
 - [`dybatpho::agent_audit`](#dybatphoagent_audit) — Append one action to the audit log. Records are JSON Lines so a later run, or a human, can replay what an agent did without parsing prose.
 - [`dybatpho::agent_audit_show`](#dybatphoagent_audit_show) — Print the audit log as readable lines.
-- [`__agent_flatten_schema`](#__agent_flatten_schema) — Turn a CLI schema into a flat list of callable commands. Each command carries the options it accepts, with hidden entries dropped. The tree is walked here rather than in a filter because only one of the two JSON backends supports user-defined functions, and a schema can nest.
-- [`__agent_flatten_command`](#__agent_flatten_command) — Append one command and its subcommands to a flat list.
-- [`__agent_options_schema`](#__agent_options_schema) — Build a JSON Schema object from a command's option list. Flags become booleans, parameters become strings, `choices:` becomes an `enum`, and `multiple:true` becomes an array of that item type.
+- [`__dybatpho_agent_flatten_schema`](#__dybatpho_agent_flatten_schema) — Turn a CLI schema into a flat list of callable commands. Each command carries the options it accepts, with hidden entries dropped. The tree is walked here rather than in a filter because only one of the two JSON backends supports user-defined functions, and a schema can nest.
+- [`__dybatpho_agent_flatten_command`](#__dybatpho_agent_flatten_command) — Append one command and its subcommands to a flat list.
+- [`__dybatpho_agent_options_schema`](#__dybatpho_agent_options_schema) — Build a JSON Schema object from a command's option list. Flags become booleans, parameters become strings, `choices:` becomes an `enum`, and `multiple:true` becomes an array of that item type.
 - [`dybatpho::agent_tools`](#dybatphoagent_tools) — Generate tool definitions from a CLI option spec. The root command and every subcommand become one tool, named by joining the command path with underscores. Because the definitions come from the same spec the parser uses, a tool can never describe an option the CLI does not have.
-- [`__agent_tool_name`](#__agent_tool_name) — Derive a callable tool name from a flattened command entry. The command path is joined with underscores and anything a tool name may not contain is replaced, so a prefix with a space still yields a valid name.
+- [`__dybatpho_agent_tool_name`](#__dybatpho_agent_tool_name) — Derive a callable tool name from a flattened command entry. The command path is joined with underscores and anything a tool name may not contain is replaced, so a prefix with a space still yields a valid name.
 - [`dybatpho::agent_mcp`](#dybatphoagent_mcp) — Generate an MCP `tools/list` payload for a CLI option spec. Each tool carries the command line it maps to under `x-dybatpho-command`, so a thin MCP server can dispatch without a second source of truth.
 
 <a id="usage"></a>
@@ -144,7 +144,7 @@ dybatpho::agent_confirm restart "Restart the API service" \
 <a id="reference"></a>
 ## 📚 Reference
 
-### `__agent_require_json`
+### `__dybatpho_agent_require_json`
 
 Fail loudly when no JSON backend is installed.
 
@@ -162,7 +162,7 @@ _Function has no arguments._
 
 ---
 
-### `__agent_marker_present`
+### `__dybatpho_agent_marker_present`
 
 Return success when an agent runtime marker is present.
 
@@ -330,7 +330,7 @@ _Function has no arguments._
 
 ---
 
-### `__agent_allowed`
+### `__dybatpho_agent_allowed`
 
 Return success when an action appears in the agent allowlist.
 
@@ -463,7 +463,7 @@ _Function has no arguments._
 
 ---
 
-### `__agent_flatten_schema`
+### `__dybatpho_agent_flatten_schema`
 
 Turn a CLI schema into a flat list of callable commands.
 Each command carries the options it accepts, with hidden entries dropped.
@@ -483,7 +483,7 @@ JSON backends supports user-defined functions, and a schema can nest.
 
 ---
 
-### `__agent_flatten_command`
+### `__dybatpho_agent_flatten_command`
 
 Append one command and its subcommands to a flat list.
 
@@ -502,7 +502,7 @@ Append one command and its subcommands to a flat list.
 
 ---
 
-### `__agent_options_schema`
+### `__dybatpho_agent_options_schema`
 
 Build a JSON Schema object from a command's option list.
 Flags become booleans, parameters become strings, `choices:` becomes an
@@ -561,7 +561,7 @@ dybatpho::agent_tools _spec_root mytool openai     # function-calling shape
 
 ---
 
-### `__agent_tool_name`
+### `__dybatpho_agent_tool_name`
 
 Derive a callable tool name from a flattened command entry.
 The command path is joined with underscores and anything a tool name may not

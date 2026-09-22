@@ -56,38 +56,38 @@ anything is sent, and a call budget that stops a runaway loop.
 
 ### 🚀 Highlights
 
-- [`__ai_require_json`](#__ai_require_json) — Fail loudly when no JSON backend is installed.
-- [`__ai_redact`](#__ai_redact) — Mask registered secrets in text before it leaves the machine.
-- [`__ai_state_cleanup_once`](#__ai_state_cleanup_once) — Arrange for the counter file to be removed when the script ends. Sourcing a module must not touch the host script's traps, so this runs on first use rather than at load time. A command substitution gets its own process, and a handler registered there would delete the counters the moment that subshell returned, so only the top-level shell registers one.
-- [`__ai_state_read`](#__ai_state_read) — Print the counter document, creating it on first use.
-- [`__ai_state_write`](#__ai_state_write) — Replace the counter document.
-- [`__ai_budget_check`](#__ai_budget_check) — Stop the script when the call budget is already used up. This is deliberately separate from counting: the count happens deep inside a command substitution, where an `exit` would only leave that subshell, so the refusal has to be raised by the public function the caller invoked.
-- [`__ai_count_call`](#__ai_count_call) — Count one model call in the shared counter file.
-- [`__ai_record_usage`](#__ai_record_usage) — Record the token usage a provider reported for one call.
-- [`__ai_ollama_alive`](#__ai_ollama_alive) — Return success when an Ollama daemon answers on the base URL.
+- [`__dybatpho_ai_require_json`](#__dybatpho_ai_require_json) — Fail loudly when no JSON backend is installed.
+- [`__dybatpho_ai_redact`](#__dybatpho_ai_redact) — Mask registered secrets in text before it leaves the machine.
+- [`__dybatpho_ai_state_cleanup_once`](#__dybatpho_ai_state_cleanup_once) — Arrange for the counter file to be removed when the script ends. Sourcing a module must not touch the host script's traps, so this runs on first use rather than at load time. A command substitution gets its own process, and a handler registered there would delete the counters the moment that subshell returned, so only the top-level shell registers one.
+- [`__dybatpho_ai_state_read`](#__dybatpho_ai_state_read) — Print the counter document, creating it on first use.
+- [`__dybatpho_ai_state_write`](#__dybatpho_ai_state_write) — Replace the counter document.
+- [`__dybatpho_ai_budget_check`](#__dybatpho_ai_budget_check) — Stop the script when the call budget is already used up. This is deliberately separate from counting: the count happens deep inside a command substitution, where an `exit` would only leave that subshell, so the refusal has to be raised by the public function the caller invoked.
+- [`__dybatpho_ai_count_call`](#__dybatpho_ai_count_call) — Count one model call in the shared counter file.
+- [`__dybatpho_ai_record_usage`](#__dybatpho_ai_record_usage) — Record the token usage a provider reported for one call.
+- [`__dybatpho_ai_ollama_alive`](#__dybatpho_ai_ollama_alive) — Return success when an Ollama daemon answers on the base URL.
 - [`dybatpho::ai_provider`](#dybatphoai_provider) — Resolve which backend a call will use. Detection order for `auto`: an Anthropic key, an OpenAI key, a live local Ollama daemon, then any supported command line client.
 - [`dybatpho::ai_model`](#dybatphoai_model) — Resolve the model identifier for the active backend.
-- [`__ai_api_key`](#__ai_api_key) — Resolve the API key for an HTTP backend.
-- [`__ai_base_url`](#__ai_base_url) — Resolve the base URL of an HTTP backend.
+- [`__dybatpho_ai_api_key`](#__dybatpho_ai_api_key) — Resolve the API key for an HTTP backend.
+- [`__dybatpho_ai_base_url`](#__dybatpho_ai_base_url) — Resolve the base URL of an HTTP backend.
 - [`dybatpho::ai_check`](#dybatphoai_check) — Report whether the module can run, without making a request. Checks the JSON backend, the transport command, and the credentials of the active backend.
-- [`__ai_cli_command`](#__ai_cli_command) — Resolve the command used by the `cli` backend.
-- [`__ai_conversation_build`](#__ai_conversation_build) — Build a conversation document from a system prompt and turns. The document is the provider-neutral shape the payload builders consume.
-- [`__ai_payload_anthropic`](#__ai_payload_anthropic) — Render a conversation document into an Anthropic request body.
-- [`__ai_payload_openai`](#__ai_payload_openai) — Render a conversation document into an OpenAI-compatible body.
-- [`__ai_messages_with_system`](#__ai_messages_with_system) — Prepend the system prompt as a message, the way the OpenAI-compatible and Ollama APIs expect it.
-- [`__ai_tools_as_functions`](#__ai_tools_as_functions) — Convert the neutral tool list into the OpenAI function shape, which both OpenAI-compatible endpoints and Ollama accept.
-- [`__ai_payload_ollama`](#__ai_payload_ollama) — Render a conversation document into an Ollama chat body.
-- [`__ai_cache_key`](#__ai_cache_key) — Compute the cache key of a request.
-- [`__ai_cache_read`](#__ai_cache_read) — Print a cached response when one is present and still fresh.
-- [`__ai_cache_write`](#__ai_cache_write) — Store a response body in the cache.
+- [`__dybatpho_ai_cli_command`](#__dybatpho_ai_cli_command) — Resolve the command used by the `cli` backend.
+- [`__dybatpho_ai_conversation_build`](#__dybatpho_ai_conversation_build) — Build a conversation document from a system prompt and turns. The document is the provider-neutral shape the payload builders consume.
+- [`__dybatpho_ai_payload_anthropic`](#__dybatpho_ai_payload_anthropic) — Render a conversation document into an Anthropic request body.
+- [`__dybatpho_ai_payload_openai`](#__dybatpho_ai_payload_openai) — Render a conversation document into an OpenAI-compatible body.
+- [`__dybatpho_ai_messages_with_system`](#__dybatpho_ai_messages_with_system) — Prepend the system prompt as a message, the way the OpenAI-compatible and Ollama APIs expect it.
+- [`__dybatpho_ai_tools_as_functions`](#__dybatpho_ai_tools_as_functions) — Convert the neutral tool list into the OpenAI function shape, which both OpenAI-compatible endpoints and Ollama accept.
+- [`__dybatpho_ai_payload_ollama`](#__dybatpho_ai_payload_ollama) — Render a conversation document into an Ollama chat body.
+- [`__dybatpho_ai_cache_key`](#__dybatpho_ai_cache_key) — Compute the cache key of a request.
+- [`__dybatpho_ai_cache_read`](#__dybatpho_ai_cache_read) — Print a cached response when one is present and still fresh.
+- [`__dybatpho_ai_cache_write`](#__dybatpho_ai_cache_write) — Store a response body in the cache.
 - [`dybatpho::ai_cache_clear`](#dybatphoai_cache_clear) — Forget every cached response.
-- [`__ai_dry_run_body`](#__ai_dry_run_body) — Produce a provider-shaped placeholder response for `DRY_RUN`. Keeping the shape lets the rest of the pipeline run unchanged, so an example or a rehearsal exercises the real extraction and accounting code.
-- [`__ai_http`](#__ai_http) — Send one request to an HTTP backend and print the raw response.
-- [`__ai_assert_no_error`](#__ai_assert_no_error) — Stop the script when a provider response carries an error object.
-- [`__ai_extract_text`](#__ai_extract_text) — Extract the assistant text from a provider response.
-- [`__ai_usage_from_response`](#__ai_usage_from_response) — Read token usage out of a provider response into the module state.
-- [`__ai_cli_complete`](#__ai_cli_complete) — Complete a conversation through the `cli` backend.
-- [`__ai_complete`](#__ai_complete) — Complete a conversation and print the assistant text. This is the single funnel every public helper goes through.
+- [`__dybatpho_ai_dry_run_body`](#__dybatpho_ai_dry_run_body) — Produce a provider-shaped placeholder response for `DRY_RUN`. Keeping the shape lets the rest of the pipeline run unchanged, so an example or a rehearsal exercises the real extraction and accounting code.
+- [`__dybatpho_ai_http`](#__dybatpho_ai_http) — Send one request to an HTTP backend and print the raw response.
+- [`__dybatpho_ai_assert_no_error`](#__dybatpho_ai_assert_no_error) — Stop the script when a provider response carries an error object.
+- [`__dybatpho_ai_extract_text`](#__dybatpho_ai_extract_text) — Extract the assistant text from a provider response.
+- [`__dybatpho_ai_usage_from_response`](#__dybatpho_ai_usage_from_response) — Read token usage out of a provider response into the module state.
+- [`__dybatpho_ai_cli_complete`](#__dybatpho_ai_cli_complete) — Complete a conversation through the `cli` backend.
+- [`__dybatpho_ai_complete`](#__dybatpho_ai_complete) — Complete a conversation and print the assistant text. This is the single funnel every public helper goes through.
 - [`dybatpho::ai_ask`](#dybatphoai_ask) — Ask the model a single question and print its answer.
 - [`dybatpho::ai_conversation_new`](#dybatphoai_conversation_new) — Create a conversation file and store its path in a variable. The file is registered for cleanup when the script exits.
 - [`dybatpho::ai_conversation_add`](#dybatphoai_conversation_add) — Append a turn to a conversation file.
@@ -95,12 +95,12 @@ anything is sent, and a call budget that stops a runaway loop.
 - [`dybatpho::ai_chat`](#dybatphoai_chat) — Send the next turn of a stored conversation and record the reply. Both the question and the answer are appended to the file, so the next call carries the full history.
 - [`dybatpho::ai_json`](#dybatphoai_json) — Ask for an answer that matches a JSON schema, and validate it. Backends with native structured output are told about the schema; the rest are asked in the prompt. Either way the answer is parsed and re-checked locally, and the call is retried when the model returns something unusable.
 - [`dybatpho::ai_stream`](#dybatphoai_stream) — Ask a question and print the answer as it is generated. Falls back to a normal buffered call on backends without a token stream.
-- [`__ai_stream_chunk`](#__ai_stream_chunk) — Print one streamed delta without adding a line break. The JSON backends both terminate their output with a newline, which would turn a stream of fragments into a column of them, so exactly one trailing newline is removed while any the model actually produced are kept.
+- [`__dybatpho_ai_stream_chunk`](#__dybatpho_ai_stream_chunk) — Print one streamed delta without adding a line break. The JSON backends both terminate their output with a newline, which would turn a stream of fragments into a column of them, so exactly one trailing newline is removed while any the model actually produced are kept.
 - [`dybatpho::ai_tool_register`](#dybatphoai_tool_register) — Register a shell function the model may call during `ai_run`.
 - [`dybatpho::ai_tool_list`](#dybatphoai_tool_list) — Print the names of registered tools, one per line.
 - [`dybatpho::ai_tool_clear`](#dybatphoai_tool_clear) — Unregister every tool.
-- [`__ai_tools_json`](#__ai_tools_json) — Render the tool registry as a provider-neutral tools array.
-- [`__ai_tool_invoke`](#__ai_tool_invoke) — Run one registered tool and print what it wrote. A failing handler is not fatal: its output is returned to the model as an error result so the model can adapt, which is the documented contract for tool results.
+- [`__dybatpho_ai_tools_json`](#__dybatpho_ai_tools_json) — Render the tool registry as a provider-neutral tools array.
+- [`__dybatpho_ai_tool_invoke`](#__dybatpho_ai_tool_invoke) — Run one registered tool and print what it wrote. A failing handler is not fatal: its output is returned to the model as an error result so the model can adapt, which is the documented contract for tool results.
 - [`dybatpho::ai_run`](#dybatphoai_run) — Answer a prompt, letting the model call registered tools first. The loop sends the prompt, runs whatever tools the model asks for, feeds the results back, and repeats until the model answers in text or the step limit is reached.
 - [`dybatpho::ai_tokens_estimate`](#dybatphoai_tokens_estimate) — Estimate how many tokens a piece of text costs. The estimate is four characters per token, which is close enough to size a prompt or decide whether to truncate before a call; it is not a billing figure.
 - [`dybatpho::ai_usage`](#dybatphoai_usage) — Print the token usage recorded so far.
@@ -205,7 +205,7 @@ dybatpho::ai_run "Are we about to run out of disk?"
 <a id="reference"></a>
 ## 📚 Reference
 
-### `__ai_require_json`
+### `__dybatpho_ai_require_json`
 
 Fail loudly when no JSON backend is installed.
 
@@ -223,7 +223,7 @@ _Function has no arguments._
 
 ---
 
-### `__ai_redact`
+### `__dybatpho_ai_redact`
 
 Mask registered secrets in text before it leaves the machine.
 
@@ -250,7 +250,7 @@ Mask registered secrets in text before it leaves the machine.
 
 ---
 
-### `__ai_state_cleanup_once`
+### `__dybatpho_ai_state_cleanup_once`
 
 Arrange for the counter file to be removed when the script ends.
 Sourcing a module must not touch the host script's traps, so this runs on
@@ -271,7 +271,7 @@ _Function has no arguments._
 
 ---
 
-### `__ai_state_read`
+### `__dybatpho_ai_state_read`
 
 Print the counter document, creating it on first use.
 
@@ -288,7 +288,7 @@ Print the counter document, creating it on first use.
 
 ---
 
-### `__ai_state_write`
+### `__dybatpho_ai_state_write`
 
 Replace the counter document.
 
@@ -301,7 +301,7 @@ Replace the counter document.
 
 ---
 
-### `__ai_budget_check`
+### `__dybatpho_ai_budget_check`
 
 Stop the script when the call budget is already used up.
 This is deliberately separate from counting: the count happens deep inside a
@@ -328,7 +328,7 @@ refusal has to be raised by the public function the caller invoked.
 
 ---
 
-### `__ai_count_call`
+### `__dybatpho_ai_count_call`
 
 Count one model call in the shared counter file.
 
@@ -339,7 +339,7 @@ Count one model call in the shared counter file.
 
 ---
 
-### `__ai_record_usage`
+### `__dybatpho_ai_record_usage`
 
 Record the token usage a provider reported for one call.
 
@@ -355,7 +355,7 @@ Record the token usage a provider reported for one call.
 
 ---
 
-### `__ai_ollama_alive`
+### `__dybatpho_ai_ollama_alive`
 
 Return success when an Ollama daemon answers on the base URL.
 
@@ -439,7 +439,7 @@ dybatpho::info "Asking $(dybatpho::ai_model)"
 
 ---
 
-### `__ai_api_key`
+### `__dybatpho_ai_api_key`
 
 Resolve the API key for an HTTP backend.
 
@@ -461,7 +461,7 @@ Resolve the API key for an HTTP backend.
 
 ---
 
-### `__ai_base_url`
+### `__dybatpho_ai_base_url`
 
 Resolve the base URL of an HTTP backend.
 
@@ -505,7 +505,7 @@ _Function has no arguments._
 
 ---
 
-### `__ai_cli_command`
+### `__dybatpho_ai_cli_command`
 
 Resolve the command used by the `cli` backend.
 
@@ -527,7 +527,7 @@ Resolve the command used by the `cli` backend.
 
 ---
 
-### `__ai_conversation_build`
+### `__dybatpho_ai_conversation_build`
 
 Build a conversation document from a system prompt and turns.
 The document is the provider-neutral shape the payload builders consume.
@@ -546,7 +546,7 @@ The document is the provider-neutral shape the payload builders consume.
 
 ---
 
-### `__ai_payload_anthropic`
+### `__dybatpho_ai_payload_anthropic`
 
 Render a conversation document into an Anthropic request body.
 
@@ -565,7 +565,7 @@ Render a conversation document into an Anthropic request body.
 
 ---
 
-### `__ai_payload_openai`
+### `__dybatpho_ai_payload_openai`
 
 Render a conversation document into an OpenAI-compatible body.
 
@@ -584,7 +584,7 @@ Render a conversation document into an OpenAI-compatible body.
 
 ---
 
-### `__ai_messages_with_system`
+### `__dybatpho_ai_messages_with_system`
 
 Prepend the system prompt as a message, the way the
 OpenAI-compatible and Ollama APIs expect it.
@@ -602,7 +602,7 @@ OpenAI-compatible and Ollama APIs expect it.
 
 ---
 
-### `__ai_tools_as_functions`
+### `__dybatpho_ai_tools_as_functions`
 
 Convert the neutral tool list into the OpenAI function shape,
 which both OpenAI-compatible endpoints and Ollama accept.
@@ -620,7 +620,7 @@ which both OpenAI-compatible endpoints and Ollama accept.
 
 ---
 
-### `__ai_payload_ollama`
+### `__dybatpho_ai_payload_ollama`
 
 Render a conversation document into an Ollama chat body.
 
@@ -639,7 +639,7 @@ Render a conversation document into an Ollama chat body.
 
 ---
 
-### `__ai_cache_key`
+### `__dybatpho_ai_cache_key`
 
 Compute the cache key of a request.
 
@@ -657,7 +657,7 @@ Compute the cache key of a request.
 
 ---
 
-### `__ai_cache_read`
+### `__dybatpho_ai_cache_read`
 
 Print a cached response when one is present and still fresh.
 
@@ -685,7 +685,7 @@ Print a cached response when one is present and still fresh.
 
 ---
 
-### `__ai_cache_write`
+### `__dybatpho_ai_cache_write`
 
 Store a response body in the cache.
 
@@ -729,7 +729,7 @@ _Function has no arguments._
 
 ---
 
-### `__ai_dry_run_body`
+### `__dybatpho_ai_dry_run_body`
 
 Produce a provider-shaped placeholder response for `DRY_RUN`.
 Keeping the shape lets the rest of the pipeline run unchanged, so an example
@@ -749,7 +749,7 @@ or a rehearsal exercises the real extraction and accounting code.
 
 ---
 
-### `__ai_http`
+### `__dybatpho_ai_http`
 
 Send one request to an HTTP backend and print the raw response.
 
@@ -777,7 +777,7 @@ Send one request to an HTTP backend and print the raw response.
 
 ---
 
-### `__ai_assert_no_error`
+### `__dybatpho_ai_assert_no_error`
 
 Stop the script when a provider response carries an error object.
 
@@ -796,7 +796,7 @@ Stop the script when a provider response carries an error object.
 
 ---
 
-### `__ai_extract_text`
+### `__dybatpho_ai_extract_text`
 
 Extract the assistant text from a provider response.
 
@@ -814,7 +814,7 @@ Extract the assistant text from a provider response.
 
 ---
 
-### `__ai_usage_from_response`
+### `__dybatpho_ai_usage_from_response`
 
 Read token usage out of a provider response into the module state.
 
@@ -832,7 +832,7 @@ Read token usage out of a provider response into the module state.
 
 ---
 
-### `__ai_cli_complete`
+### `__dybatpho_ai_cli_complete`
 
 Complete a conversation through the `cli` backend.
 
@@ -853,7 +853,7 @@ Complete a conversation through the `cli` backend.
 
 ---
 
-### `__ai_complete`
+### `__dybatpho_ai_complete`
 
 Complete a conversation and print the assistant text.
 This is the single funnel every public helper goes through.
@@ -1121,7 +1121,7 @@ dybatpho::ai_stream "Explain this stack trace" | tee /tmp/answer.txt
 
 ---
 
-### `__ai_stream_chunk`
+### `__dybatpho_ai_stream_chunk`
 
 Print one streamed delta without adding a line break.
 The JSON backends both terminate their output with a newline, which would
@@ -1218,7 +1218,7 @@ _Function has no arguments._
 
 ---
 
-### `__ai_tools_json`
+### `__dybatpho_ai_tools_json`
 
 Render the tool registry as a provider-neutral tools array.
 
@@ -1229,7 +1229,7 @@ Render the tool registry as a provider-neutral tools array.
 
 ---
 
-### `__ai_tool_invoke`
+### `__dybatpho_ai_tool_invoke`
 
 Run one registered tool and print what it wrote.
 A failing handler is not fatal: its output is returned to the model as an

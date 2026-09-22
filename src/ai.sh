@@ -136,7 +136,7 @@ declare -gA DYBATPHO_AI_TOOL_HANDLER=()
 # @exitcode 127 Stop the script because neither is installed
 # @see dybatpho::json_object
 #######################################
-function __ai_require_json {
+function __dybatpho_ai_require_json {
   __dybatpho_json_cmd > /dev/null
 }
 
@@ -147,7 +147,7 @@ function __ai_require_json {
 # @stdout Redacted text
 # @see dybatpho::secret_mask
 #######################################
-function __ai_redact {
+function __dybatpho_ai_redact {
   local text
   dybatpho::expect_args text -- "$@"
   if dybatpho::is true "${DYBATPHO_AI_REDACT}"; then
@@ -168,7 +168,7 @@ function __ai_redact {
 #   register one
 # @see dybatpho::cleanup_file_on_exit
 #######################################
-function __ai_state_cleanup_once {
+function __dybatpho_ai_state_cleanup_once {
   [[ "${BASHPID}" == "$$" ]] || return 0
   [[ -n "${__dybatpho_ai_state_cleanup-}" ]] && return 0
   __dybatpho_ai_state_cleanup=1
@@ -180,7 +180,7 @@ function __ai_state_cleanup_once {
 # @env DYBATPHO_AI_STATE_FILE string File the counters are kept in
 # @stdout Counter JSON
 #######################################
-function __ai_state_read {
+function __dybatpho_ai_state_read {
   if [[ ! -f "${DYBATPHO_AI_STATE_FILE}" ]]; then
     printf '%s\n' '{"calls":0,"total_input":0,"total_output":0,"last_input":0,"last_output":0,"last_model":"","last_stop_reason":""}' \
       > "${DYBATPHO_AI_STATE_FILE}"
@@ -192,7 +192,7 @@ function __ai_state_read {
 # @description Replace the counter document.
 # @arg $1 string Counter JSON
 #######################################
-function __ai_state_write {
+function __dybatpho_ai_state_write {
   local document
   dybatpho::expect_args document -- "$@"
   printf '%s\n' "${document}" > "${DYBATPHO_AI_STATE_FILE}"
@@ -208,14 +208,14 @@ function __ai_state_write {
 # @exitcode 0 There is budget left
 # @exitcode 1 Stop the script when the budget is exhausted
 #######################################
-function __ai_budget_check {
+function __dybatpho_ai_budget_check {
   local wanted="${1:-1}"
   # Every public entry point passes through here, which makes it the place to
   # arrange cleanup of the counter file in the caller's own shell.
-  __ai_state_cleanup_once
+  __dybatpho_ai_state_cleanup_once
   ((DYBATPHO_AI_MAX_CALLS > 0)) || return 0
   local calls
-  calls=$(dybatpho::json_get "$(__ai_state_read)" '.calls')
+  calls=$(dybatpho::json_get "$(__dybatpho_ai_state_read)" '.calls')
   if ((calls + wanted > DYBATPHO_AI_MAX_CALLS)); then
     dybatpho::die "ai: call budget of ${DYBATPHO_AI_MAX_CALLS} calls is exhausted"
   fi
@@ -225,8 +225,8 @@ function __ai_budget_check {
 # @description Count one model call in the shared counter file.
 # @exitcode 0 The counter was incremented
 #######################################
-function __ai_count_call {
-  __ai_state_write "$(dybatpho::json_eval "$(__ai_state_read)" '.calls += 1')"
+function __dybatpho_ai_count_call {
+  __dybatpho_ai_state_write "$(dybatpho::json_eval "$(__dybatpho_ai_state_read)" '.calls += 1')"
 }
 
 #######################################
@@ -236,7 +236,7 @@ function __ai_count_call {
 # @arg $3 string Model that answered
 # @arg $4 string Stop reason
 #######################################
-function __ai_record_usage {
+function __dybatpho_ai_record_usage {
   local input_tokens="${1:-0}" output_tokens="${2:-0}" model="${3:-}" stop_reason="${4:-}"
   [[ "${input_tokens}" =~ ^[0-9]+$ ]] || input_tokens=0
   [[ "${output_tokens}" =~ ^[0-9]+$ ]] || output_tokens=0
@@ -246,7 +246,7 @@ function __ai_record_usage {
     last_output:json "${output_tokens}" \
     last_model "${model}" \
     last_stop_reason "${stop_reason}")
-  __ai_state_write "$(dybatpho::json_eval "$(__ai_state_read)" \
+  __dybatpho_ai_state_write "$(dybatpho::json_eval "$(__dybatpho_ai_state_read)" \
     ". + ${last} | .total_input += ${input_tokens} | .total_output += ${output_tokens}")"
 }
 
@@ -256,7 +256,7 @@ function __ai_record_usage {
 # @exitcode 0 Ollama is reachable
 # @exitcode 1 Ollama is not reachable
 #######################################
-function __ai_ollama_alive {
+function __dybatpho_ai_ollama_alive {
   hash curl > /dev/null 2>&1 || return 1
   local base="${DYBATPHO_AI_BASE_URL:-http://localhost:11434}"
   curl --silent --fail --max-time 2 "${base}/api/tags" > /dev/null 2>&1
@@ -296,7 +296,7 @@ function dybatpho::ai_provider {
     printf 'anthropic\n'
   elif dybatpho::is set "${OPENAI_API_KEY-}"; then
     printf 'openai\n'
-  elif __ai_ollama_alive; then
+  elif __dybatpho_ai_ollama_alive; then
     printf 'ollama\n'
   elif dybatpho::coalesce_cmd claude llm ollama > /dev/null 2>&1; then
     printf 'cli\n'
@@ -337,7 +337,7 @@ function dybatpho::ai_model {
 # @exitcode 0 A key was found, or the backend needs none
 # @exitcode 1 Stop the script when a required key is missing
 #######################################
-function __ai_api_key {
+function __dybatpho_ai_api_key {
   local provider
   dybatpho::expect_args provider -- "$@"
   if dybatpho::is set "${DYBATPHO_AI_API_KEY}"; then
@@ -365,7 +365,7 @@ function __ai_api_key {
 # @arg $1 string Backend name
 # @stdout Base URL without a trailing slash
 #######################################
-function __ai_base_url {
+function __dybatpho_ai_base_url {
   local provider
   dybatpho::expect_args provider -- "$@"
   if dybatpho::is set "${DYBATPHO_AI_BASE_URL}"; then
@@ -393,16 +393,16 @@ function __ai_base_url {
 # @exitcode 1 Stop the script when a dependency or credential is missing
 #######################################
 function dybatpho::ai_check {
-  __ai_require_json
+  __dybatpho_ai_require_json
   local provider
   provider=$(dybatpho::ai_provider)
   case "${provider}" in
     anthropic | openai | ollama)
       hash curl > /dev/null 2>&1 || dybatpho::die "ai: curl is required by the ${provider} backend" 127
-      __ai_api_key "${provider}" > /dev/null
+      __dybatpho_ai_api_key "${provider}" > /dev/null
       ;;
     cli)
-      __ai_cli_command > /dev/null
+      __dybatpho_ai_cli_command > /dev/null
       ;;
   esac
   dybatpho::debug "ai: provider=${provider} model=$(dybatpho::ai_model "${provider}")"
@@ -415,7 +415,7 @@ function dybatpho::ai_check {
 # @exitcode 0 A supported client exists
 # @exitcode 127 Stop the script when no client is installed
 #######################################
-function __ai_cli_command {
+function __dybatpho_ai_cli_command {
   if dybatpho::is set "${DYBATPHO_AI_CLI}"; then
     hash "${DYBATPHO_AI_CLI}" > /dev/null 2>&1 \
       || dybatpho::die "ai: DYBATPHO_AI_CLI is '${DYBATPHO_AI_CLI}' but that command is not installed" 127
@@ -433,7 +433,7 @@ function __ai_cli_command {
 # @arg $@ string Alternating role and content pairs
 # @stdout Conversation JSON
 #######################################
-function __ai_conversation_build {
+function __dybatpho_ai_conversation_build {
   local system
   dybatpho::expect_args system -- "$@"
   shift
@@ -453,7 +453,7 @@ function __ai_conversation_build {
 # @arg $3 string Output schema JSON, or empty for free-form text
 # @stdout Request payload
 #######################################
-function __ai_payload_anthropic {
+function __dybatpho_ai_payload_anthropic {
   local conversation tools schema
   dybatpho::expect_args conversation tools -- "$@"
   schema="${3:-}"
@@ -490,14 +490,14 @@ function __ai_payload_anthropic {
 # @arg $3 string Output schema JSON, or empty for free-form text
 # @stdout Request payload
 #######################################
-function __ai_payload_openai {
+function __dybatpho_ai_payload_openai {
   local conversation tools schema
   dybatpho::expect_args conversation tools -- "$@"
   schema="${3:-}"
 
   local system messages
   system=$(dybatpho::json_get "${conversation}" '.system')
-  messages=$(__ai_messages_with_system "${conversation}")
+  messages=$(__dybatpho_ai_messages_with_system "${conversation}")
 
   local -a fields=(
     model "$(dybatpho::ai_model openai)"
@@ -507,7 +507,7 @@ function __ai_payload_openai {
   dybatpho::is set "${DYBATPHO_AI_TEMPERATURE}" \
     && fields+=(temperature:json "${DYBATPHO_AI_TEMPERATURE}")
   if [[ "${tools}" != "[]" ]]; then
-    fields+=(tools:json "$(__ai_tools_as_functions "${tools}")")
+    fields+=(tools:json "$(__dybatpho_ai_tools_as_functions "${tools}")")
   fi
   if dybatpho::is set "${schema}"; then
     local contract
@@ -524,7 +524,7 @@ function __ai_payload_openai {
 # @arg $1 string Conversation JSON
 # @stdout Message array JSON
 #######################################
-function __ai_messages_with_system {
+function __dybatpho_ai_messages_with_system {
   local conversation
   dybatpho::expect_args conversation -- "$@"
   local system messages
@@ -543,7 +543,7 @@ function __ai_messages_with_system {
 # @arg $1 string Tools array JSON
 # @stdout Converted tools array JSON
 #######################################
-function __ai_tools_as_functions {
+function __dybatpho_ai_tools_as_functions {
   local tools
   dybatpho::expect_args tools -- "$@"
   dybatpho::json_eval "${tools}" \
@@ -560,7 +560,7 @@ function __ai_tools_as_functions {
 # @arg $3 string Output schema JSON, or empty for free-form text
 # @stdout Request payload
 #######################################
-function __ai_payload_ollama {
+function __dybatpho_ai_payload_ollama {
   local conversation tools schema
   dybatpho::expect_args conversation tools -- "$@"
   schema="${3:-}"
@@ -568,12 +568,12 @@ function __ai_payload_ollama {
   local -a fields=(
     model "$(dybatpho::ai_model ollama)"
     stream:json false
-    messages:json "$(__ai_messages_with_system "${conversation}")"
+    messages:json "$(__dybatpho_ai_messages_with_system "${conversation}")"
   )
   if dybatpho::is set "${DYBATPHO_AI_TEMPERATURE}"; then
     fields+=(options:json "$(dybatpho::json_object temperature:json "${DYBATPHO_AI_TEMPERATURE}")")
   fi
-  [[ "${tools}" != "[]" ]] && fields+=(tools:json "$(__ai_tools_as_functions "${tools}")")
+  [[ "${tools}" != "[]" ]] && fields+=(tools:json "$(__dybatpho_ai_tools_as_functions "${tools}")")
   dybatpho::is set "${schema}" && fields+=(format:json "${schema}")
 
   dybatpho::json_object "${fields[@]}"
@@ -585,7 +585,7 @@ function __ai_payload_ollama {
 # @arg $2 string Request payload
 # @stdout Hexadecimal key
 #######################################
-function __ai_cache_key {
+function __dybatpho_ai_cache_key {
   local provider payload
   dybatpho::expect_args provider payload -- "$@"
   local hasher
@@ -601,7 +601,7 @@ function __ai_cache_key {
 # @exitcode 0 A fresh entry was printed
 # @exitcode 1 No usable entry
 #######################################
-function __ai_cache_read {
+function __dybatpho_ai_cache_read {
   local key
   dybatpho::expect_args key -- "$@"
   dybatpho::is true "${DYBATPHO_AI_CACHE}" || return 1
@@ -622,7 +622,7 @@ function __ai_cache_read {
 # @arg $2 string Response body
 # @exitcode 0 Stored, or caching is disabled
 #######################################
-function __ai_cache_write {
+function __dybatpho_ai_cache_write {
   local key body
   dybatpho::expect_args key body -- "$@"
   dybatpho::is true "${DYBATPHO_AI_CACHE}" || return 0
@@ -654,7 +654,7 @@ function dybatpho::ai_cache_clear {
 # @arg $2 string Request payload, inspected for a structured output contract
 # @stdout Response body in the provider's own shape
 #######################################
-function __ai_dry_run_body {
+function __dybatpho_ai_dry_run_body {
   local provider payload
   dybatpho::expect_args provider payload -- "$@"
   local text="[dry run] no request was sent"
@@ -706,29 +706,29 @@ function __ai_dry_run_body {
 # @exitcode 5 HTTP 5xx from the provider
 # @see dybatpho::curl_do
 #######################################
-function __ai_http {
+function __dybatpho_ai_http {
   local provider payload
   dybatpho::expect_args provider payload -- "$@"
 
   local cache_key body
-  cache_key=$(__ai_cache_key "${provider}" "${payload}")
-  if body=$(__ai_cache_read "${cache_key}"); then
+  cache_key=$(__dybatpho_ai_cache_key "${provider}" "${payload}")
+  if body=$(__dybatpho_ai_cache_read "${cache_key}"); then
     printf '%s\n' "${body}"
     return 0
   fi
 
   local url base
-  base=$(__ai_base_url "${provider}")
+  base=$(__dybatpho_ai_base_url "${provider}")
   local -a headers=()
   case "${provider}" in
     anthropic)
       url="${base}/v1/messages"
-      headers+=(--header "x-api-key: $(__ai_api_key anthropic)")
+      headers+=(--header "x-api-key: $(__dybatpho_ai_api_key anthropic)")
       headers+=(--header "anthropic-version: ${DYBATPHO_AI_ANTHROPIC_VERSION}")
       ;;
     openai)
       url="${base}/chat/completions"
-      headers+=(--header "Authorization: Bearer $(__ai_api_key openai)")
+      headers+=(--header "Authorization: Bearer $(__dybatpho_ai_api_key openai)")
       ;;
     ollama)
       url="${base}/api/chat"
@@ -737,11 +737,11 @@ function __ai_http {
 
   if dybatpho::is true "${DRY_RUN-}"; then
     dybatpho::info "🧪 DRY RUN: POST ${url} as ${provider}"
-    __ai_dry_run_body "${provider}" "${payload}"
+    __dybatpho_ai_dry_run_body "${provider}" "${payload}"
     return 0
   fi
 
-  __ai_count_call
+  __dybatpho_ai_count_call
   local response_file
   dybatpho::create_temp response_file ".json" "ai_response"
 
@@ -753,7 +753,7 @@ function __ai_http {
     --data-binary "${payload}" || return $?
 
   body=$(cat "${response_file}")
-  __ai_cache_write "${cache_key}" "${body}"
+  __dybatpho_ai_cache_write "${cache_key}" "${body}"
   printf '%s\n' "${body}"
 }
 
@@ -764,7 +764,7 @@ function __ai_http {
 # @exitcode 0 The response has no error field
 # @exitcode 1 Stop the script and report the provider message
 #######################################
-function __ai_assert_no_error {
+function __dybatpho_ai_assert_no_error {
   local provider body
   dybatpho::expect_args provider body -- "$@"
   local present
@@ -789,7 +789,7 @@ function __ai_assert_no_error {
 # @arg $2 string Response body
 # @stdout Assistant text, empty when the turn produced only tool calls
 #######################################
-function __ai_extract_text {
+function __dybatpho_ai_extract_text {
   local provider body
   dybatpho::expect_args provider body -- "$@"
   case "${provider}" in
@@ -812,7 +812,7 @@ function __ai_extract_text {
 # @arg $2 string Response body
 # @see dybatpho::ai_usage
 #######################################
-function __ai_usage_from_response {
+function __dybatpho_ai_usage_from_response {
   local provider body
   dybatpho::expect_args provider body -- "$@"
   local input_tokens output_tokens model stop_reason
@@ -834,7 +834,7 @@ function __ai_usage_from_response {
       stop_reason=$(dybatpho::json_get "${body}" '.done_reason // ""')
       ;;
   esac
-  __ai_record_usage "${input_tokens}" "${output_tokens}" "${model}" "${stop_reason}"
+  __dybatpho_ai_record_usage "${input_tokens}" "${output_tokens}" "${model}" "${stop_reason}"
 }
 
 #######################################
@@ -843,11 +843,11 @@ function __ai_usage_from_response {
 # @stdout Assistant text
 # @exitcode 0 The client answered
 #######################################
-function __ai_cli_complete {
+function __dybatpho_ai_cli_complete {
   local conversation
   dybatpho::expect_args conversation -- "$@"
   local command system prompt model
-  command=$(__ai_cli_command)
+  command=$(__dybatpho_ai_cli_command)
   model=$(dybatpho::ai_model cli)
   system=$(dybatpho::json_get "${conversation}" '.system // ""')
   # Command line clients are single-shot, so the history is flattened into one
@@ -871,7 +871,7 @@ function __ai_cli_complete {
     return 0
   fi
 
-  __ai_count_call
+  __dybatpho_ai_count_call
   dybatpho::debug "ai: running ${command}"
   case "${command}" in
     claude)
@@ -906,7 +906,7 @@ function __ai_cli_complete {
 # @stdout Assistant text
 # @exitcode 0 The provider answered
 #######################################
-function __ai_complete {
+function __dybatpho_ai_complete {
   local conversation schema
   dybatpho::expect_args conversation -- "$@"
   schema="${2:-}"
@@ -914,16 +914,16 @@ function __ai_complete {
   provider=$(dybatpho::ai_provider)
 
   if [[ "${provider}" == "cli" ]]; then
-    __ai_cli_complete "${conversation}"
+    __dybatpho_ai_cli_complete "${conversation}"
     return 0
   fi
 
   local payload body
-  payload=$("__ai_payload_${provider}" "${conversation}" '[]' "${schema}")
-  body=$(__ai_http "${provider}" "${payload}")
-  __ai_assert_no_error "${provider}" "${body}"
-  __ai_usage_from_response "${provider}" "${body}"
-  __ai_extract_text "${provider}" "${body}"
+  payload=$("__dybatpho_ai_payload_${provider}" "${conversation}" '[]' "${schema}")
+  body=$(__dybatpho_ai_http "${provider}" "${payload}")
+  __dybatpho_ai_assert_no_error "${provider}" "${body}"
+  __dybatpho_ai_usage_from_response "${provider}" "${body}"
+  __dybatpho_ai_extract_text "${provider}" "${body}"
 }
 
 #######################################
@@ -946,11 +946,11 @@ function dybatpho::ai_ask {
   local prompt system
   dybatpho::expect_args prompt -- "$@"
   system="${2:-${DYBATPHO_AI_SYSTEM}}"
-  __ai_budget_check
-  prompt=$(__ai_redact "${prompt}")
+  __dybatpho_ai_budget_check
+  prompt=$(__dybatpho_ai_redact "${prompt}")
   local conversation
-  conversation=$(__ai_conversation_build "${system}" user "${prompt}")
-  __ai_complete "${conversation}"
+  conversation=$(__dybatpho_ai_conversation_build "${system}" user "${prompt}")
+  __dybatpho_ai_complete "${conversation}"
 }
 
 #######################################
@@ -973,7 +973,7 @@ function dybatpho::ai_conversation_new {
   system="${2:-${DYBATPHO_AI_SYSTEM}}"
   local file
   dybatpho::create_temp file ".json" "ai_chat"
-  __ai_conversation_build "${system}" > "${file}"
+  __dybatpho_ai_conversation_build "${system}" > "${file}"
   local -n conversation_path="${path_var}"
   # shellcheck disable=SC2034 # The caller reads the value through the nameref.
   conversation_path="${file}"
@@ -1042,11 +1042,11 @@ function dybatpho::ai_chat {
   local file prompt
   dybatpho::expect_args file prompt -- "$@"
   dybatpho::is file "${file}" || dybatpho::die "dybatpho::ai_chat: '${file}' is not a conversation file"
-  __ai_budget_check
-  prompt=$(__ai_redact "${prompt}")
+  __dybatpho_ai_budget_check
+  prompt=$(__dybatpho_ai_redact "${prompt}")
   dybatpho::ai_conversation_add "${file}" user "${prompt}"
   local answer
-  answer=$(__ai_complete "$(cat "${file}")")
+  answer=$(__dybatpho_ai_complete "$(cat "${file}")")
   dybatpho::ai_conversation_add "${file}" assistant "${answer}"
   printf '%s\n' "${answer}"
 }
@@ -1077,7 +1077,7 @@ function dybatpho::ai_json {
   dybatpho::json_valid "${schema}" \
     || dybatpho::die "dybatpho::ai_json: The schema argument is not valid JSON"
 
-  prompt=$(__ai_redact "${prompt}")
+  prompt=$(__dybatpho_ai_redact "${prompt}")
   local provider
   provider=$(dybatpho::ai_provider)
 
@@ -1095,10 +1095,10 @@ ${schema}"
 
   local attempt=1 answer candidate
   while ((attempt <= DYBATPHO_AI_JSON_RETRIES)); do
-    __ai_budget_check
+    __dybatpho_ai_budget_check
     local conversation
-    conversation=$(__ai_conversation_build "${system}" user "${effective_prompt}")
-    answer=$(__ai_complete "${conversation}" "${native_schema}")
+    conversation=$(__dybatpho_ai_conversation_build "${system}" user "${effective_prompt}")
+    answer=$(__dybatpho_ai_complete "${conversation}" "${native_schema}")
     # Models sometimes wrap JSON in a fence even when told not to; strip it
     # before parsing rather than failing a well-formed answer on packaging.
     candidate=$(printf '%s\n' "${answer}" | sed -e 's/^[[:space:]]*```[a-zA-Z]*[[:space:]]*$//' -e 's/^[[:space:]]*```[[:space:]]*$//')
@@ -1129,7 +1129,7 @@ function dybatpho::ai_stream {
   local prompt system
   dybatpho::expect_args prompt -- "$@"
   system="${2:-${DYBATPHO_AI_SYSTEM}}"
-  prompt=$(__ai_redact "${prompt}")
+  prompt=$(__dybatpho_ai_redact "${prompt}")
 
   local provider
   provider=$(dybatpho::ai_provider)
@@ -1142,24 +1142,24 @@ function dybatpho::ai_stream {
       ;;
   esac
 
-  __ai_budget_check
+  __dybatpho_ai_budget_check
 
   local conversation payload url base
-  conversation=$(__ai_conversation_build "${system}" user "${prompt}")
-  payload=$("__ai_payload_${provider}" "${conversation}" '[]' "")
-  base=$(__ai_base_url "${provider}")
+  conversation=$(__dybatpho_ai_conversation_build "${system}" user "${prompt}")
+  payload=$("__dybatpho_ai_payload_${provider}" "${conversation}" '[]' "")
+  base=$(__dybatpho_ai_base_url "${provider}")
 
   local -a headers=()
   case "${provider}" in
     anthropic)
       url="${base}/v1/messages"
-      headers+=(--header "x-api-key: $(__ai_api_key anthropic)")
+      headers+=(--header "x-api-key: $(__dybatpho_ai_api_key anthropic)")
       headers+=(--header "anthropic-version: ${DYBATPHO_AI_ANTHROPIC_VERSION}")
       payload=$(dybatpho::json_eval "${payload}" '.stream = true')
       ;;
     openai)
       url="${base}/chat/completions"
-      headers+=(--header "Authorization: Bearer $(__ai_api_key openai)")
+      headers+=(--header "Authorization: Bearer $(__dybatpho_ai_api_key openai)")
       payload=$(dybatpho::json_eval "${payload}" '.stream = true')
       ;;
     ollama)
@@ -1173,7 +1173,7 @@ function dybatpho::ai_stream {
     return 0
   fi
 
-  __ai_count_call
+  __dybatpho_ai_count_call
   dybatpho::debug "ai: streaming from ${url}"
   local filter
   case "${provider}" in
@@ -1204,7 +1204,7 @@ function dybatpho::ai_stream {
       data="${line#data: }"
       [[ "${data}" == "[DONE]" ]] && break
       [[ "${data}" == event:* ]] && continue
-      __ai_stream_chunk "${data}" "${filter}"
+      __dybatpho_ai_stream_chunk "${data}" "${filter}"
     done
   printf '\n'
 }
@@ -1218,7 +1218,7 @@ function dybatpho::ai_stream {
 # @arg $2 string Filter selecting the text fragment
 # @stdout The fragment, with no added newline
 #######################################
-function __ai_stream_chunk {
+function __dybatpho_ai_stream_chunk {
   local event filter
   dybatpho::expect_args event filter -- "$@"
   local chunk
@@ -1291,7 +1291,7 @@ function dybatpho::ai_tool_clear {
 # @description Render the tool registry as a provider-neutral tools array.
 # @stdout JSON array, `[]` when nothing is registered
 #######################################
-function __ai_tools_json {
+function __dybatpho_ai_tools_json {
   local tools='[]' name definition
   for name in $(dybatpho::ai_tool_list); do
     definition=$(dybatpho::json_object \
@@ -1312,7 +1312,7 @@ function __ai_tools_json {
 # @arg $2 string Tool arguments as JSON
 # @stdout Tool output
 #######################################
-function __ai_tool_invoke {
+function __dybatpho_ai_tool_invoke {
   local name arguments
   dybatpho::expect_args name arguments -- "$@"
   local handler="${DYBATPHO_AI_TOOL_HANDLER[${name}]-}"
@@ -1353,7 +1353,7 @@ function dybatpho::ai_run {
   local prompt system
   dybatpho::expect_args prompt -- "$@"
   system="${2:-${DYBATPHO_AI_SYSTEM}}"
-  prompt=$(__ai_redact "${prompt}")
+  prompt=$(__dybatpho_ai_redact "${prompt}")
 
   local provider
   provider=$(dybatpho::ai_provider)
@@ -1369,19 +1369,19 @@ function dybatpho::ai_run {
   ((${#DYBATPHO_AI_TOOL_HANDLER[@]} > 0)) \
     || dybatpho::die "dybatpho::ai_run: No tools registered, use dybatpho::ai_tool_register first"
 
-  __ai_require_json
+  __dybatpho_ai_require_json
   local tools messages payload body step=1
-  tools=$(__ai_tools_json)
+  tools=$(__dybatpho_ai_tools_json)
   messages="[$(dybatpho::json_object role user content "${prompt}")]"
 
   while ((step <= DYBATPHO_AI_MAX_STEPS)); do
-    __ai_budget_check
+    __dybatpho_ai_budget_check
     local conversation
     conversation=$(dybatpho::json_object system "${system}" messages:json "${messages}")
-    payload=$("__ai_payload_${provider}" "${conversation}" "${tools}" "")
-    body=$(__ai_http "${provider}" "${payload}")
-    __ai_assert_no_error "${provider}" "${body}"
-    __ai_usage_from_response "${provider}" "${body}"
+    payload=$("__dybatpho_ai_payload_${provider}" "${conversation}" "${tools}" "")
+    body=$(__dybatpho_ai_http "${provider}" "${payload}")
+    __dybatpho_ai_assert_no_error "${provider}" "${body}"
+    __dybatpho_ai_usage_from_response "${provider}" "${body}"
 
     # `@json` renders the tool arguments as text both backends spell the same
     # way, so a handler always receives one JSON string.
@@ -1402,7 +1402,7 @@ function dybatpho::ai_run {
     local total
     total=$(dybatpho::json_get "${calls}" 'length')
     if [[ "${total}" == "0" ]]; then
-      __ai_extract_text "${provider}" "${body}"
+      __dybatpho_ai_extract_text "${provider}" "${body}"
       return 0
     fi
 
@@ -1426,7 +1426,7 @@ function dybatpho::ai_run {
       call_id=$(dybatpho::json_get "${calls}" ".[${index}].id")
       call_name=$(dybatpho::json_get "${calls}" ".[${index}].name")
       call_arguments=$(dybatpho::json_get "${calls}" ".[${index}].arguments")
-      result=$(__ai_tool_invoke "${call_name}" "${call_arguments}")
+      result=$(__dybatpho_ai_tool_invoke "${call_name}" "${call_arguments}")
       case "${provider}" in
         anthropic)
           entry=$(dybatpho::json_object \
@@ -1491,9 +1491,9 @@ function dybatpho::ai_tokens_estimate {
 #######################################
 function dybatpho::ai_usage {
   local scope="${1:-last}"
-  __ai_state_cleanup_once
+  __dybatpho_ai_state_cleanup_once
   local state
-  state=$(__ai_state_read)
+  state=$(__dybatpho_ai_state_read)
   case "${scope}" in
     last)
       dybatpho::json_get "${state}" \
@@ -1526,8 +1526,8 @@ function dybatpho::ai_usage_field {
     calls | total_input | total_output | last_input | last_output | last_model | last_stop_reason) ;;
     *) dybatpho::die "dybatpho::ai_usage_field: Unknown field '${field}'" ;;
   esac
-  __ai_state_cleanup_once
-  dybatpho::json_get "$(__ai_state_read)" ".${field}"
+  __dybatpho_ai_state_cleanup_once
+  dybatpho::json_get "$(__dybatpho_ai_state_read)" ".${field}"
 }
 
 #######################################
@@ -1536,8 +1536,8 @@ function dybatpho::ai_usage_field {
 # @exitcode 0 The counters are back to zero
 #######################################
 function dybatpho::ai_usage_reset {
-  __ai_state_cleanup_once
-  __ai_state_write '{"calls":0,"total_input":0,"total_output":0,"last_input":0,"last_output":0,"last_model":"","last_stop_reason":""}'
+  __dybatpho_ai_state_cleanup_once
+  __dybatpho_ai_state_write '{"calls":0,"total_input":0,"total_output":0,"last_input":0,"last_output":0,"last_model":"","last_stop_reason":""}'
 }
 
 #######################################

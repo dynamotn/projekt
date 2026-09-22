@@ -75,13 +75,19 @@ every `IT-xxx` should correspond to a test that exists.
 Verify no module is missing a spec before finishing:
 
 ```bash
-comm -23 \
-  <(ls src/*.sh | xargs -n1 basename | sed 's/\.sh$/.md/' | sort) \
-  <(ls doc/spec/*.md | xargs -n1 basename | sort)
+scripts/test.sh test/conventions.bats
 ```
 
-The command must print nothing. Any output is a missing spec that must be
-written before the change is complete.
+`test/conventions.bats` enforces this rule and the rest of the repository
+contract as part of the normal suite, so a missing spec fails the tests rather
+than waiting for a reviewer. It checks that every `src/<module>.sh` has its
+`doc/`, `doc/spec/`, `test/` and `example/` counterpart, that the module is
+registered in `init.sh`, that the spec is listed in `doc/spec/README.md`, that
+every public function is named in both its module doc and its test file, and
+that no function escapes the `dybatpho::` / `__dybatpho_` namespaces.
+
+Each test reports every violation it finds at once, so the output is the full
+list of what the change still owes.
 
 ### Complete example requirements
 
@@ -511,6 +517,7 @@ to the module convention.
 | External tool used by a module | A declaration in `DYBATPHO_DOCTOR_REQUIRED` or `DYBATPHO_DOCTOR_OPTIONAL` in `src/doctor.sh`, on the module that runs the command, plus a case in `test/doctor.bats` |
 | Bootstrap function or generated artifact | `test/init.bats` or `test/bundle.bats`, and a regenerated bundle check: `scripts/bundle.sh --modules all -o /tmp/bundle.sh` |
 | Documentation/spec | Correct links/references and `git diff --check` |
+| New public function | `test/conventions.bats` — it must appear in `doc/<module>.md` and be named directly in `test/<module>.bats` |
 | Any public behavior | `CHANGELOG.md` entry under `## [Unreleased]`, in the same change |
 
 ## Completion checklist

@@ -84,7 +84,7 @@ DYBATPHO_AGENT_MARKERS="CLAUDECODE CLAUDE_CODE CLAUDE_AGENT ANTHROPIC_AGENT AI_A
 # @exitcode 127 Stop the script because neither is installed
 # @see dybatpho::json_object
 #######################################
-function __agent_require_json {
+function __dybatpho_agent_require_json {
   __dybatpho_json_cmd > /dev/null
 }
 
@@ -95,7 +95,7 @@ function __agent_require_json {
 # @exitcode 0 At least one marker variable is set and non-empty
 # @exitcode 1 No marker is present
 #######################################
-function __agent_marker_present {
+function __dybatpho_agent_marker_present {
   local name
   for name in ${DYBATPHO_AGENT_MARKERS} ${DYBATPHO_AGENT_ENV}; do
     [[ -n "${!name-}" ]] && return 0
@@ -124,7 +124,7 @@ function dybatpho::agent_mode {
     on) printf 'on\n' ;;
     off) printf 'off\n' ;;
     auto)
-      if __agent_marker_present; then
+      if __dybatpho_agent_marker_present; then
         printf 'on\n'
       else
         printf 'off\n'
@@ -273,7 +273,7 @@ function dybatpho::agent_context {
 # @exitcode 0 The action is allowed
 # @exitcode 1 The action is not allowed
 #######################################
-function __agent_allowed {
+function __dybatpho_agent_allowed {
   local action
   dybatpho::expect_args action -- "$@"
   [[ " ${DYBATPHO_AGENT_ALLOW} " == *" all "* ]] && return 0
@@ -308,7 +308,7 @@ function dybatpho::agent_confirm {
     return $?
   fi
 
-  if __agent_allowed "${action}"; then
+  if __dybatpho_agent_allowed "${action}"; then
     dybatpho::agent_audit "${action}" "allowed: ${description}"
     return 0
   fi
@@ -384,10 +384,10 @@ function dybatpho::agent_audit_show {
 # @arg $1 string CLI schema JSON from `dybatpho::generate_schema`
 # @stdout JSON array of `{path, description, options}` objects
 #######################################
-function __agent_flatten_schema {
+function __dybatpho_agent_flatten_schema {
   local schema
   dybatpho::expect_args schema -- "$@"
-  __agent_flatten_command "${schema}" '[]' '[]'
+  __dybatpho_agent_flatten_command "${schema}" '[]' '[]'
 }
 
 #######################################
@@ -397,7 +397,7 @@ function __agent_flatten_schema {
 # @arg $3 string Accumulated list JSON
 # @stdout The list with this command and its descendants appended
 #######################################
-function __agent_flatten_command {
+function __dybatpho_agent_flatten_command {
   local node parent flattened
   dybatpho::expect_args node parent flattened -- "$@"
 
@@ -413,7 +413,7 @@ function __agent_flatten_command {
   local total index=0
   total=$(dybatpho::json_get "${node}" '[.commands[]?] | length')
   while ((index < total)); do
-    flattened=$(__agent_flatten_command \
+    flattened=$(__dybatpho_agent_flatten_command \
       "$(dybatpho::json_eval "${node}" ".commands[${index}]")" \
       "${path}" "${flattened}")
     index=$((index + 1))
@@ -428,7 +428,7 @@ function __agent_flatten_command {
 # @arg $1 string Options array JSON
 # @stdout JSON Schema object
 #######################################
-function __agent_options_schema {
+function __dybatpho_agent_options_schema {
   local options
   dybatpho::expect_args options -- "$@"
 
@@ -516,15 +516,15 @@ function dybatpho::agent_tools {
   esac
   local schema commands tools='[]' entry description input_schema tool_name definition
   schema=$(dybatpho::generate_schema "${spec}" "${name}")
-  commands=$(__agent_flatten_schema "${schema}")
+  commands=$(__dybatpho_agent_flatten_schema "${schema}")
 
   local index=0 total
   total=$(dybatpho::json_get "${commands}" 'length')
   while ((index < total)); do
     entry=$(dybatpho::json_eval "${commands}" ".[${index}]")
     description=$(dybatpho::json_get "${entry}" '.description')
-    tool_name=$(__agent_tool_name "${entry}")
-    input_schema=$(__agent_options_schema "$(dybatpho::json_eval "${entry}" '.options')")
+    tool_name=$(__dybatpho_agent_tool_name "${entry}")
+    input_schema=$(__dybatpho_agent_options_schema "$(dybatpho::json_eval "${entry}" '.options')")
     if [[ "${format}" == "anthropic" ]]; then
       definition=$(dybatpho::json_object \
         name "${tool_name}" description "${description}" input_schema:json "${input_schema}")
@@ -547,7 +547,7 @@ function dybatpho::agent_tools {
 # @arg $1 string Flattened command entry JSON
 # @stdout Tool name
 #######################################
-function __agent_tool_name {
+function __dybatpho_agent_tool_name {
   local entry
   dybatpho::expect_args entry -- "$@"
   local path
@@ -578,15 +578,15 @@ function dybatpho::agent_mcp {
   command="${3:-$0}"
   local schema commands tools='[]' entry description input_schema tool_name argv definition
   schema=$(dybatpho::generate_schema "${spec}" "${name}")
-  commands=$(__agent_flatten_schema "${schema}")
+  commands=$(__dybatpho_agent_flatten_schema "${schema}")
 
   local index=0 total
   total=$(dybatpho::json_get "${commands}" 'length')
   while ((index < total)); do
     entry=$(dybatpho::json_eval "${commands}" ".[${index}]")
     description=$(dybatpho::json_get "${entry}" '.description')
-    tool_name=$(__agent_tool_name "${entry}")
-    input_schema=$(__agent_options_schema "$(dybatpho::json_eval "${entry}" '.options')")
+    tool_name=$(__dybatpho_agent_tool_name "${entry}")
+    input_schema=$(__dybatpho_agent_options_schema "$(dybatpho::json_eval "${entry}" '.options')")
     # The first path element is the root name, which the command already names.
     argv=$(dybatpho::json_eval "${entry}" \
       "[$(dybatpho::json_string "${command}")] + (.path[1:])")

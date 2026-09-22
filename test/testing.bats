@@ -479,3 +479,18 @@ setup() {
   dybatpho::assert_dir "${BATS_TEST_TMPDIR}"
   assert_equal "${DYBATPHO_TEST_FAILURES}" "2"
 }
+
+@test "dybatpho::mock_calls prints one line per call and fails for an unmocked command" {
+  dybatpho::mock_command deploy-tool 0
+
+  deploy-tool push --env staging
+  deploy-tool status
+
+  run dybatpho::mock_calls deploy-tool
+  assert_success
+  assert_line --index 0 "push --env staging"
+  assert_line --index 1 "status"
+
+  run dybatpho::mock_calls never-mocked-tool
+  assert_failure
+}
