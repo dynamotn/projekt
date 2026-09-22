@@ -319,6 +319,75 @@ function dybatpho::compare_log_level {
 }
 
 #######################################
+# @description Translate a diagnostic dybatpho itself emitted, using the English
+#   text as its own message id the way gettext does, so that none of the several
+#   hundred `die`, `warn` and `error` call sites in the library has to be
+#   rewritten to use a key.
+#
+#   The hook is inert unless the optional `i18n` module is loaded and
+#   translation of library messages was explicitly turned on, which keeps the
+#   default output byte for byte the same. The guard names an internal helper of
+#   that module on purpose: `dybatpho::` functions are exported and a child
+#   shell inherits them without the internals they call, so guarding on the
+#   public name would take the active branch in a child that never loaded
+#   `i18n`.
+# @arg $1 string The English message
+# @stdout The translation when one exists, otherwise the message unchanged
+#######################################
+function __dybatpho_log_translate {
+  if declare -F __dybatpho_i18n_lookup > /dev/null; then
+    dybatpho::i18n_library_message "${1-}"
+    return 0
+  fi
+  printf '%s' "${1-}"
+}
+
+#######################################
+# @description Translate a piece of dybatpho's own user interface that carries a
+#   value, such as a help heading or a parser error naming the switch it
+#   rejected. Unlike a diagnostic, that text cannot be its own message id once a
+#   value is baked into it, so the caller names a stable key and passes the
+#   English it would otherwise have printed.
+#
+#   `cli` renders its help and parser errors through this helper as well.
+#   `logging` is a core module and owns the hook, so routing the call through
+#   here keeps the optional `i18n` module out of the dependency graph of both.
+# @arg $1 string Message key
+# @arg $2 string The English rendering, already complete
+# @arg $@ string `name=value` bindings for the translated template
+# @stdout The translation when one exists, otherwise $2 unchanged
+#######################################
+function __dybatpho_log_text {
+  local key="${1-}" english="${2-}"
+  shift 2 2> /dev/null || true
+  if declare -F __dybatpho_i18n_lookup > /dev/null; then
+    dybatpho::i18n_library_text "${key}" "${english}" "$@"
+    return 0
+  fi
+  printf '%s' "${english}"
+}
+
+#######################################
+# @description Translate a piece of dybatpho's own user interface that counts
+#   something, letting the target language pick the plural form rather than the
+#   English call site.
+# @arg $1 string Message key
+# @arg $2 number Count
+# @arg $3 string The English rendering, already complete
+# @arg $@ string Further `name=value` bindings for the translated template
+# @stdout The translation when one exists, otherwise $3 unchanged
+#######################################
+function __dybatpho_log_text_n {
+  local key="${1-}" count="${2-}" english="${3-}"
+  shift 3 2> /dev/null || true
+  if declare -F __dybatpho_i18n_lookup > /dev/null; then
+    dybatpho::i18n_library_plural "${key}" "${count}" "${english}" "$@"
+    return 0
+  fi
+  printf '%s' "${english}"
+}
+
+#######################################
 # @description Log a structured diagnostic message with timestamp and call-site information. Also appends a JSON event to `LOG_FILE` when configured, independently of `LOG_FORMAT`.
 # @arg $1 string Log level
 # @arg $2 string Rendered label for the log level
@@ -345,16 +414,9 @@ function __dybatpho_log_inspect {
     indicator="bash:${BASH_LINENO[1]}" # kcov(skip)
   fi
   local color="${5:-}"
-  # dybatpho's own diagnostics can be translated too, using the English text as
-  # the message id the way gettext does, so that none of the several hundred
-  # call sites in the library has to be rewritten to use a key. The hook is
-  # inert unless the `i18n` module is loaded and translation of library messages
-  # was explicitly turned on, which keeps the default output byte for byte the
-  # same. Only the message is passed through it: the level label beside it is
-  # padded to a fixed width for the column separators and must not change.
-  if declare -F dybatpho::i18n_library_message > /dev/null; then
-    message="$(dybatpho::i18n_library_message "${message}")"
-  fi
+  # Only the message is translated here: the level label beside it is padded to
+  # a fixed width for the column separators and must not change.
+  message="$(__dybatpho_log_translate "${message}")"
   __dybatpho_log_write_file "${log_level}" "${indicator}" "${message}"
   if [[ "${LOG_FORMAT}" == "json" ]]; then
     __dybatpho_log_structured "${log_level}" "${indicator}" "${message}" "${color}"
@@ -650,7 +712,11 @@ function dybatpho::print {
 #######################################
 function dybatpho::progress {
   local color="0;3;34"
-  __dybatpho_log_box "╭" "─" "╮" "│" "│" "╰" "╯" "🚀 $*..." stdout "${color}"
+  # The banner helpers compose their text before boxing it, so they never reach
+  # the hook in `__dybatpho_log_inspect` and have to translate their own message.
+  local message
+  message="$(__dybatpho_log_translate "$*")"
+  __dybatpho_log_box "╭" "─" "╮" "│" "│" "╰" "╯" "🚀 ${message}..." stdout "${color}"
 }
 
 #######################################
@@ -676,7 +742,9 @@ function dybatpho::progress_bar {
 #######################################
 function dybatpho::header {
   local color="1;5;30;47"
-  __dybatpho_log_box "╔" "═" "╗" "║" "║" "╚" "╝" "$*" stdout "${color}"
+  local message
+  message="$(__dybatpho_log_translate "$*")"
+  __dybatpho_log_box "╔" "═" "╗" "║" "║" "╚" "╝" "${message}" stdout "${color}"
 }
 
 #######################################
@@ -686,7 +754,12 @@ function dybatpho::header {
 #######################################
 function dybatpho::success {
   local color="1;3;32"
-  __dybatpho_log_box "╭" "─" "╮" "│" "│" "╰" "╯" "✅ DONE: $1" stdout "${color}"
+  # The message is the caller's and is keyed by its English text; the `DONE:`
+  # beside it is the library's own label and gets a stable key of its own.
+  local message label
+  message="$(__dybatpho_log_translate "$1")"
+  label="$(__dybatpho_log_text logging.done "DONE:")"
+  __dybatpho_log_box "╭" "─" "╮" "│" "│" "╰" "╯" "✅ ${label} ${message}" stdout "${color}"
 }
 
 #######################################

@@ -42,6 +42,9 @@ appended to a rotating log file at an independent verbosity level.
 - [`__dybatpho_log_write_file`](#__dybatpho_log_write_file) — Append a structured JSON log event to `LOG_FILE` when it passes `LOG_FILE_LEVEL` filtering, rotating the file first when needed.
 - [`__dybatpho_log_structured`](#__dybatpho_log_structured) — Log a diagnostic event as JSON when `LOG_FORMAT=json`.
 - [`dybatpho::compare_log_level`](#dybatphocompare_log_level) — Return success when a message level should be shown against a threshold.
+- [`__dybatpho_log_translate`](#__dybatpho_log_translate) — Translate a diagnostic dybatpho itself emitted, using the English text as its own message id the way gettext does, so that none of the several hundred `die`, `warn` and `error` call sites in the library has to be rewritten to use a key. The hook is inert unless the optional `i18n` module is loaded and translation of library messages was explicitly turned on, which keeps the default output byte for byte the same. The guard names an internal helper of that module on purpose: `dybatpho::` functions are exported and a child shell inherits them without the internals they call, so guarding on the public name would take the active branch in a child that never loaded `i18n`.
+- [`__dybatpho_log_text`](#__dybatpho_log_text) — Translate a piece of dybatpho's own user interface that carries a value, such as a help heading or a parser error naming the switch it rejected. Unlike a diagnostic, that text cannot be its own message id once a value is baked into it, so the caller names a stable key and passes the English it would otherwise have printed. `cli` renders its help and parser errors through this helper as well. `logging` is a core module and owns the hook, so routing the call through here keeps the optional `i18n` module out of the dependency graph of both.
+- [`__dybatpho_log_text_n`](#__dybatpho_log_text_n) — Translate a piece of dybatpho's own user interface that counts something, letting the target language pick the plural form rather than the English call site.
 - [`__dybatpho_log_inspect`](#__dybatpho_log_inspect) — Log a structured diagnostic message with timestamp and call-site information. Also appends a JSON event to `LOG_FILE` when configured, independently of `LOG_FORMAT`.
 - [`__dybatpho_log_get_terminal_width`](#__dybatpho_log_get_terminal_width) — Return the effective terminal width used by boxed logging helpers.
 - [`__dybatpho_log_string_display_width`](#__dybatpho_log_string_display_width) — Return the display width of a string, accounting for wide Unicode glyphs when possible.
@@ -284,6 +287,85 @@ Return success when a message level should be shown against a threshold.
 
 - `0`: The message level should be emitted
 - `1`: The message level is filtered out
+
+
+---
+
+### `__dybatpho_log_translate`
+
+Translate a diagnostic dybatpho itself emitted, using the English
+  text as its own message id the way gettext does, so that none of the several
+  hundred `die`, `warn` and `error` call sites in the library has to be
+  rewritten to use a key.
+
+
+  The hook is inert unless the optional `i18n` module is loaded and
+  translation of library messages was explicitly turned on, which keeps the
+  default output byte for byte the same. The guard names an internal helper of
+  that module on purpose: `dybatpho::` functions are exported and a child
+  shell inherits them without the internals they call, so guarding on the
+  public name would take the active branch in a child that never loaded
+  `i18n`.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | The English message |
+
+**📤 Output on stdout**
+
+- The translation when one exists, otherwise the message unchanged
+
+
+---
+
+### `__dybatpho_log_text`
+
+Translate a piece of dybatpho's own user interface that carries a
+  value, such as a help heading or a parser error naming the switch it
+  rejected. Unlike a diagnostic, that text cannot be its own message id once a
+  value is baked into it, so the caller names a stable key and passes the
+  English it would otherwise have printed.
+
+
+  `cli` renders its help and parser errors through this helper as well.
+  `logging` is a core module and owns the hook, so routing the call through
+  here keeps the optional `i18n` module out of the dependency graph of both.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Message key |
+| `$2` | string | The English rendering, already complete |
+| `$@` | string | `name=value` bindings for the translated template |
+
+**📤 Output on stdout**
+
+- The translation when one exists, otherwise $2 unchanged
+
+
+---
+
+### `__dybatpho_log_text_n`
+
+Translate a piece of dybatpho's own user interface that counts
+  something, letting the target language pick the plural form rather than the
+  English call site.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Message key |
+| `$2` | number | Count |
+| `$3` | string | The English rendering, already complete |
+| `$@` | string | Further `name=value` bindings for the translated template |
+
+**📤 Output on stdout**
+
+- The translation when one exists, otherwise $3 unchanged
 
 
 ---

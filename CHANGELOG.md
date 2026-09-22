@@ -80,10 +80,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `i18n_bidi_mark`, `i18n_bidi_isolate`, and `i18n_bidi_strip` cover text that
   reads right to left.
 
-  Setting `DYBATPHO_I18N_TRANSLATE_LIBRARY` also routes dybatpho's own
-  diagnostics through the catalog, using each English message as its own message
-  id in the way gettext does. It is off by default, so output is unchanged
-  unless it is asked for.
+  Setting `DYBATPHO_I18N_TRANSLATE_LIBRARY` also routes dybatpho's own output
+  through the catalog, so that translating your strings does not leave half the
+  screen in English. A diagnostic that carries no value is its own message id in
+  the way gettext does — `"curl is not installed" = ...` translates every call
+  site that emits it. Text that does carry one cannot work that way, because no
+  catalog can list `Unrecognized option: --colr`, so those call sites name a
+  stable key instead and `dybatpho::i18n_library_text` fills its placeholders:
+  `cli.heading_usage`, `cli.heading_options`, `cli.heading_commands`,
+  `cli.heading_arguments`, `cli.placeholder_options`, `cli.placeholder_command`,
+  `cli.placeholder_args`, `cli.show_help`, `cli.more_info`, `cli.select`,
+  `cli.select_multiple`, `cli.unrecognized_option`, `cli.invalid_command`,
+  `cli.did_you_mean`, `cli.did_you_mean_one_of`, `cli.argument_required`,
+  `cli.no_argument_allowed`, `cli.missing_required_option`,
+  `cli.validation_error`, `cli.args_none`, `cli.args_range`,
+  `cli.invalid_args_rule`, `cli.invalid_switch_alias`, `cli.invalid_var_name`,
+  `cli.unsupported_shell`, `cli.deprecated_option`, `cli.deprecated_command`,
+  and `logging.done`. `dybatpho::i18n_library_plural` covers the counted ones —
+  `cli.args_exact`, `cli.args_min`, `cli.args_max` — so the target language
+  picks between its plural forms rather than the English call site picking
+  between `argument` and `arguments`. `dybatpho::success`, `dybatpho::progress` and
+  `dybatpho::header` compose their text before boxing it, so they translate it
+  themselves and the border is re-measured around the result.
+
+  All of it is off by default: with `DYBATPHO_I18N_TRANSLATE_LIBRARY` unset,
+  every message above is byte for byte what it was, and the hooks stay inert in
+  a shell that never loaded the module.
 
   ```sh
   . dybatpho/init.sh --modules i18n

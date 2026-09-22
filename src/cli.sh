@@ -450,8 +450,11 @@ function dybatpho::select {
     printf "  %d) %s\n" "$((index + 1))" "${items[index]}" >&2
   done
   while :; do
-    local selection_prompt="Select"
-    dybatpho::is true "${multiple}" && selection_prompt+=" (comma-separated or ranges, e.g. 1-3)"
+    local selection_prompt
+    selection_prompt="$(__dybatpho_log_text cli.select "Select")"
+    dybatpho::is true "${multiple}" \
+      && selection_prompt+="$(__dybatpho_log_text cli.select_multiple \
+        " (comma-separated or ranges, e.g. 1-3)")"
     answer="$(dybatpho::prompt "${selection_prompt}")" || return 1
     selected=()
     local -a answers=()
@@ -719,7 +722,7 @@ function __dybatpho_cli_parse_opt {
                 || __flags="${__flags}${__alias_switch#-}"
               ;;
             *)
-              dybatpho::die "Invalid switch alias: ${1#alias:}" # kcov(skip)
+              dybatpho::die "$(__dybatpho_log_text cli.invalid_switch_alias "Invalid switch alias: ${1#alias:}" "alias=${1#alias:}")" # kcov(skip)
               ;;
           esac
           ;;
@@ -741,7 +744,7 @@ function __dybatpho_cli_parse_opt {
                   || __flags="${__flags}${__opt_alias#-}"
                 ;;
               *)
-                dybatpho::die "Invalid switch alias: ${__opt_alias}" # kcov(skip)
+                dybatpho::die "$(__dybatpho_log_text cli.invalid_switch_alias "Invalid switch alias: ${__opt_alias}" "alias=${__opt_alias}")" # kcov(skip)
                 ;;
             esac
           done
@@ -778,7 +781,7 @@ function __dybatpho_cli_parse_opt {
               __dybatpho_cli_add_switch "'--with-${i}'|'--without-${i}'"
               ;;
             -? | --*) __dybatpho_cli_add_plain_switch "${1#alias:}" ;;
-            *) dybatpho::die "Invalid switch alias: ${1#alias:}" ;; # kcov(skip)
+            *) dybatpho::die "$(__dybatpho_log_text cli.invalid_switch_alias "Invalid switch alias: ${1#alias:}" "alias=${1#alias:}")" ;; # kcov(skip)
           esac
           ;;
         aliases:*)
@@ -796,7 +799,7 @@ function __dybatpho_cli_parse_opt {
                 __dybatpho_cli_add_switch "'--with-${i}'|'--without-${i}'"
                 ;;
               -? | --*) __dybatpho_cli_add_plain_switch "${__opt_alias}" ;;
-              *) dybatpho::die "Invalid switch alias: ${__opt_alias}" ;; # kcov(skip)
+              *) dybatpho::die "$(__dybatpho_log_text cli.invalid_switch_alias "Invalid switch alias: ${__opt_alias}" "alias=${__opt_alias}")" ;; # kcov(skip)
             esac
           done
           ;;
@@ -844,7 +847,8 @@ function __dybatpho_cli_require_shell_name {
   local name="${1:-}"
   [[ "${name}" == "-" ]] && return 0
   [[ "${name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] \
-    || dybatpho::die "Invalid shell variable name: ${name}"
+    || dybatpho::die "$(__dybatpho_log_text cli.invalid_var_name \
+      "Invalid shell variable name: ${name}" "name=${name}")"
 }
 
 #######################################
@@ -1143,13 +1147,17 @@ function __dybatpho_cli_generate_logic {
   # answered with the closest match instead of a bare "Unrecognized option".
   __dybatpho_cli_print_known_candidates
   __dybatpho_cli_print_indent 1 'case $1 in'
-  __dybatpho_cli_print_indent 2 'unknown) set "Unrecognized option: $2$(__dybatpho_cli_suggest_suffix "$2" ${__cli_known_opts[@]+"${__cli_known_opts[@]}"})" "$@" ;;'
-  __dybatpho_cli_print_indent 2 'noarg) set "Does not allow an argument: $2" "$@" ;;'
-  __dybatpho_cli_print_indent 2 'needarg) set "Requires an argument: $2" "$@" ;;'
-  __dybatpho_cli_print_indent 2 'missingopt) set "Missing required option: $2" "$@" ;;'
+  # Each parser error names the switch or command it rejected, so the English
+  # sentence cannot double as its own message id; the generated code calls the
+  # keyed hook and keeps the English as the fallback rendering. The suggestion
+  # suffix translates itself and is appended afterwards.
+  __dybatpho_cli_print_indent 2 'unknown) set "$(__dybatpho_log_text cli.unrecognized_option "Unrecognized option: $2" "option=$2")$(__dybatpho_cli_suggest_suffix "$2" ${__cli_known_opts[@]+"${__cli_known_opts[@]}"})" "$@" ;;'
+  __dybatpho_cli_print_indent 2 'noarg) set "$(__dybatpho_log_text cli.no_argument_allowed "Does not allow an argument: $2" "option=$2")" "$@" ;;'
+  __dybatpho_cli_print_indent 2 'needarg) set "$(__dybatpho_log_text cli.argument_required "Requires an argument: $2" "option=$2")" "$@" ;;'
+  __dybatpho_cli_print_indent 2 'missingopt) set "$(__dybatpho_log_text cli.missing_required_option "Missing required option: $2" "option=$2")" "$@" ;;'
   __dybatpho_cli_print_indent 2 'argcount) set "$2" "$@" ;;'
-  __dybatpho_cli_print_indent 2 'notcmd) set "Invalid command: $2$(__dybatpho_cli_suggest_suffix "$2" ${__cli_known_cmds[@]+"${__cli_known_cmds[@]}"})" "$@" ;;'
-  __dybatpho_cli_print_indent 2 '*) set "Validation error ($1): $2" "$@"'
+  __dybatpho_cli_print_indent 2 'notcmd) set "$(__dybatpho_log_text cli.invalid_command "Invalid command: $2" "command=$2")$(__dybatpho_cli_suggest_suffix "$2" ${__cli_known_cmds[@]+"${__cli_known_cmds[@]}"})" "$@" ;;'
+  __dybatpho_cli_print_indent 2 '*) set "$(__dybatpho_log_text cli.validation_error "Validation error ($1): $2" "kind=$1" "detail=$2")" "$@"'
   __dybatpho_cli_print_indent 1 "esac"
   [ "${__error}" ] && __dybatpho_cli_print_indent 1 "${__error}" '"$@" >&2 || exit $?'
   __dybatpho_cli_print_indent 1 'dybatpho::die "$1" 1'
@@ -1200,7 +1208,7 @@ function __dybatpho_cli_generate_help {
   # A command that declares no help option of its own is still given `--help`
   # and `-h` by the parser, so the generated help lists them too.
   if dybatpho::is false "${__has_help}"; then
-    __help_opt_rows+=("$(__dybatpho_cli_help_row disp "-" "Show this help" -h alias:--help)")
+    __help_opt_rows+=("$(__dybatpho_cli_help_row disp "-" "$(__dybatpho_log_text cli.show_help "Show this help")" -h alias:--help)")
   fi
   __help_mode=false
   # A command that declares a persistent option sees it twice: once replayed as
@@ -1219,22 +1227,27 @@ function __dybatpho_cli_generate_help {
     dybatpho::print ""
     dybatpho::print "${__help_description}"
   fi
+  # Help is the library's own chrome rather than the caller's text, so each
+  # piece carries a stable key instead of being looked up by its English.
   if ((${#__help_arg_rows[@]})); then
     dybatpho::print ""
-    dybatpho::print "Arguments:"
+    dybatpho::print "$(__dybatpho_log_text cli.heading_arguments "Arguments:")"
     __dybatpho_cli_help_render_rows "${__width}" "${__help_arg_rows[@]}"
   fi
   if ((${#__help_cmd_rows[@]})); then
     dybatpho::print ""
-    dybatpho::print "Commands:"
+    dybatpho::print "$(__dybatpho_log_text cli.heading_commands "Commands:")"
     __dybatpho_cli_help_render_rows "${__width}" "${__help_cmd_rows[@]}"
   fi
   dybatpho::print ""
-  dybatpho::print "Options:"
+  dybatpho::print "$(__dybatpho_log_text cli.heading_options "Options:")"
   __dybatpho_cli_help_render_rows "${__width}" ${__help_opt_rows[@]+"${__help_opt_rows[@]}"}
   if ((${#__help_cmd_rows[@]})); then
+    local __invocation="${0##*/}${__help_subcmd:+ ${__help_subcmd}}"
     dybatpho::print ""
-    dybatpho::print "Run '${0##*/}${__help_subcmd:+ ${__help_subcmd}} COMMAND --help' for more information on a command."
+    dybatpho::print "$(__dybatpho_log_text cli.more_info \
+      "Run '${__invocation} COMMAND --help' for more information on a command." \
+      "command=${__invocation}")"
   fi
 }
 
@@ -1246,14 +1259,21 @@ function __dybatpho_cli_generate_help {
 # @stdout Usage line
 #######################################
 function __dybatpho_cli_help_usage {
-  local usage="Usage: ${0##*/}${__help_subcmd:+ ${__help_subcmd}} [OPTIONS]"
-  ((${#__help_cmd_rows[@]})) && usage="${usage} COMMAND"
+  # The label and the three placeholders are translated one by one rather than
+  # as a sentence: their order around the program name is fixed by the shell
+  # syntax being described, so only the words themselves can change.
+  local label placeholder_options
+  label="$(__dybatpho_log_text cli.heading_usage "Usage:")"
+  placeholder_options="$(__dybatpho_log_text cli.placeholder_options "[OPTIONS]")"
+  local usage="${label} ${0##*/}${__help_subcmd:+ ${__help_subcmd}} ${placeholder_options}"
+  ((${#__help_cmd_rows[@]})) \
+    && usage="${usage} $(__dybatpho_log_text cli.placeholder_command "COMMAND")"
   if [ -n "${__help_arg_usage}" ]; then
     usage="${usage} ${__help_arg_usage}"
   else
     case "${__help_args_rule,,}" in
       none | noargs) ;;
-      *) usage="${usage} [ARGS]..." ;;
+      *) usage="${usage} $(__dybatpho_log_text cli.placeholder_args "[ARGS]...")" ;;
     esac
   fi
   printf '%s' "${usage}"
@@ -1438,7 +1458,8 @@ function dybatpho::generate_completion {
   dybatpho::expect_args spec shell -- "$@"
   case "${shell}" in
     bash | zsh | fish) ;;                                          # kcov(skip)
-    *) dybatpho::die "Unsupported completion shell: ${shell}" 1 ;; # kcov(skip)
+    *) dybatpho::die "$(__dybatpho_log_text cli.unsupported_shell \
+      "Unsupported completion shell: ${shell}" "shell=${shell}")" 1 ;; # kcov(skip)
   esac
 
   local cache_file=""
@@ -1845,11 +1866,15 @@ function __dybatpho_cli_suggest_suffix {
   mapfile -t matches < <(dybatpho::cli_suggest "${input}" "$@" || true)
   ((${#matches[@]})) || return 0
   if ((${#matches[@]} == 1)); then
-    printf ". Did you mean '%s'?" "${matches[0]}"
+    __dybatpho_log_text cli.did_you_mean \
+      "$(printf ". Did you mean '%s'?" "${matches[0]}")" \
+      "suggestion=${matches[0]}"
   else
     local joined="" match
     for match in "${matches[@]}"; do joined="${joined}${joined:+, }'${match}'"; done
-    printf ". Did you mean one of %s?" "${joined}"
+    __dybatpho_log_text cli.did_you_mean_one_of \
+      "$(printf ". Did you mean one of %s?" "${joined}")" \
+      "suggestions=${joined}"
   fi
   return 0
 }
@@ -2032,8 +2057,11 @@ function __dybatpho_cli_print_known_candidates {
 #######################################
 function __dybatpho_cli_print_deprecated_warning {
   local __item_type="$1" __item_label="$2" __message="$3"
-  local __warning
-  __dybatpho_cli_assign_quoted __warning "Deprecated ${__item_type}: ${__item_label}. ${__message}"
+  local __warning __english
+  __english="$(__dybatpho_log_text "cli.deprecated_${__item_type}" \
+    "Deprecated ${__item_type}: ${__item_label}. ${__message}" \
+    "item=${__item_label}" "message=${__message}")"
+  __dybatpho_cli_assign_quoted __warning "${__english}"
   __dybatpho_cli_print_indent 4 "dybatpho::warn ${__warning}"
 }
 
@@ -2066,47 +2094,47 @@ function __dybatpho_cli_print_args_check {
     "" | any | arbitrary) return 0 ;;
     none | noargs)
       __dybatpho_cli_print_indent 2 '[ $# -eq 0 ] && {'
-      __dybatpho_cli_print_indent 3 '[ "${__rest_argc}" -eq 0 ] || set "argcount" "Expected no arguments, got ${__rest_argc}"'
+      __dybatpho_cli_print_indent 3 '[ "${__rest_argc}" -eq 0 ] || set "argcount" "$(__dybatpho_log_text cli.args_none "Expected no arguments, got ${__rest_argc}" "got=${__rest_argc}")"'
       __dybatpho_cli_print_indent 2 '}'
       ;;
     exact:*)
       expected="${rule#exact:}"
-      [[ "${expected}" =~ ^[0-9]+$ ]] || dybatpho::die "Invalid args rule: ${rule}"
+      [[ "${expected}" =~ ^[0-9]+$ ]] || dybatpho::die "$(__dybatpho_log_text cli.invalid_args_rule "Invalid args rule: ${rule}" "rule=${rule}")"
       noun="arguments"
       [ "${expected}" -eq 1 ] && noun="argument"
       __dybatpho_cli_print_indent 2 '[ $# -eq 0 ] && {'
-      __dybatpho_cli_print_indent 3 "[ \"\${__rest_argc}\" -eq ${expected} ] || set \"argcount\" \"Expected exactly ${expected} ${noun}, got \${__rest_argc}\""
+      __dybatpho_cli_print_indent 3 "[ \"\${__rest_argc}\" -eq ${expected} ] || set \"argcount\" \"\$(__dybatpho_log_text_n cli.args_exact ${expected} \"Expected exactly ${expected} ${noun}, got \${__rest_argc}\" \"expected=${expected}\" \"got=\${__rest_argc}\")\""
       __dybatpho_cli_print_indent 2 '}'
       ;;
     min:*)
       min="${rule#min:}"
-      [[ "${min}" =~ ^[0-9]+$ ]] || dybatpho::die "Invalid args rule: ${rule}"
+      [[ "${min}" =~ ^[0-9]+$ ]] || dybatpho::die "$(__dybatpho_log_text cli.invalid_args_rule "Invalid args rule: ${rule}" "rule=${rule}")"
       noun="arguments"
       [ "${min}" -eq 1 ] && noun="argument"
       __dybatpho_cli_print_indent 2 '[ $# -eq 0 ] && {'
-      __dybatpho_cli_print_indent 3 "[ \"\${__rest_argc}\" -ge ${min} ] || set \"argcount\" \"Expected at least ${min} ${noun}, got \${__rest_argc}\""
+      __dybatpho_cli_print_indent 3 "[ \"\${__rest_argc}\" -ge ${min} ] || set \"argcount\" \"\$(__dybatpho_log_text_n cli.args_min ${min} \"Expected at least ${min} ${noun}, got \${__rest_argc}\" \"expected=${min}\" \"got=\${__rest_argc}\")\""
       __dybatpho_cli_print_indent 2 '}'
       ;;
     max:*)
       max="${rule#max:}"
-      [[ "${max}" =~ ^[0-9]+$ ]] || dybatpho::die "Invalid args rule: ${rule}"
+      [[ "${max}" =~ ^[0-9]+$ ]] || dybatpho::die "$(__dybatpho_log_text cli.invalid_args_rule "Invalid args rule: ${rule}" "rule=${rule}")"
       noun="arguments"
       [ "${max}" -eq 1 ] && noun="argument"
       __dybatpho_cli_print_indent 2 '[ $# -eq 0 ] && {'
-      __dybatpho_cli_print_indent 3 "[ \"\${__rest_argc}\" -le ${max} ] || set \"argcount\" \"Expected at most ${max} ${noun}, got \${__rest_argc}\""
+      __dybatpho_cli_print_indent 3 "[ \"\${__rest_argc}\" -le ${max} ] || set \"argcount\" \"\$(__dybatpho_log_text_n cli.args_max ${max} \"Expected at most ${max} ${noun}, got \${__rest_argc}\" \"expected=${max}\" \"got=\${__rest_argc}\")\""
       __dybatpho_cli_print_indent 2 '}'
       ;;
     range:*)
       min="${rule#range:}"
       max="${min#*:}"
       min="${min%%:*}"
-      [[ "${min}" =~ ^[0-9]+$ && "${max}" =~ ^[0-9]+$ && "${min}" -le "${max}" ]] || dybatpho::die "Invalid args rule: ${rule}"
+      [[ "${min}" =~ ^[0-9]+$ && "${max}" =~ ^[0-9]+$ && "${min}" -le "${max}" ]] || dybatpho::die "$(__dybatpho_log_text cli.invalid_args_rule "Invalid args rule: ${rule}" "rule=${rule}")"
       __dybatpho_cli_print_indent 2 '[ $# -eq 0 ] && {'
-      __dybatpho_cli_print_indent 3 "[ \"\${__rest_argc}\" -ge ${min} ] && [ \"\${__rest_argc}\" -le ${max} ] || set \"argcount\" \"Expected between ${min} and ${max} arguments, got \${__rest_argc}\""
+      __dybatpho_cli_print_indent 3 "[ \"\${__rest_argc}\" -ge ${min} ] && [ \"\${__rest_argc}\" -le ${max} ] || set \"argcount\" \"\$(__dybatpho_log_text cli.args_range \"Expected between ${min} and ${max} arguments, got \${__rest_argc}\" \"min=${min}\" \"max=${max}\" \"got=\${__rest_argc}\")\""
       __dybatpho_cli_print_indent 2 '}'
       ;;
     *)
-      dybatpho::die "Invalid args rule: ${rule}" # kcov(skip)
+      dybatpho::die "$(__dybatpho_log_text cli.invalid_args_rule "Invalid args rule: ${rule}" "rule=${rule}")" # kcov(skip)
       ;;
   esac
 }

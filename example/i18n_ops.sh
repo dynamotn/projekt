@@ -3,14 +3,16 @@
 # @brief Example showing translation and locale-aware formatting
 # @description Demonstrates dybatpho::i18n_init, i18n_t, i18n_tn, i18n_number,
 #   i18n_currency, i18n_percent, i18n_bytes, i18n_date, i18n_time, i18n_relative,
-#   i18n_direction, the bidi helpers, i18n_register_* and i18n_lint
+#   i18n_direction, the bidi helpers, i18n_register_*, i18n_lint, and the
+#   i18n_library_text / i18n_library_plural hooks that translate the library's
+#   own help, banners, and parser errors
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # `table` and `text` are not needed by the i18n module; this demo asks for them
 # only to lay its output out. Aligning columns that contain Japanese or Arabic
 # needs a display width rather than a character count, which is what
 # `dybatpho::table_align` measures and a plain `printf '%-20s'` does not.
 # shellcheck source=init.sh
-. "${SCRIPTDIR}/../init.sh" --modules i18n table text
+. "${SCRIPTDIR}/../init.sh" --modules i18n table text cli
 
 dybatpho::register_common_handlers
 
@@ -41,6 +43,22 @@ deploy.start = Đang triển khai {app} lên {env}
 deploy.files[other] = Đã tải lên {count} tệp
 # `deploy.done` is deliberately left untranslated so i18n_lint has something
 # to report at the end of this demo.
+
+# dybatpho's own interface. The keys below are the library's, not this script's:
+# translating them is what stops a CLI reading half in Vietnamese and half in
+# English. A short key is used wherever the English carries no value, and the
+# English sentence itself is the key for a diagnostic that carries none either.
+cli.heading_usage = Cách dùng:
+cli.heading_options = Tùy chọn:
+cli.heading_commands = Lệnh:
+cli.placeholder_options = [TÙY-CHỌN]
+cli.placeholder_args = [ĐỐI-SỐ]...
+cli.show_help = Hiện trợ giúp này
+cli.unrecognized_option = Tùy chọn không hợp lệ: {option}
+cli.did_you_mean = . Ý bạn là '{suggestion}'?
+cli.args_exact = Cần đúng {count} đối số, nhận được {got}
+logging.done = XONG:
+"Deployment finished" = Đã triển khai xong
 CATALOG
 
   export DYBATPHO_I18N_PATH="${WORKDIR}/locale"
@@ -227,6 +245,56 @@ SOURCE
   dybatpho::info "be reported too, which is the failure nothing else catches"
 }
 
+# Run one call with the library's own text routed through the catalog. The
+# subshell is the point: the rest of the demo keeps printing in English, and
+# nothing set here reaches the caller. ShellCheck reads that confinement as a
+# lost assignment, which is exactly the behavior being relied on.
+# shellcheck disable=SC2030,SC2031
+function _translated {
+  (
+    export DYBATPHO_I18N_TRANSLATE_LIBRARY=true
+    "$@"
+  )
+}
+
+function _demo_library_ui {
+  dybatpho::header "THE LIBRARY'S OWN INTERFACE"
+  dybatpho::info "Translating your strings still leaves dybatpho's half of the"
+  dybatpho::info "screen in English: 'Usage:', 'Options:', 'Unrecognized option'."
+  dybatpho::info "DYBATPHO_I18N_TRANSLATE_LIBRARY routes those through the catalog"
+  dybatpho::info "too. It is off by default, so nothing changes until it is asked for."
+
+  dybatpho::i18n_reset
+  dybatpho::i18n_init vi_VN
+
+  dybatpho::print ""
+  dybatpho::print "  Generated help, before and after:"
+  (dybatpho::generate_help _demo_spec) | dybatpho::text_indent - "    "
+  dybatpho::print ""
+  _translated dybatpho::generate_help _demo_spec | dybatpho::text_indent - "    "
+
+  dybatpho::print ""
+  dybatpho::print "  A rejected switch. The English names the switch, so it cannot"
+  dybatpho::print "  be its own message id; the call site passes a key instead:"
+  (dybatpho::generate_from_spec _demo_spec --dst /tmp) 2>&1 \
+    | dybatpho::text_indent - "    " || true
+  _translated dybatpho::generate_from_spec _demo_spec --dst /tmp 2>&1 \
+    | dybatpho::text_indent - "    " || true
+
+  dybatpho::print ""
+  dybatpho::print "  A banner, whose label and message are translated separately:"
+  _translated dybatpho::success "Deployment finished"
+  dybatpho::info "The banner re-measures its border around the translated text,"
+  dybatpho::info "which is why the box is not the width it was in English"
+}
+
+# The spec whose help and errors the section above renders. It is deliberately
+# plain: everything interesting in that output belongs to the library.
+function _demo_spec {
+  dybatpho::opts::setup "Deploy an application" ARGS action:"true"
+  dybatpho::opts::param "Where to deploy" DEST -d --dest
+}
+
 function _main {
   _setup
   _demo_translate
@@ -239,6 +307,7 @@ function _main {
   _demo_direction
   _demo_register
   _demo_tooling
+  _demo_library_ui
   dybatpho::success "Internationalization and localization demo complete"
 }
 

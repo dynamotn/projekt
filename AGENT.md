@@ -227,8 +227,20 @@ edge would drag that module in and, for a core module, create a forbidden
 dependency on an optional one. Today this applies to the `metrics` hooks in
 `helpers`, `logging`, and `network`, and to the `secret` masking hook in
 `logging`, which is why the snippet reports `helpers -> metrics` while
-`__dybatpho_module_deps` says nothing about it. Use the same `declare -F` guard
-for any future hook of this kind.
+`__dybatpho_module_deps` says nothing about it.
+
+The `i18n` hooks work the same way and are why the snippet also reports
+`logging -> i18n`: `logging` routes its diagnostics, its banners, and the help
+and parser errors `cli` asks it to render through
+`dybatpho::i18n_library_message`, `dybatpho::i18n_library_text`, and
+`dybatpho::i18n_library_plural`, all behind a guard on
+`__dybatpho_i18n_lookup`. `logging` is a core module, so recording that edge
+would make a core module depend on an optional one. `cli` reaches the same hooks
+through `__dybatpho_log_text` rather than naming `i18n` itself, which is
+deliberate: it keeps a second module out of the scan and leaves one place where
+the guard has to be right.
+
+Use the same `declare -F` guard for any future hook of this kind.
 
 **The guard must name an internal `__dybatpho_` helper of the other module, never
 a public `dybatpho::` function.** Public functions are exported and a child shell
@@ -298,8 +310,15 @@ affect editor navigation.
   never generated, and `printf '%f'` follows `LC_NUMERIC` — so names and
   patterns come from the module's own tables and fractional values are built
   from digit strings. A missing translation degrades to the key rather than
-  stopping a script, and the hook that translates the library's own diagnostics
-  stays inert unless it is explicitly turned on.
+  stopping a script, and the hooks that translate the library's own output stay
+  inert unless they are explicitly turned on. Which hook a piece of text takes
+  follows from whether it carries a value: a diagnostic that does not, such as
+  `curl is not installed`, is its own message id, while text that does — a help
+  heading, `Unrecognized option: --colr`, a rejected argument count — is named by
+  a stable `cli.*` or `logging.*` key, with the English the call site already
+  built kept as the fallback. Text that counts something goes through the plural
+  hook, so the target language picks the form rather than the English test for
+  one.
 - **Observability module** (`metrics`): recording must never change what a
   script does, so a timing helper returns the command's exit code unchanged and
   the hooks in `helpers`, `logging`, and `network` stay inert unless the module

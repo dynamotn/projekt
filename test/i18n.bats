@@ -1326,3 +1326,174 @@ SOURCE
   run -0 bash "${script}"
   assert_output "a message"
 }
+
+# ---------------------------------------------------------------------------
+# translating dybatpho's own user interface
+# ---------------------------------------------------------------------------
+
+@test "a keyed library string is left in English by default" {
+  run -0 dybatpho::i18n_library_text cli.heading_options "Options:"
+  assert_output "Options:"
+}
+
+@test "a keyed library string is translated once that is turned on" {
+  local file
+  file="$(_catalog vi.msg 'cli.heading_options = Tùy chọn:')"
+  dybatpho::i18n_load vi "${file}"
+  dybatpho::i18n_set_locale vi
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 \
+    dybatpho::i18n_library_text cli.heading_options "Options:"
+  assert_output "Tùy chọn:"
+}
+
+@test "a keyed library string fills the placeholders the translation uses" {
+  local file
+  file="$(_catalog vi.msg 'cli.unrecognized_option = Tùy chọn không hợp lệ: {option}')"
+  dybatpho::i18n_load vi "${file}"
+  dybatpho::i18n_set_locale vi
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 \
+    dybatpho::i18n_library_text cli.unrecognized_option \
+    "Unrecognized option: --colr" "option=--colr"
+  assert_output "Tùy chọn không hợp lệ: --colr"
+}
+
+@test "an untranslated key keeps the English the call site already built" {
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 \
+    dybatpho::i18n_library_text cli.no_such_key "Unrecognized option: --colr" \
+    "option=--colr"
+  assert_output "Unrecognized option: --colr"
+}
+
+@test "a counted library string takes the plural form of the target language" {
+  # Vietnamese has one form where English has two, and the English call site
+  # has already picked the wrong one for it.
+  local file
+  file="$(_catalog vi.msg 'cli.args_exact = Cần đúng {count} đối số')"
+  dybatpho::i18n_load vi "${file}"
+  dybatpho::i18n_set_locale vi
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 \
+    dybatpho::i18n_library_plural cli.args_exact 1 "Expected exactly 1 argument"
+  assert_output "Cần đúng 1 đối số"
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 \
+    dybatpho::i18n_library_plural cli.args_exact 5 "Expected exactly 5 arguments"
+  assert_output "Cần đúng 5 đối số"
+}
+
+@test "a counted library string chooses between the forms a catalog declares" {
+  local file
+  file="$(_catalog en.msg \
+    'cli.args_exact[one] = Expected exactly {count} argument' \
+    'cli.args_exact[other] = Expected exactly {count} arguments')"
+  dybatpho::i18n_load en "${file}"
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 \
+    dybatpho::i18n_library_plural cli.args_exact 1 "fallback"
+  assert_output "Expected exactly 1 argument"
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 \
+    dybatpho::i18n_library_plural cli.args_exact 3 "fallback"
+  assert_output "Expected exactly 3 arguments"
+}
+
+@test "a counted library string keeps the English when the count is not a number" {
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 \
+    dybatpho::i18n_library_plural cli.args_exact "many" "Expected exactly 2 arguments"
+  assert_output "Expected exactly 2 arguments"
+}
+
+@test "the keyed hooks survive a shell that never sourced the module" {
+  local script="${BATS_TEST_TMPDIR}/detached_keyed.sh"
+  {
+    printf 'set -euo pipefail\n'
+    printf 'unset DYBATPHO_I18N_TRANSLATE_LIBRARY\n'
+    printf 'dybatpho::i18n_library_text a.key "in English"\n'
+    printf "printf '|'\n"
+    printf 'dybatpho::i18n_library_plural a.key 2 "two of them"\n'
+  } > "${script}"
+  run -0 bash "${script}"
+  assert_output "in English|two of them"
+}
+
+# ---------------------------------------------------------------------------
+# the logging banners, which compose their text before boxing it
+# ---------------------------------------------------------------------------
+
+@test "the success banner keeps its English label and message by default" {
+  run -0 dybatpho::success "Repository lint passed"
+  assert_output --partial "DONE: Repository lint passed"
+}
+
+@test "the success banner translates both its label and its message" {
+  local file
+  file="$(_catalog vi.msg \
+    'logging.done = XONG:' \
+    '"Repository lint passed" = Kiểm tra kho mã đã qua')"
+  dybatpho::i18n_load vi "${file}"
+  dybatpho::i18n_set_locale vi
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 dybatpho::success "Repository lint passed"
+  assert_output --partial "XONG: Kiểm tra kho mã đã qua"
+}
+
+@test "the progress and header banners are translated too" {
+  local file
+  file="$(_catalog vi.msg \
+    '"Building the bundle" = Đang dựng gói' \
+    '"Release" = Phát hành')"
+  dybatpho::i18n_load vi "${file}"
+  dybatpho::i18n_set_locale vi
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 dybatpho::progress "Building the bundle"
+  assert_output --partial "Đang dựng gói"
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 dybatpho::header "Release"
+  assert_output --partial "Phát hành"
+}
+
+# ---------------------------------------------------------------------------
+# the cli help and parser errors
+# ---------------------------------------------------------------------------
+
+_i18n_spec() {
+  dybatpho::opts::setup "A tool" ARGS action:"true"
+  dybatpho::opts::param "Where to" DEST -d --dest
+}
+
+@test "generated help is in English by default" {
+  run -0 dybatpho::generate_help _i18n_spec
+  assert_output --partial "Usage:"
+  assert_output --partial "Options:"
+  assert_output --partial "[OPTIONS]"
+  assert_output --partial "Show this help"
+}
+
+@test "generated help renders every heading and placeholder from the catalog" {
+  local file
+  file="$(_catalog vi.msg \
+    'cli.heading_usage = Cách dùng:' \
+    'cli.heading_options = Tùy chọn:' \
+    'cli.placeholder_options = [TÙY-CHỌN]' \
+    'cli.placeholder_args = [ĐỐI-SỐ]...' \
+    'cli.show_help = Hiện trợ giúp này')"
+  dybatpho::i18n_load vi "${file}"
+  dybatpho::i18n_set_locale vi
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run -0 dybatpho::generate_help _i18n_spec
+  assert_output --partial "Cách dùng:"
+  assert_output --partial "[TÙY-CHỌN]"
+  assert_output --partial "[ĐỐI-SỐ]..."
+  assert_output --partial "Tùy chọn:"
+  assert_output --partial "Hiện trợ giúp này"
+}
+
+@test "a rejected switch is reported through its key, with the switch filled in" {
+  # The English sentence carries the switch, so it cannot be its own message id;
+  # this is the case the keyed hook exists for.
+  local file
+  file="$(_catalog vi.msg 'cli.unrecognized_option = Tùy chọn không hợp lệ: {option}')"
+  dybatpho::i18n_load vi "${file}"
+  dybatpho::i18n_set_locale vi
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run --separate-stderr -1 \
+    dybatpho::generate_from_spec _i18n_spec --dst x
+  assert_regex "${stderr}" "Tùy chọn không hợp lệ: --dst"
+  assert_regex "${stderr}" "--dest"
+}
+
+@test "a rejected switch stays in English by default" {
+  run --separate-stderr -1 dybatpho::generate_from_spec _i18n_spec --dst x
+  assert_regex "${stderr}" "Unrecognized option: --dst"
+}

@@ -1019,6 +1019,86 @@ function dybatpho::i18n_library_message {
   return 0
 }
 
+#######################################
+# @description Translate a piece of dybatpho's own user interface that carries a
+#   value. The English text a call site already builds cannot serve as the
+#   message id here, because the value is baked into it and no catalog can list
+#   `Unrecognized option: --colr`. So the caller names a stable key and hands
+#   over the English rendering it would otherwise have printed; the key is what
+#   translators see, and the English is what is printed whenever the hook is off,
+#   the module is absent, or the key is untranslated.
+# @arg $1 string Message key
+# @arg $2 string The English rendering, already complete
+# @arg $@ string `name=value` bindings, or bare positional values
+# @stdout The translation with its placeholders filled, otherwise $2 unchanged
+#######################################
+function dybatpho::i18n_library_text {
+  local key english
+  key="${1-}"
+  english="${2-}"
+  shift 2 2> /dev/null || true
+  if ! dybatpho::is true "${DYBATPHO_I18N_TRANSLATE_LIBRARY:-false}"; then
+    printf '%s' "${english}"
+    return 0
+  fi
+  # Reachable from a child shell that inherited this exported function without
+  # the module's internals; see `dybatpho::i18n_library_message`.
+  if ! declare -F __dybatpho_i18n_lookup > /dev/null; then
+    printf '%s' "${english}"
+    return 0
+  fi
+  local template rendered
+  if __dybatpho_i18n_lookup template "${key}"; then
+    __dybatpho_i18n_interpolate rendered "${template}" "$@"
+    printf '%s' "${rendered}"
+    return 0
+  fi
+  printf '%s' "${english}"
+  return 0
+}
+
+#######################################
+# @description Translate a piece of dybatpho's own user interface that counts
+#   something, choosing the plural form the count takes in the target language.
+#   This is the half a generated English string cannot express: the call site
+#   picks between `argument` and `arguments` by testing for one, which is the
+#   wrong question in Russian and a question Vietnamese never asks.
+# @arg $1 string Message key
+# @arg $2 number Count
+# @arg $3 string The English rendering, already complete
+# @arg $@ string Further `name=value` bindings, or bare positional values
+# @stdout The translation with `{count}` filled, otherwise $3 unchanged
+#######################################
+function dybatpho::i18n_library_plural {
+  local key count english
+  key="${1-}"
+  count="${2-}"
+  english="${3-}"
+  shift 3 2> /dev/null || true
+  if ! dybatpho::is true "${DYBATPHO_I18N_TRANSLATE_LIBRARY:-false}"; then
+    printf '%s' "${english}"
+    return 0
+  fi
+  if ! declare -F __dybatpho_i18n_lookup > /dev/null; then
+    printf '%s' "${english}"
+    return 0
+  fi
+  [[ "${count}" =~ ^-?[0-9]+$ ]] || {
+    printf '%s' "${english}"
+    return 0
+  }
+  local template rendered grouped
+  grouped="$(dybatpho::i18n_number "${count}" 0 "$(dybatpho::i18n_locale)")"
+  if __dybatpho_i18n_lookup template "${key}" "${count}"; then
+    __dybatpho_i18n_interpolate rendered "${template}" \
+      "count=${grouped}" "n=${grouped}" "$@"
+    printf '%s' "${rendered}"
+    return 0
+  fi
+  printf '%s' "${english}"
+  return 0
+}
+
 # Number symbols per locale, keyed `<locale>.<field>`. `grouping` is the primary
 # group size, optionally followed by `;` and the size of every further group:
 # `3;2` is the Indian lakh system, where 12345678 reads 1,23,45,678. Holding it
