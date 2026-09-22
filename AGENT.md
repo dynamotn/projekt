@@ -119,6 +119,7 @@ changed examples.
 | `os.sh` | OS, architecture, and environment detection | `test/os.bats`, `doc/os.md`, `doc/spec/os.md` |
 | `process.sh` | Traps, cleanup, dry-run, and process lifecycle | `test/process.bats`, `doc/process.md`, `doc/spec/process.md` |
 | `pkg.sh` | Package manager detection and guarded dependency installation | `test/pkg.bats`, `doc/pkg.md`, `doc/spec/pkg.md` |
+| `release.sh` | Version bumping from commits, changelog generation, per-platform packaging, checksums, and signing | `test/release.bats`, `doc/release.md`, `doc/spec/release.md` |
 | `safety.sh` | Guards for destructive operations: removal, overwrite, extraction, and system changes | `test/safety.bats`, `doc/safety.md`, `doc/spec/safety.md` |
 | `secret.sh` | Read, mask, and store secrets safely | `test/secret.bats`, `doc/secret.md`, `doc/spec/secret.md` |
 | `semver.sh` | Semantic version parsing, comparison, and validation | `test/semver.bats`, `doc/semver.md`, `doc/spec/semver.md` |

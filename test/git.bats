@@ -388,3 +388,37 @@ function _append_git_commit {
 
   unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
 }
+
+@test "dybatpho::git_latest_tag orders tags by version, not as strings" {
+  local repo_path
+  repo_path="$(_new_git_repo_path)"
+  _create_git_repo "${repo_path}" main
+  for version in v1.0.0 v2.0.0 v9.0.0 v10.0.0; do
+    _append_git_commit "${repo_path}" "towards ${version}"
+    git -C "${repo_path}" tag "${version}"
+  done
+  # A string sort would put v9.0.0 on top; a version sort puts v10.0.0 there.
+  assert_equal "$(dybatpho::git_latest_tag "${repo_path}")" "v10.0.0"
+}
+
+@test "dybatpho::git_latest_tag honors a tag pattern" {
+  local repo_path
+  repo_path="$(_new_git_repo_path)"
+  _create_git_repo "${repo_path}" main
+  git -C "${repo_path}" tag v1.0.0
+  _append_git_commit "${repo_path}" "nightly"
+  git -C "${repo_path}" tag nightly-2026-01-01
+  assert_equal "$(dybatpho::git_latest_tag "${repo_path}" 'v*')" "v1.0.0"
+  assert_equal "$(dybatpho::git_latest_tag "${repo_path}" 'nightly-*')" "nightly-2026-01-01"
+}
+
+@test "dybatpho::git_latest_tag reports failure when no tag matches" {
+  local repo_path
+  repo_path="$(_new_git_repo_path)"
+  _create_git_repo "${repo_path}" main
+  run -1 dybatpho::git_latest_tag "${repo_path}"
+  assert_output ""
+  git -C "${repo_path}" tag v1.0.0
+  run -1 dybatpho::git_latest_tag "${repo_path}" 'release-*'
+  assert_output ""
+}

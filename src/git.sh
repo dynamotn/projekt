@@ -267,6 +267,30 @@ function dybatpho::git_changed_files {
 }
 
 #######################################
+# @description Print the highest version tag in a repository.
+#   Tags are ordered the way versions compare, not the way strings do, so `v10`
+#   sorts above `v9` and the newest release is the first line.
+# @example
+#   if previous="$(dybatpho::git_latest_tag "." "v*")"; then
+#     dybatpho::info "Releasing on top of ${previous}"
+#   fi
+#
+# @arg $1 string Optional repository path, default is `.`
+# @arg $2 string Optional tag glob to match, default is every tag
+# @stdout The highest matching tag
+# @exitcode 0 A matching tag exists
+# @exitcode 1 The repository has no matching tag
+#######################################
+function dybatpho::git_latest_tag {
+  local repo_path pattern tag
+  repo_path="$(__dybatpho_git_repo_path "${1:-.}")" || return $?
+  pattern="${2:-*}"
+  tag="$(__dybatpho_git "${repo_path}" tag --list "${pattern}" --sort=-v:refname | head -n 1)"
+  [[ -n "${tag}" ]] || return 1
+  printf '%s\n' "${tag}"
+}
+
+#######################################
 # @description List tags that contain a commit.
 # @arg $1 string Optional repository path, default is `.`
 # @arg $2 string Optional commit-ish, default is `HEAD`

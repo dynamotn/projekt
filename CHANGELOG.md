@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`release` module** — cut a release from the commits since the last tag.
+  `dybatpho::release_next_version` derives the version from
+  [Conventional Commits](https://www.conventionalcommits.org) (a breaking change
+  moves the major, `feat` the minor, `fix` and `perf` the patch, anything else
+  moves nothing and is reported as nothing to release);
+  `release_changelog` writes the matching entry, grouped by what changed;
+  `release_artifact_name` and `release_package` produce one artifact per platform
+  under the `name_version_os_arch` layout Go release tooling established, a zip
+  for Windows and a tarball elsewhere; `release_checksums` writes a `SHA256SUMS`
+  file that `sha256sum -c` verifies; and `release_sign` signs it with `gpg`, or
+  with any other tool through `DYBATPHO_RELEASE_SIGN_CMD`.
+
+  The module produces files and never contacts a forge, so credentials for
+  pushing a tag or creating a release stay with the caller.
+
+  ```sh
+  . dybatpho/init.sh --modules release
+  version="$(dybatpho::release_next_version .)" || exit 0
+  dybatpho::release_changelog . "$(dybatpho::git_latest_tag . 'v*')" HEAD "${version}"
+  dybatpho::release_package ./dist/linux_amd64 ./release mytool "${version}" linux amd64
+  dybatpho::release_sign "$(dybatpho::release_checksums ./release)"
+  ```
+
+- `dybatpho::git_latest_tag` returns the highest version tag in a repository,
+  ordering tags as versions rather than as strings, so `v10.0.0` outranks
+  `v9.0.0`.
+
 - **`metrics` module** — measure a script and export the result to Prometheus.
   `dybatpho::metrics_time` wraps a command, records how long it took and whether
   it failed, and returns its exit code unchanged; `metrics_timer_start` and

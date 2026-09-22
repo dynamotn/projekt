@@ -43,6 +43,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `notification.md`
 - `secret.md`
 - `safety.md`
+- `release.md`
 - `metrics.md`
 - `ai.md`
 - `agent.md`
@@ -73,6 +74,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `src/secret.sh` -> `secret.md`
 - `src/testing.sh` -> `testing.md`
 - `src/safety.sh` -> `safety.md`
+- `src/release.sh` -> `release.md`
 - `src/metrics.sh` -> `metrics.md`
 - `src/ai.sh` -> `ai.md`
 - `src/agent.sh` -> `agent.md`

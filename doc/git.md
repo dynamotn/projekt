@@ -33,6 +33,7 @@ information, listing changed files, and querying commit/tag relationships.
 - [`dybatpho::git_remote_url`](#dybatphogit_remote_url) — Return the URL for a Git remote.
 - [`dybatpho::git_has_remote`](#dybatphogit_has_remote) — Return success when a named remote exists.
 - [`dybatpho::git_changed_files`](#dybatphogit_changed_files) — List changed files relative to a base ref, including untracked.
+- [`dybatpho::git_latest_tag`](#dybatphogit_latest_tag) — Print the highest version tag in a repository. Tags are ordered the way versions compare, not the way strings do, so `v10` sorts above `v9` and the newest release is the first line.
 - [`dybatpho::git_tags_containing`](#dybatphogit_tags_containing) — List tags that contain a commit.
 
 <a id="tips"></a>
@@ -351,6 +352,40 @@ List changed files relative to a base ref, including untracked.
 **📤 Output on stdout**
 
 - One changed file path per line, sorted and deduplicated
+
+
+---
+
+### `dybatpho::git_latest_tag`
+
+Print the highest version tag in a repository.
+  Tags are ordered the way versions compare, not the way strings do, so `v10`
+  sorts above `v9` and the newest release is the first line.
+
+**🧪 Example**
+
+```bash
+if previous="$(dybatpho::git_latest_tag "." "v*")"; then
+  dybatpho::info "Releasing on top of ${previous}"
+fi
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Optional repository path, default is `.` |
+| `$2` | string | Optional tag glob to match, default is every tag |
+
+**📤 Output on stdout**
+
+- The highest matching tag
+
+**🚦 Exit codes**
+
+- `0`: A matching tag exists
+- `1`: The repository has no matching tag
 
 
 ---
