@@ -60,7 +60,7 @@ export DYBATPHO_DIR
 # @env DYBATPHO_CORE_MODULES string Modules that call each other and are always loaded
 DYBATPHO_CORE_MODULES="string logging helpers process file secret"
 # @env DYBATPHO_OPTIONAL_MODULES string Modules that are only loaded when requested
-DYBATPHO_OPTIONAL_MODULES="array text lock network date json config archive git table cli os notification semver testing safety metrics ai agent pkg release parallel"
+DYBATPHO_OPTIONAL_MODULES="array text lock network date json config archive git table cli os notification semver testing safety metrics ai agent pkg release parallel doctor"
 # The loaded set describes the current shell, so it is deliberately neither
 # exported nor seeded from the environment. A child shell that sources `init.sh`
 # again has to source the module files itself: only `dybatpho::` functions cross
@@ -68,6 +68,10 @@ DYBATPHO_OPTIONAL_MODULES="array text lock network date json config archive git 
 # inheriting the list would leave those functions half-defined.
 # @env DYBATPHO_LOADED_MODULES string Modules loaded so far, in load order
 DYBATPHO_LOADED_MODULES=""
+# The version is a property of this copy of the library rather than of the
+# shell, so a value already in the environment is honored as an override.
+# @env DYBATPHO_VERSION string Cached library version, see `dybatpho::version`
+DYBATPHO_VERSION="${DYBATPHO_VERSION-}"
 # Modules whose dependencies are still being resolved, used to stop a
 # dependency cycle from recursing forever.
 __dybatpho_loading_modules=""
@@ -155,6 +159,69 @@ function __dybatpho_load_module {
 #######################################
 function __dybatpho_export_functions {
   eval "$(declare -F | sed -e 's/-f /-fx /' | grep 'x dybatpho::')"
+}
+
+#######################################
+# @description Print the version of the library this shell loaded, including the
+#   commit it is at.
+#   The release version is read from the `VERSION` file next to `init.sh`, which
+#   is what a release stamps and what a vendored or bundled copy carries. When
+#   the copy is a Git working tree, the short commit is appended as SemVer build
+#   metadata — `2.0.0+af745ff`, and `+af745ff.dirty` when the tree has
+#   uncommitted changes — so a bug report names the exact code that ran rather
+#   than the last tag before it. A checkout without a `VERSION` file falls back
+#   to `git describe`, which carries the commit of its own. Only the library's
+#   own repository is consulted: a copy vendored inside another project reports
+#   its stamped version alone, because that project's commits say nothing about
+#   which dybatpho is installed.
+# @example
+#   . dybatpho/init.sh
+#   dybatpho::version   # 2.0.0+af745ff
+#
+# @env DYBATPHO_VERSION string Version to report, resolved on first call and cached; set it to override the resolution
+# @set DYBATPHO_VERSION
+# @stdout The version, without a leading `v`, or `unknown` when it cannot be resolved
+# @exitcode 0 Always
+#######################################
+function dybatpho::version {
+  if [[ -z "${DYBATPHO_VERSION}" ]]; then
+    local version=""
+    local file="${DYBATPHO_DIR}/VERSION"
+    if [[ -r "${file}" ]]; then
+      # `read` reports failure on a last line without a newline, and the value
+      # it stored is still the one wanted.
+      read -r version < "${file}" || true
+    fi
+    # Only this library's own repository may name a commit. A copy vendored
+    # inside another project sits in *that* project's working tree, whose
+    # commits say nothing about which dybatpho is installed.
+    # An empty prefix means this directory *is* the repository root, which the
+    # library's own checkout is and a vendored copy in a subdirectory is not.
+    # Comparing prefixes rather than paths keeps the test working when the
+    # checkout is reached through a symlink.
+    local own_repo="false"
+    [[ -z "$(git -C "${DYBATPHO_DIR}" rev-parse --show-prefix 2> /dev/null || printf 'vendored/')" ]] \
+      && own_repo="true"
+    if [[ -n "${version// /}" ]]; then
+      # A stamped version names the release; the commit names the code. Both
+      # matter in a report, so the commit rides along as build metadata, which
+      # SemVer allows and ignores when comparing.
+      local commit=""
+      [[ "${own_repo}" == "true" ]] \
+        && commit="$(git -C "${DYBATPHO_DIR}" rev-parse --short HEAD 2> /dev/null || true)"
+      if [[ -n "${commit}" ]]; then
+        version="${version}+${commit}"
+        git -C "${DYBATPHO_DIR}" diff --quiet HEAD 2> /dev/null || version="${version}.dirty"
+      fi
+    elif [[ "${own_repo}" == "true" ]]; then
+      # No stamp: `git describe` answers with the last tag, the distance from it,
+      # and the commit, which is the same information in one string.
+      version="$(git -C "${DYBATPHO_DIR}" describe --tags --always --dirty 2> /dev/null || true)"
+    fi
+    version="${version#v}"
+    DYBATPHO_VERSION="${version:-unknown}"
+  fi
+  printf '%s\n' "${DYBATPHO_VERSION}"
 }
 
 #######################################

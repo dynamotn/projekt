@@ -163,6 +163,15 @@ fi
 - **FR-017**: The loaded module set MUST describe the current shell only, and
   MUST NOT be exported or read from the environment, because the internal
   helpers that public functions call do not cross a process boundary.
+- **FR-018**: The bootstrap MUST expose the version of the library through
+  `dybatpho::version`, resolved from the `VERSION` file beside `init.sh`, then
+  from the repository tags, and finally as `unknown`, with any leading `v`
+  removed, cached in `DYBATPHO_VERSION`, and overridable by setting that
+  variable before sourcing. When the copy is the root of its own Git working
+  tree the reported version MUST also name the commit it is at, as SemVer build
+  metadata, marked when the tree has uncommitted changes; a copy vendored inside
+  another repository MUST NOT report that repository's commit. See `doc/spec/doctor.md` for the diagnostics and
+  the bundle that build on it.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -172,6 +181,7 @@ fi
 - **Module Set**: The modules requested for a session, recorded in load order in `DYBATPHO_LOADED_MODULES`.
 - **Module Dependency**: An edge from one module to another module it calls, resolved before the dependent module is sourced.
 - **Module Source Map**: The mapping from a module name to its file, derived from the name as `src/<name>.sh`.
+- **Library Version**: The version of this copy of the library, stamped in `VERSION` and reported by `dybatpho::version`.
 
 ## Success Criteria *(mandatory)*
 
@@ -226,6 +236,11 @@ fi
 - **IT-016**: Export the loaded set from a parent shell, source `init.sh` again
   in a child shell, and verify the child loads its own modules and its public
   functions still work.
+- **IT-017**: Verify `dybatpho::version` reports the stamped version without a
+  leading `v`, names the current short commit, marks a dirty working tree,
+  ignores the commits of a project it is vendored into,
+  caches the answer in `DYBATPHO_VERSION`, honors a value already set in the
+  environment, and still answers in a copy that has no `VERSION` file.
 
 ## Acceptance Criteria *(mandatory)*
 

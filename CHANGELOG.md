@@ -9,6 +9,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`doctor` module — one report of what the environment is missing.**
+  `dybatpho::doctor` prints the Bash version, the library version, the host
+  platform, and every external command the loaded modules can call, each marked
+  found or missing. A module only reaches for `yq`, `curl`, or `tar` when the
+  caller reaches the function that needs it, so this turns a sequence of
+  mid-script failures into one list to fix before the work starts. Missing
+  **required** dependencies fail the report; missing **optional** ones are
+  reported and succeed, because they only cost part of a module.
+
+  `--modules "json,git"` checks a set the shell has not loaded yet, `--all`
+  covers the registry, `--quiet` answers through the exit code alone for CI, and
+  `--json` emits one object — built without `jq`, since a diagnostic that needs a
+  tool the user may be missing is of no use.
+  `dybatpho::doctor_requirements <module> [required|optional|all]` exposes the
+  declarations, and `dybatpho::doctor_bash_supported` answers the version
+  question on its own. A dependency written as `a|b` is satisfied by either, so
+  `file` reports one row for `sha256sum|shasum|openssl`.
+
+  ```sh
+  . dybatpho/init.sh --modules doctor json archive
+  dybatpho::doctor || dybatpho::die "Install the tools listed above first"
+  ```
+
+- **`dybatpho::version`** — the library now reports which copy is loaded, from
+  `init.sh` alone and without loading a module. The version comes from the new
+  `VERSION` file beside `init.sh`, with the commit the copy is at appended as
+  SemVer build metadata — `2.0.0+af745ff`, and `+af745ff.dirty` when the working
+  tree has uncommitted changes — so a report names the code that ran rather than
+  the last release before it. Only the library's own checkout is consulted: a
+  copy vendored inside another project reports its stamped version alone. A checkout with no `VERSION` file falls back to
+  `git describe`, and a copy with neither answers `unknown` rather than empty. It
+  drops a leading `v`, caches into `DYBATPHO_VERSION`, and honors that variable
+  when it is already set.
+
+- **`scripts/bundle.sh`** — flattens a module selection into a single
+  `dybatpho.bundle.sh` to vendor into another repository or bake into a
+  container image. The selection is the same `--modules` used everywhere else
+  and is resolved by running `init.sh` itself, so the bundled set cannot drift
+  from what that selection loads. The generated file carries the bootstrap
+  guards and the module sources verbatim, needs no `src/` directory beside it,
+  reports the version it was generated from, and lists only what it carries as
+  its registry. Inside a bundle, `dybatpho::load` succeeds for a carried module
+  and fails for anything else with the command that regenerates the bundle with
+  it. The generator refuses to overwrite an existing output without `--force` or
+  `DYBATPHO_FORCE`, honors `DRY_RUN`, and verifies that what it wrote parses and
+  can be sourced.
+
+  ```sh
+  scripts/bundle.sh --modules "logging git semver" --output dist/dybatpho.sh
+  ```
+
 - **XDG directories and more filesystem helpers in the `file` module.**
   `dybatpho::xdg_config_dir`, `xdg_cache_dir`, `xdg_data_dir`, and
   `xdg_state_dir` return the directories the XDG Base Directory specification

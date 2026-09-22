@@ -231,3 +231,84 @@ echo reached'
   refute_output --partial "reached"
   assert_output --partial "does not exist"
 }
+
+@test "dybatpho::version reports the stamped release version" {
+  local stamped
+  stamped="$(head -n 1 "${DYBATPHO_DIR}/VERSION")"
+  run -0 init_sh "" 'dybatpho::version'
+  # The commit rides along as build metadata, so the release version is the
+  # start of the answer rather than the whole of it.
+  assert_output --regexp "^${stamped}([+]|$)"
+}
+
+@test "dybatpho::version names the commit the library is at" {
+  local commit
+  commit="$(git -C "${DYBATPHO_DIR}" rev-parse --short HEAD)"
+  run -0 init_sh "" 'dybatpho::version'
+  assert_output --partial "+${commit}"
+}
+
+@test "dybatpho::version marks a dirty working tree" {
+  # Only meaningful while the tree has uncommitted changes; a clean checkout
+  # reports the commit without the marker, which is the other half of FR-018.
+  run -0 init_sh "" 'dybatpho::version'
+  if git -C "${DYBATPHO_DIR}" diff --quiet HEAD; then
+    refute_output --partial ".dirty"
+  else
+    assert_output --partial ".dirty"
+  fi
+}
+
+@test "dybatpho::version reports a version without a leading v" {
+  run -0 init_sh "" 'dybatpho::version'
+  refute_output --regexp '^v'
+  assert_output --regexp '^[0-9]'
+}
+
+@test "dybatpho::version honors a version set in the environment" {
+  run -0 env DYBATPHO_VERSION=9.9.9-test bash "$(bootstrap_script "" 'dybatpho::version')"
+  assert_output "9.9.9-test"
+}
+
+@test "dybatpho::version caches its answer" {
+  run -0 init_sh "" 'dybatpho::version > /dev/null
+printf "%s\n" "${DYBATPHO_VERSION}"'
+  assert_output "$(dybatpho::version)"
+}
+
+@test "dybatpho::version ignores the commits of a project it is vendored into" {
+  # A copy inside another repository sits in that repository's working tree,
+  # whose commits say nothing about which dybatpho is installed.
+  local host="${BATS_TEST_TMPDIR}/host"
+  mkdir -p "${host}/vendor/src"
+  cp "${DYBATPHO_DIR}/init.sh" "${host}/vendor/init.sh"
+  cp "${DYBATPHO_DIR}/VERSION" "${host}/vendor/VERSION"
+  cp "${DYBATPHO_DIR}/src/"*.sh "${host}/vendor/src/"
+  git -C "${host}" init -q .
+  git -C "${host}" add -A
+  git -C "${host}" -c user.email=t@example.com -c user.name=test commit -qm vendored
+  local script="${BATS_TEST_TMPDIR}/vendored.sh"
+  printf '. %q\ndybatpho::version\n' "${host}/vendor/init.sh" > "${script}"
+  run -0 env -u DYBATPHO_VERSION -u DYBATPHO_MODULES bash "${script}"
+  assert_output "$(head -n 1 "${DYBATPHO_DIR}/VERSION")"
+}
+
+@test "dybatpho::version falls back to git describe without a VERSION file" {
+  # A checkout that has not stamped a VERSION file still answers, so the
+  # bundle header and `dybatpho::doctor` never print an empty version.
+  local copy="${BATS_TEST_TMPDIR}/copy"
+  mkdir -p "${copy}/src"
+  cp "${DYBATPHO_DIR}/init.sh" "${copy}/init.sh"
+  cp "${DYBATPHO_DIR}/src/"*.sh "${copy}/src/"
+  local script="${BATS_TEST_TMPDIR}/nofile.sh"
+  printf '. %q\ndybatpho::version\n' "${copy}/init.sh" > "${script}"
+  run -0 env -u DYBATPHO_VERSION -u DYBATPHO_MODULES bash "${script}"
+  # The copy lives outside any repository, so `git describe` has nothing to say
+  # either, and the documented last resort applies.
+  assert_output --regexp '^(unknown|[0-9a-zA-Z._-]+)$'
+}
+
+@test "the doctor module is registered" {
+  run -0 init_sh "--modules doctor" 'dybatpho::module_loaded doctor && echo present'
+  assert_output "present"
+}

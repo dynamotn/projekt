@@ -37,6 +37,7 @@ make use of ${DYBATPHO_DIR} to find each other.
 | **`DYBATPHO_CORE_MODULES`** | string | Modules that call each other and are always loaded |
 | **`DYBATPHO_OPTIONAL_MODULES`** | string | Modules that are only loaded when requested |
 | **`DYBATPHO_LOADED_MODULES`** | string | Modules loaded so far, in load order |
+| **`DYBATPHO_VERSION`** | string | Cached library version, see `dybatpho::version` |
 
 ### 🚀 Highlights
 
@@ -44,6 +45,7 @@ make use of ${DYBATPHO_DIR} to find each other.
 - [`__dybatpho_module_exists`](#__dybatpho_module_exists) — Return success when a name is a known dybatpho module.
 - [`__dybatpho_load_module`](#__dybatpho_load_module) — Source a module and its dependencies, at most once each.
 - [`__dybatpho_export_functions`](#__dybatpho_export_functions) — Filter functions and re-export only dybatpho functions to subshells.
+- [`dybatpho::version`](#dybatphoversion) — Print the version of the library this shell loaded, including the commit it is at. The release version is read from the `VERSION` file next to `init.sh`, which is what a release stamps and what a vendored or bundled copy carries. When the copy is a Git working tree, the short commit is appended as SemVer build metadata — `2.0.0+af745ff`, and `+af745ff.dirty` when the tree has uncommitted changes — so a bug report names the exact code that ran rather than the last tag before it. A checkout without a `VERSION` file falls back to `git describe`, which carries the commit of its own. Only the library's own repository is consulted: a copy vendored inside another project reports its stamped version alone, because that project's commits say nothing about which dybatpho is installed.
 - [`dybatpho::load`](#dybatphoload) — Load one or more modules after `init.sh` has already been sourced.
 - [`dybatpho::module_loaded`](#dybatphomodule_loaded) — Return success when a module is already loaded.
 - [`dybatpho::module_list`](#dybatphomodule_list) — Print module names, one per line.
@@ -120,6 +122,50 @@ Source a module and its dependencies, at most once each.
 Filter functions and re-export only dybatpho functions to subshells.
 
 _Function has no arguments._
+
+
+---
+
+### `dybatpho::version`
+
+Print the version of the library this shell loaded, including the
+  commit it is at.
+  The release version is read from the `VERSION` file next to `init.sh`, which
+  is what a release stamps and what a vendored or bundled copy carries. When
+  the copy is a Git working tree, the short commit is appended as SemVer build
+  metadata — `2.0.0+af745ff`, and `+af745ff.dirty` when the tree has
+  uncommitted changes — so a bug report names the exact code that ran rather
+  than the last tag before it. A checkout without a `VERSION` file falls back
+  to `git describe`, which carries the commit of its own. Only the library's
+  own repository is consulted: a copy vendored inside another project reports
+  its stamped version alone, because that project's commits say nothing about
+  which dybatpho is installed.
+
+**🧪 Example**
+
+```bash
+. dybatpho/init.sh
+dybatpho::version   # 2.0.0+af745ff
+
+```
+
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`DYBATPHO_VERSION`** | string | Version to report, resolved on first call and cached; set it to override the resolution |
+
+**🧩 Variable sets**
+
+- DYBATPHO_VERSION
+
+**📤 Output on stdout**
+
+- The version, without a leading `v`, or `unknown` when it cannot be resolved
+
+**🚦 Exit codes**
+
+- `0`: Always
 
 
 ---

@@ -107,6 +107,31 @@ An unknown module name stops the script at bootstrap instead of failing later
 with a missing function. See [init.sh reference](doc/init.md) and
 [example/init_modules.sh](example/init_modules.sh).
 
+`dybatpho::version` reports which copy of the library is loaded, and the
+`doctor` module turns the module set into an environment check:
+
+```sh
+. < path > /init.sh --modules doctor json archive
+dybatpho::version                  # 2.0.0+af745ff (release + current commit)
+dybatpho::doctor                   # every external tool these modules can call
+dybatpho::doctor --modules git --quiet || echo "git is missing here"
+```
+
+## 📦 Vendoring as one file
+
+`scripts/bundle.sh` flattens the modules a project uses into a single
+`dybatpho.bundle.sh`, which is what vendoring into another repository or baking
+into a container image needs. The selection is the same `--modules` used
+everywhere else, and the bundler resolves it through `init.sh` itself:
+
+```sh
+scripts/bundle.sh --modules "logging git semver" --output dist/dybatpho.sh
+```
+
+The bundle carries no dependency on a `src/` directory: copy the one file, source
+it, and the bundled functions work. Inside it, `dybatpho::load` succeeds for a
+bundled module and names the regeneration command for anything else.
+
 ## 📚 Modules
 
 ### 🧱 Core scripting
@@ -176,6 +201,7 @@ with a missing function. See [init.sh reference](doc/init.md) and
 | [release.sh](doc/release.md)  | Version from commits, changelog, per-platform artifacts, checksums, signing |
 | [testing.sh](doc/testing.md)  | File/JSON/YAML assertions, CLI snapshots, mocks, fixtures |
 | [metrics.sh](doc/metrics.md)  | Command timing, counters, retry/HTTP/error stats, Prometheus export |
+| [doctor.sh](doc/doctor.md)    | Report the Bash version, the library version and every external tool the loaded modules need |
 
 ## 🗂 Directory Structure
 
@@ -185,10 +211,11 @@ with a missing function. See [init.sh reference](doc/init.md) and
 │   ├── *.md        # Usage guides & reference for each module
 │   └── spec/       # Module specifications and design docs
 ├── example/        # Example scripts for users
-├── scripts/        # Helper scripts (test, doc generation, etc.)
+├── scripts/        # Helper scripts (test, doc generation, bundling, etc.)
 ├── src/            # Source code of modules
 ├── test/           # Unit tests
 ├── CHANGELOG.md    # User-visible history
+├── VERSION         # Version of this copy, reported by `dybatpho::version`
 └── init.sh         # Initialization script, **must be sourced first**
 ```
 

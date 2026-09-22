@@ -15,6 +15,9 @@ The goal is to capture the current product behavior of the library in a form tha
 - Every `src/*.sh` module has a matching spec file. This mapping is mandatory:
   adding a module without adding its spec is an incomplete change.
 - `init.md` describes repository bootstrap and module loading behavior.
+- `doctor.md` also covers `dybatpho::version` and `scripts/bundle.sh`, which
+  answer the same question as the diagnostics: what is this copy, and what does
+  it need to run?
 - Recent helper additions are folded into the existing module specs here rather than tracked in a separate spec tree.
 
 ## Spec Files
@@ -49,6 +52,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `ai.md`
 - `agent.md`
 - `pkg.md`
+- `doctor.md`
 
 ## Source Mapping
 
@@ -81,6 +85,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `src/ai.sh` -> `ai.md`
 - `src/agent.sh` -> `agent.md`
 - `src/pkg.sh` -> `pkg.md`
+- `src/doctor.sh` -> `doctor.md`
 
 ## Notes
 

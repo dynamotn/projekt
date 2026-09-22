@@ -19,6 +19,10 @@ This document describes the repository workflow and conventions to preserve.
 - `doc/spec/` — Spec Kit-style feature specifications.
 - `CHANGELOG.md` — user-visible history, [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 - `scripts/test.sh` — test runner; `--coverage` adds the kcov report.
+- `scripts/bundle.sh` — flatten a module selection into one vendorable file;
+  covered by `test/bundle.bats` and specified in `doc/spec/doctor.md`.
+- `VERSION` — the version this copy reports through `dybatpho::version`; bump it
+  in the same change that tags a release.
 - `.mise.toml` — standard tasks such as `mise run test` and `mise run doc`.
 
 ## Module scope
@@ -107,6 +111,7 @@ changed examples.
 | `cli.sh` | Declarative parser, help, subcommands, typo suggestions, config-bound options, completions, and CLI artifacts | `test/cli.bats`, `doc/cli.md`, `doc/spec/cli.md` |
 | `config.sh` | Load dotenv, JSON/YAML configuration, precedence, typed schema validation, and configuration docs | `test/config.bats`, `doc/config.md`, `doc/spec/config.md` |
 | `date.sh` | Portable date/time parsing, formatting, and calculations | `test/date.bats`, `doc/date.md`, `doc/spec/date.md` |
+| `doctor.sh` | Environment report: Bash version, library version, and the external commands the loaded modules declare | `test/doctor.bats`, `doc/doctor.md`, `doc/spec/doctor.md` |
 | `file.sh` | Path and XDG helpers, upward search, directory creation, temporary files, atomic content rewrites, checksums, and metadata | `test/file.bats`, `doc/file.md`, `doc/spec/file.md` |
 | `git.sh` | Safe repository, branch, commit, and Git operations | `test/git.bats`, `doc/git.md`, `doc/spec/git.md` |
 | `helpers.sh` | Argument validation, command lookup, retry, and common helpers | `test/helpers.bats`, `doc/helpers.md`, `doc/spec/helpers.md` |
@@ -493,6 +498,8 @@ to the module convention.
 | Testing helpers | Passing and failing direction of every assertion, mock restore, snapshot create/match/diff, and fixture cleanup |
 | New module | `init.sh` registry entry and dependency edges, `doc/spec/<module>.md`, `doc/spec/README.md` entries, `test/<module>.bats`, and `example/<module>_ops.sh` |
 | Bootstrap/module loading | `test/init.bats`, a fresh shell per assertion, dependency order, cycle termination, and unknown-module failure. Spawn child shells from a script **file**, never `bash -c`: a `-c` shell has an empty `BASH_SOURCE`, which the kcov hook expands on every command and `set -u` then turns into a failure that only appears under `scripts/test.sh` |
+| External tool used by a module | A declaration in `DYBATPHO_DOCTOR_REQUIRED` or `DYBATPHO_DOCTOR_OPTIONAL` in `src/doctor.sh`, on the module that runs the command, plus a case in `test/doctor.bats` |
+| Bootstrap function or generated artifact | `test/init.bats` or `test/bundle.bats`, and a regenerated bundle check: `scripts/bundle.sh --modules all -o /tmp/bundle.sh` |
 | Documentation/spec | Correct links/references and `git diff --check` |
 | Any public behavior | `CHANGELOG.md` entry under `## [Unreleased]`, in the same change |
 
