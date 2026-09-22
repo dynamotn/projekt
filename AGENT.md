@@ -107,7 +107,7 @@ changed examples.
 | `cli.sh` | Declarative parser, help, subcommands, completions, and CLI artifacts | `test/cli.bats`, `doc/cli.md`, `doc/spec/cli.md` |
 | `config.sh` | Load dotenv, JSON/YAML configuration, precedence, typed schema validation, and configuration docs | `test/config.bats`, `doc/config.md`, `doc/spec/config.md` |
 | `date.sh` | Portable date/time parsing, formatting, and calculations | `test/date.bats`, `doc/date.md`, `doc/spec/date.md` |
-| `file.sh` | Path helpers, upward search, directory creation, temporary files, and atomic content rewrites, checksums, and metadata | `test/file.bats`, `doc/file.md`, `doc/spec/file.md` |
+| `file.sh` | Path and XDG helpers, upward search, directory creation, temporary files, atomic content rewrites, checksums, and metadata | `test/file.bats`, `doc/file.md`, `doc/spec/file.md` |
 | `git.sh` | Safe repository, branch, commit, and Git operations | `test/git.bats`, `doc/git.md`, `doc/spec/git.md` |
 | `helpers.sh` | Argument validation, command lookup, retry, and common helpers | `test/helpers.bats`, `doc/helpers.md`, `doc/spec/helpers.md` |
 | `json.sh` | Query, validate, pretty-print, and convert JSON/YAML | `test/json.bats`, `doc/json.md`, `doc/spec/json.md` |

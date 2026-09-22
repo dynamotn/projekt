@@ -65,6 +65,9 @@ function _create_git_repo {
     git -C "${repo_path}" config commit.gpgsign false
     git -C "${repo_path}" config tag.gpgsign false
     git -C "${repo_path}" config gc.auto 0
+    # Same reason as in test/release.bats: a globally configured hooks path
+    # must not reach the repositories these tests create.
+    git -C "${repo_path}" config core.hooksPath /dev/null
     printf 'hello\n' > "${repo_path}/README.md"
     git -C "${repo_path}" add README.md
     git -C "${repo_path}" commit -qm 'Initial commit'

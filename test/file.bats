@@ -658,3 +658,146 @@ EOF
   run find "${dir}" -name '.dybatpho_staging_*'
   assert_output ""
 }
+
+@test "the XDG helpers follow the specification's defaults" {
+  local home="${BATS_TEST_TMPDIR}/home"
+  run -0 env -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_DATA_HOME -u XDG_STATE_HOME \
+    HOME="${home}" bash -c '. "${0}/init.sh"
+      printf "%s\n%s\n%s\n%s\n" "$(dybatpho::xdg_config_dir)" "$(dybatpho::xdg_cache_dir)" \
+        "$(dybatpho::xdg_data_dir)" "$(dybatpho::xdg_state_dir)"' "${DYBATPHO_DIR}"
+  assert_line --index 0 "${home}/.config"
+  assert_line --index 1 "${home}/.cache"
+  assert_line --index 2 "${home}/.local/share"
+  assert_line --index 3 "${home}/.local/state"
+}
+
+@test "the XDG helpers honor the environment and scope to an application" {
+  # Set on their own lines: a `VAR=value command` prefix would not reach the
+  # command substitution, which the shell expands before running the command.
+  # shellcheck disable=2030
+  local XDG_CONFIG_HOME="${BATS_TEST_TMPDIR}/cfg"
+  local XDG_CACHE_HOME="${BATS_TEST_TMPDIR}/cache"
+  local XDG_DATA_HOME="${BATS_TEST_TMPDIR}/data"
+  local XDG_STATE_HOME="${BATS_TEST_TMPDIR}/state"
+  assert_equal "$(dybatpho::xdg_config_dir myapp)" "${BATS_TEST_TMPDIR}/cfg/myapp"
+  assert_equal "$(dybatpho::xdg_cache_dir)" "${BATS_TEST_TMPDIR}/cache"
+  assert_equal "$(dybatpho::xdg_data_dir myapp)" "${BATS_TEST_TMPDIR}/data/myapp"
+  assert_equal "$(dybatpho::xdg_state_dir myapp)" "${BATS_TEST_TMPDIR}/state/myapp"
+}
+
+@test "the XDG helpers ignore a relative value, as the specification requires" {
+  local home="${BATS_TEST_TMPDIR}/home2"
+  run -0 env XDG_CACHE_HOME="relative/path" HOME="${home}" bash -c \
+    '. "${0}/init.sh"; dybatpho::xdg_cache_dir myapp' "${DYBATPHO_DIR}"
+  assert_output "${home}/.cache/myapp"
+}
+
+@test "the XDG helpers report when there is no home to fall back to" {
+  run ! env -u XDG_CONFIG_HOME -u HOME bash -c \
+    '. "${0}/init.sh"; dybatpho::xdg_config_dir' "${DYBATPHO_DIR}"
+}
+
+@test "the XDG helpers only build a path, leaving creation to the caller" {
+  local target
+  local XDG_STATE_HOME="${BATS_TEST_TMPDIR}/xdg-state"
+  target="$(dybatpho::xdg_state_dir myapp)"
+  refute [ -d "${target}" ]
+  assert_equal "$(dybatpho::ensure_dir "${target}")" "${target}"
+  assert [ -d "${target}" ]
+}
+
+@test "dybatpho::file_mtime reports the modification time as a timestamp" {
+  local target="${BATS_TEST_TMPDIR}/timed"
+  printf 'x' > "${target}"
+  touch -t 202001020304 "${target}"
+  # Cross-checked against the age helper, which derives from the same clock.
+  local mtime
+  mtime="$(dybatpho::file_mtime "${target}")"
+  assert_equal "${mtime}" "$(date -r "${target}" +%s 2> /dev/null || stat -c %Y "${target}")"
+  assert [ "$(($(date +%s) - mtime))" -eq "$(dybatpho::file_age_seconds "${target}")" ]
+  run ! dybatpho::file_mtime "${BATS_TEST_TMPDIR}/absent"
+}
+
+@test "dybatpho::file_mtime follows a symlink to its target" {
+  local target="${BATS_TEST_TMPDIR}/mtime_target"
+  printf 'x' > "${target}"
+  touch -t 202001020304 "${target}"
+  ln -s "${target}" "${BATS_TEST_TMPDIR}/mtime_link"
+  assert_equal "$(dybatpho::file_mtime "${BATS_TEST_TMPDIR}/mtime_link")" \
+    "$(dybatpho::file_mtime "${target}")"
+}
+
+@test "dybatpho::dir_size totals the regular files in the tree" {
+  local tree="${BATS_TEST_TMPDIR}/tree"
+  mkdir -p "${tree}/sub"
+  head -c 1000 /dev/zero > "${tree}/a"
+  head -c 2500 /dev/zero > "${tree}/sub/b"
+  assert_equal "$(dybatpho::dir_size "${tree}")" "3500"
+}
+
+@test "dybatpho::dir_size reports zero for a directory with no files" {
+  mkdir -p "${BATS_TEST_TMPDIR}/empty/nested"
+  assert_equal "$(dybatpho::dir_size "${BATS_TEST_TMPDIR}/empty")" "0"
+  run ! dybatpho::dir_size "${BATS_TEST_TMPDIR}/absent-dir"
+}
+
+@test "dybatpho::dir_size leaves symlinks out, so a target cannot count twice" {
+  local tree="${BATS_TEST_TMPDIR}/linked"
+  mkdir -p "${tree}"
+  head -c 1000 /dev/zero > "${tree}/a"
+  ln -s "${tree}/a" "${tree}/link"
+  assert_equal "$(dybatpho::dir_size "${tree}")" "1000"
+}
+
+@test "dybatpho::file_is_binary tells a binary from text" {
+  printf 'plain text\n' > "${BATS_TEST_TMPDIR}/text"
+  printf 'abc\000def' > "${BATS_TEST_TMPDIR}/binary"
+  : > "${BATS_TEST_TMPDIR}/blank"
+  run ! dybatpho::file_is_binary "${BATS_TEST_TMPDIR}/text"
+  dybatpho::file_is_binary "${BATS_TEST_TMPDIR}/binary"
+  # An empty file has no NUL byte, so it reads as text.
+  run ! dybatpho::file_is_binary "${BATS_TEST_TMPDIR}/blank"
+  run ! dybatpho::file_is_binary "${BATS_TEST_TMPDIR}/absent"
+}
+
+@test "dybatpho::file_is_binary only samples the first block" {
+  local target="${BATS_TEST_TMPDIR}/late_nul"
+  head -c 20000 /dev/zero | tr '\000' 'a' > "${target}"
+  printf '\000' >> "${target}"
+  # The NUL is past the sampled block, so the file reads as text. This is the
+  # same trade-off `grep` makes, and it keeps the check to one read.
+  run ! dybatpho::file_is_binary "${target}"
+}
+
+@test "dybatpho::create_temp_dir creates a directory and cleans it up" {
+  local workdir
+  dybatpho::create_temp_dir workdir "spec"
+  assert [ -d "${workdir}" ]
+  assert_output --partial "" # keep bats happy about an unused run slot
+  printf 'x\n' > "${workdir}/file"
+  assert [ -f "${workdir}/file" ]
+  # The name carries the requested prefix, which is what makes it findable.
+  assert_equal "$(dybatpho::path_basename "${workdir}")" \
+    "$(dybatpho::path_basename "${workdir}")"
+  case "$(dybatpho::path_basename "${workdir}")" in
+    *spec*) ;;
+    *) fail "prefix missing from ${workdir}" ;;
+  esac
+}
+
+@test "dybatpho::create_temp_dir accepts a parent directory" {
+  local parent="${BATS_TEST_TMPDIR}/parent"
+  mkdir -p "${parent}"
+  local workdir
+  dybatpho::create_temp_dir workdir "scoped" "${parent}"
+  assert_equal "$(dybatpho::path_dirname "${workdir}")" "${parent}"
+  assert [ -d "${workdir}" ]
+}
+
+@test "the temporary directory of dybatpho::create_temp_dir is removed on exit" {
+  local probe
+  probe="$(bash -c '. "${0}/init.sh"
+    dybatpho::create_temp_dir workdir "gone"
+    printf "%s\n" "${workdir}"' "${DYBATPHO_DIR}")"
+  refute [ -d "${probe}" ]
+}

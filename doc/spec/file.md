@@ -8,6 +8,8 @@
 
 Shell automation often needs quick file inspection, path decomposition, path joining, path normalization, relative path calculation, extension inspection and rewriting, absolute-path checks, and temporary file or directory creation with reliable cleanup. Ad hoc implementations increase the chance of leaked paths, naming collisions, inconsistent file previews, and repeated path-splitting snippets.
 
+A script also has to decide where its own files live. Guessing `~/.myapp` ignores the XDG Base Directory specification that the rest of the system follows, and honoring it by hand means repeating the same fallback logic, including the rule that a relative value counts as unset.
+
 Two more gaps sit next to these. Locating the root of the project a script was invoked inside means walking up the directory tree by hand, and creating a directory before writing into it means repeating a `mkdir -p` guard at every call site.
 
 Rewriting the contents of a file is just as common and more dangerous. A script that redirects into a file truncates it before the new contents are written, so an interrupted run destroys the original; `sed -i` takes a different argument on GNU and BSD; appending a line to a dotfile duplicates it on the second run; and reading a size, checksum, or modification time means picking between incompatible `stat` and checksum tools per platform.
@@ -27,6 +29,8 @@ Rewriting the contents of a file is just as common and more dangerous. A script 
 - Read file metadata identically on GNU, BusyBox, and BSD systems.
 - Edit a dotfile that is symlinked into a repository without detaching the link from it.
 - Locate a project root from any directory inside it.
+- Put a program's configuration, cache, data, and state where the system expects them.
+- Answer how large a tree is, and whether a file is safe to run a text rewrite over.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -217,6 +221,42 @@ As a script author, I want one helper that creates a directory tree and reports 
 
 ---
 
+### User Story 13 - Put a program's files where they belong (Priority: P2)
+
+As a tool author, I want the directories the XDG Base Directory specification defines so that my configuration, cache, data, and state land where the rest of the system expects, and where a user's backup and cleanup tools already look.
+
+**Why this priority**: Getting this wrong is not fatal, but it scatters files a user cannot find and a backup does not cover.
+
+**Independent Test**: Read each directory with and without the environment variables set, and verify the specification's defaults and the scoping to an application name.
+
+**Acceptance Scenarios**:
+
+1. **Given** no XDG variables are set, **When** a directory is read, **Then** the specification's default under the home directory is returned
+2. **Given** a variable holds an absolute path, **When** the directory is read, **Then** that path is used
+3. **Given** a variable holds a relative path, **When** the directory is read, **Then** it is ignored and the default is used, as the specification requires
+4. **Given** an application name, **When** a directory is read, **Then** the name is appended
+5. **Given** the directory does not exist, **When** it is read, **Then** nothing is created, because building a path and creating one are separate decisions
+
+---
+
+### User Story 14 - Measure and classify what is on disk (Priority: P2)
+
+As a script author, I want the size of a tree, the modification time of a file, and whether a file is binary so that I can decide what to clean up and what is safe to rewrite.
+
+**Why this priority**: Each is small, but each otherwise means a per-platform branch, and the binary check prevents a text rewrite from destroying a file.
+
+**Independent Test**: Measure a tree of known contents, read a known modification time, and classify a text file and a file containing a NUL byte.
+
+**Acceptance Scenarios**:
+
+1. **Given** a directory tree, **When** its size is read, **Then** the total is the sum of the regular files it contains
+2. **Given** a symbolic link inside the tree, **When** the size is read, **Then** it is not counted, so its target cannot be counted twice
+3. **Given** a file, **When** its modification time is read, **Then** it is returned as a Unix timestamp, following a symlink to its target
+4. **Given** a file containing a NUL byte in its first block, **When** it is classified, **Then** it is reported as binary
+5. **Given** an empty file, **When** it is classified, **Then** it is reported as text
+
+---
+
 ### Example Workflow
 
 ```bash
@@ -284,6 +324,12 @@ dybatpho::show_file "${report_file}"
 - **FR-034**: Metadata helpers MUST report the file a symlink points at rather than the link itself.
 - **FR-035**: The module MUST provide a helper that searches a directory and its ancestors for a named entry, matching files and directories alike, printing the absolute path of the first match and reporting failure without output when the filesystem root is reached.
 - **FR-036**: The module MUST provide a helper that creates a directory and its missing parents, applies an optional mode whether or not the directory already existed, prints the resulting path, and rejects a path that exists as something other than a directory.
+- **FR-037**: The module MUST provide the configuration, cache, data, and state directories of the XDG Base Directory specification, honoring the matching environment variable when it holds an absolute path and falling back to the specification's default otherwise, including when the variable holds a relative path.
+- **FR-038**: An XDG helper MUST accept an application name to scope the directory to, MUST build a path only, and MUST fail when neither its variable nor `HOME` is usable.
+- **FR-039**: The module MUST report a file's modification time as a Unix timestamp, describing the file a symlink points at rather than the link.
+- **FR-040**: The module MUST report the total size of the regular files in a directory tree, excluding symbolic links so that a target inside the tree cannot be counted twice.
+- **FR-041**: The module MUST report whether a file is binary, by looking for a NUL byte in its first block, and MUST treat an empty file as text.
+- **FR-042**: The module MUST provide a helper that creates a temporary directory registered for cleanup, without the caller having to express "directory" as an extension argument.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -311,6 +357,8 @@ dybatpho::show_file "${report_file}"
 - **SC-011**: Editing a symlinked dotfile changes the file in the repository it points at, so the edit is tracked.
 - **SC-012**: A script locates its project root from any directory inside it with one helper call.
 - **SC-013**: A script can create a directory before writing without guarding the call.
+- **SC-014**: A tool's files land where the user's other tools, backups, and cleanup scripts already look.
+- **SC-015**: A script can decide what to rewrite without risking a binary file.
 
 ## Integration Tests *(mandatory)*
 
@@ -336,6 +384,12 @@ dybatpho::show_file "${report_file}"
 - **IT-020**: Read size and age through a symlink and verify they match the target rather than the link.
 - **IT-021**: Search upward for a marker from a nested directory, for a directory marker, from the default starting directory, and for a name that does not exist.
 - **IT-022**: Create a nested directory with a mode, call again with a different mode, and attempt the helper on a path that exists as a file.
+- **IT-023**: Read each XDG directory with no variables set and verify the specification's defaults, with variables set and verify they are honored, and with a relative value and verify it is ignored.
+- **IT-024**: Read an XDG directory with an application name, verify nothing is created, and verify the failure when neither the variable nor `HOME` is set.
+- **IT-025**: Read a known modification time, cross-check it against the age helper, and verify a symlink reports its target's time.
+- **IT-026**: Total a tree of known contents, an empty directory, and a tree containing a symlink, and reject a missing directory.
+- **IT-027**: Classify a text file, a file containing a NUL byte, an empty file, and a file whose only NUL is past the sampled block.
+- **IT-028**: Create a temporary directory with a prefix and a custom parent, and verify it is removed when the shell exits.
 
 ## Acceptance Criteria *(mandatory)*
 

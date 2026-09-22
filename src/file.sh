@@ -921,3 +921,193 @@ function dybatpho::ensure_dir {
   fi
   printf '%s\n' "${path}"
 }
+
+#######################################
+# @description Print a directory from the XDG Base Directory specification,
+#   optionally scoped to one application.
+#   The specification's own default is used whenever the variable is unset or
+#   holds a relative path, which it requires to be ignored.
+# @arg $1 string Variable name, such as `XDG_CONFIG_HOME`
+# @arg $2 string Default path relative to the home directory
+# @arg $3 string Optional application name appended to the directory
+# @stdout The resolved directory
+# @exitcode 1 Neither the variable nor `HOME` is usable
+#######################################
+function __dybatpho_xdg_dir {
+  local variable fallback application base
+  dybatpho::expect_args variable fallback -- "$@"
+  application="${3-}"
+  base="${!variable-}"
+  # The specification says a relative value must be treated as unset.
+  if [[ -z "${base}" || "${base}" != /* ]]; then
+    [[ -n "${HOME-}" ]] \
+      || dybatpho::die "${FUNCNAME[1]}: Neither ${variable} nor HOME is set"
+    base="${HOME%/}/${fallback}"
+  fi
+  if [[ -n "${application}" ]]; then
+    dybatpho::path_join "${base}" "${application}"
+  else
+    printf '%s\n' "${base%/}"
+  fi
+}
+
+#######################################
+# @description Print the directory a program's configuration belongs in.
+# @example
+#   config="$(dybatpho::ensure_dir "$(dybatpho::xdg_config_dir myapp)")"
+#   printf 'theme = dark\n' | dybatpho::file_write_atomic "${config}/settings.ini"
+#
+# @arg $1 string Optional application name appended to the directory
+# @env XDG_CONFIG_HOME string Base configuration directory, default is `~/.config`
+# @stdout The configuration directory
+# @exitcode 1 Neither `XDG_CONFIG_HOME` nor `HOME` is set
+# @tip These helpers only build a path; pair them with `dybatpho::ensure_dir`
+#   when the directory has to exist
+#######################################
+function dybatpho::xdg_config_dir {
+  __dybatpho_xdg_dir XDG_CONFIG_HOME ".config" "${1-}"
+}
+
+#######################################
+# @description Print the directory a program's cache belongs in.
+# @example
+#   cache="$(dybatpho::xdg_cache_dir myapp)"
+#
+# @arg $1 string Optional application name appended to the directory
+# @env XDG_CACHE_HOME string Base cache directory, default is `~/.cache`
+# @stdout The cache directory
+# @exitcode 1 Neither `XDG_CACHE_HOME` nor `HOME` is set
+#######################################
+function dybatpho::xdg_cache_dir {
+  __dybatpho_xdg_dir XDG_CACHE_HOME ".cache" "${1-}"
+}
+
+#######################################
+# @description Print the directory a program's data belongs in.
+# @example
+#   data="$(dybatpho::xdg_data_dir myapp)"
+#
+# @arg $1 string Optional application name appended to the directory
+# @env XDG_DATA_HOME string Base data directory, default is `~/.local/share`
+# @stdout The data directory
+# @exitcode 1 Neither `XDG_DATA_HOME` nor `HOME` is set
+#######################################
+function dybatpho::xdg_data_dir {
+  __dybatpho_xdg_dir XDG_DATA_HOME ".local/share" "${1-}"
+}
+
+#######################################
+# @description Print the directory a program's state belongs in.
+#   State is what a program wants back on the next run but should not be backed
+#   up, such as logs and history, which is what separates it from data.
+# @example
+#   state="$(dybatpho::ensure_dir "$(dybatpho::xdg_state_dir myapp)")"
+#   printf '%s\n' "${run_id}" | dybatpho::file_write_atomic "${state}/last-run"
+#
+# @arg $1 string Optional application name appended to the directory
+# @env XDG_STATE_HOME string Base state directory, default is `~/.local/state`
+# @stdout The state directory
+# @exitcode 1 Neither `XDG_STATE_HOME` nor `HOME` is set
+#######################################
+function dybatpho::xdg_state_dir {
+  __dybatpho_xdg_dir XDG_STATE_HOME ".local/state" "${1-}"
+}
+
+#######################################
+# @description Print when a file was last modified, as a Unix timestamp.
+# @example
+#   modified="$(dybatpho::file_mtime "${cache}")"
+#
+# @arg $1 string File path
+# @stdout Modification time in seconds since the epoch
+# @exitcode 1 The file is missing or its modification time cannot be read
+# @tip `dybatpho::file_age_seconds` answers the same question relative to now
+#######################################
+function dybatpho::file_mtime {
+  local path modified
+  dybatpho::expect_args path -- "$@"
+  dybatpho::is file "${path}" \
+    || dybatpho::die "${FUNCNAME[0]}: File doesn't exist: ${path}"
+  modified="$(__dybatpho_file_stat mtime "${path}" || true)"
+  [[ -n "${modified}" ]] \
+    || dybatpho::die "${FUNCNAME[0]}: Cannot read modification time of ${path}" # kcov(skip)
+  printf '%s\n' "${modified}"
+}
+
+#######################################
+# @description Print the total size of the regular files in a directory tree.
+#   The result is the sum of the files' sizes rather than the disk space they
+#   occupy, so it matches `dybatpho::file_size` instead of `du`, whose block
+#   accounting and flags differ between platforms.
+# @example
+#   bytes="$(dybatpho::dir_size ./build)"
+#
+# @arg $1 string Directory path
+# @stdout Total size in bytes, `0` for a directory holding no files
+# @exitcode 1 The directory is missing
+# @tip Symbolic links are not counted at all, the way `du` treats them, so a
+#   link to a file inside the same tree cannot count its target twice
+#######################################
+function dybatpho::dir_size {
+  local directory total
+  dybatpho::expect_args directory -- "$@"
+  dybatpho::is dir "${directory}" \
+    || dybatpho::die "${FUNCNAME[0]}: Directory doesn't exist: ${directory}"
+  # One `stat` call for the whole tree rather than one per file, trying the GNU
+  # form before the BSD one as everywhere else in this module.
+  total="$({
+    find "${directory}" -type f -exec stat -L -c '%s' {} + 2> /dev/null \
+      || find "${directory}" -type f -exec stat -L -f '%z' {} + 2> /dev/null
+  } | awk '{ total += $1 } END { printf "%d\n", total }')"
+  printf '%s\n' "${total:-0}"
+}
+
+#######################################
+# @description Return success when a file looks like binary rather than text.
+#   A NUL byte in the first block is the signal `grep` and `git` use, and it is
+#   what makes a file unsafe to pass through line-oriented tools.
+# @example
+#   if dybatpho::file_is_binary "${path}"; then
+#     dybatpho::warn "Refusing to rewrite ${path}"
+#   else
+#     dybatpho::file_replace "${path}" 'old' 'new'
+#   fi
+#
+# @arg $1 string File path
+# @exitcode 0 The file contains a NUL byte in its first block
+# @exitcode 1 The file looks like text, or is empty
+# @tip Check this before a text rewrite, which would otherwise mangle a binary
+#######################################
+function dybatpho::file_is_binary {
+  local path sampled stripped
+  dybatpho::expect_args path -- "$@"
+  dybatpho::is file "${path}" \
+    || dybatpho::die "${FUNCNAME[0]}: File doesn't exist: ${path}"
+  # A NUL byte cannot survive in a shell variable, so the byte counts before and
+  # after removing NULs are compared instead of the contents.
+  sampled="$(head -c 8192 -- "${path}" | wc -c)"
+  stripped="$(head -c 8192 -- "${path}" | LC_ALL=C tr -d '\000' | wc -c)"
+  ((${sampled//[^0-9]/} != ${stripped//[^0-9]/}))
+}
+
+#######################################
+# @description Create a temporary directory and register it for cleanup on shell exit.
+#   This is `dybatpho::create_temp` with the argument that asks for a directory
+#   already supplied, because passing `/` as an extension reads like a mistake.
+# @example
+#   local workdir
+#   dybatpho::create_temp_dir workdir "build"
+#   printf 'artifact\n' > "${workdir}/out"
+#
+# @arg $1 string Variable name that receives the created path
+# @arg $2 string Name prefix, default is `temp`
+# @arg $3 string Parent directory, default is `${TMPDIR:-/tmp}`
+# @set The named variable, to the created directory
+# @tip The directory is removed with its contents when the shell exits
+#######################################
+function dybatpho::create_temp_dir {
+  local path_var
+  dybatpho::expect_args path_var -- "$@"
+  shift
+  dybatpho::create_temp "${path_var}" "" ${1+"$1"} ${2+"$2"}
+}

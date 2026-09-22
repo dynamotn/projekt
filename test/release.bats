@@ -1,6 +1,7 @@
 setup() {
   load test_helper
   REPO="${BATS_TEST_TMPDIR}/repo"
+  _require_throwaway_repo
   git init -q "${REPO}"
   git -C "${REPO}" config user.email "test@dybatpho.invalid"
   git -C "${REPO}" config user.name "dybatpho test"
@@ -8,17 +9,42 @@ setup() {
   # under test must not depend on the caller's Git configuration.
   git -C "${REPO}" config tag.gpgSign false
   git -C "${REPO}" config commit.gpgSign false
+  # A throwaway repository must not inherit the developer's hooks: a global
+  # `core.hooksPath`, which a pre-commit framework installs, would otherwise run
+  # that hook inside these repositories and fail every commit the tests make.
+  git -C "${REPO}" config core.hooksPath /dev/null
+}
+
+# Every helper here runs `git` against `${REPO}`. An empty or unexpected value
+# would make `git -C` fall back to the current directory, which is the real
+# dybatpho repository, and `git add -A` there would stage the whole worktree.
+# `test/git.bats` guards its repositories the same way, for the same reason.
+function _require_throwaway_repo {
+  [[ -n "${BATS_TEST_TMPDIR:-}" ]] || {
+    printf '%s\n' "BATS_TEST_TMPDIR is not set" >&2
+    return 1
+  }
+  [[ -n "${REPO:-}" ]] || {
+    printf '%s\n' "REPO is not set" >&2
+    return 1
+  }
+  [[ "${REPO}" == "${BATS_TEST_TMPDIR}/"* ]] || {
+    printf '%s\n' "Refusing to use a repository outside the test tmpdir: ${REPO}" >&2
+    return 1
+  }
 }
 
 commit() {
   local subject="$1"
   shift
+  _require_throwaway_repo || return 1
   printf '%s\n' "${subject}" > "${REPO}/file-${RANDOM}"
   git -C "${REPO}" add -A
   git -C "${REPO}" commit -q -m "${subject}" ${@+"$@"}
 }
 
 tag() {
+  _require_throwaway_repo || return 1
   git -C "${REPO}" tag -m "$1" "$1"
 }
 

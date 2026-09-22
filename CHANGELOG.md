@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **XDG directories and more filesystem helpers in the `file` module.**
+  `dybatpho::xdg_config_dir`, `xdg_cache_dir`, `xdg_data_dir`, and
+  `xdg_state_dir` return the directories the XDG Base Directory specification
+  defines, optionally scoped to an application name. They honor the matching
+  environment variable when it holds an absolute path and fall back to the
+  specification's default otherwise — including when the variable holds a
+  relative path, which the specification says to ignore. They build a path and
+  create nothing, so they pair with `dybatpho::ensure_dir`, which prints the
+  directory it made.
+
+  Alongside them: `dybatpho::file_mtime` reports a modification time as a Unix
+  timestamp, `dybatpho::dir_size` totals the regular files in a tree (excluding
+  symlinks, so a target inside the tree cannot count twice),
+  `dybatpho::file_is_binary` looks for a NUL byte in the first block so a text
+  rewrite can be skipped rather than mangling the file, and
+  `dybatpho::create_temp_dir` asks for a temporary directory by name instead of
+  passing `/` as an extension to `dybatpho::create_temp`.
+
+  ```sh
+  state="$(dybatpho::ensure_dir "$(dybatpho::xdg_state_dir myapp)" 700)"
+  printf '%s\n' "${run_id}" | dybatpho::file_write_atomic "${state}/last-run"
+  ```
+
 - **`parallel` module** — run independent work a few jobs at a time.
   `dybatpho::parallel_map` runs one command over a list, passing each item as a
   single value so an item with spaces or shell syntax is not re-parsed;

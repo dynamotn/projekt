@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @file file_ops.sh
 # @brief Example showing file utilities
-# @description Demonstrates dybatpho::create_temp, show_file, path_basename, path_dirname, path_extname, path_stem, path_join, path_normalize, path_is_abs, path_has_ext, path_change_ext, path_relative, file_write_atomic, file_replace, file_ensure_line, file_remove_line, file_hash, file_size, file_age_seconds, file_backup, find_up, ensure_dir, and temp cleanup behavior
+# @description Demonstrates dybatpho::create_temp, show_file, path_basename, path_dirname, path_extname, path_stem, path_join, path_normalize, path_is_abs, path_has_ext, path_change_ext, path_relative, xdg_config_dir, xdg_cache_dir, xdg_data_dir, xdg_state_dir, create_temp_dir, file_mtime, dir_size, file_is_binary, file_write_atomic, file_replace, file_ensure_line, file_remove_line, file_hash, file_size, file_age_seconds, file_backup, find_up, ensure_dir, and temp cleanup behavior
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
 . "${SCRIPTDIR}/../init.sh"
@@ -230,6 +230,53 @@ function _demo_symlinked_dotfile {
   dybatpho::info "Repository copy now holds  : $(cat "${WORKDIR}/dotfiles/bashrc")"
 }
 
+function _demo_xdg {
+  dybatpho::header "XDG DIRECTORIES"
+  # These only build a path. Pairing them with `ensure_dir`, which prints the
+  # directory it made, keeps the whole thing to one line.
+  dybatpho::info "config : $(dybatpho::xdg_config_dir myapp)"
+  dybatpho::info "cache  : $(dybatpho::xdg_cache_dir myapp)"
+  dybatpho::info "data   : $(dybatpho::xdg_data_dir myapp)"
+  dybatpho::info "state  : $(dybatpho::xdg_state_dir myapp)"
+  dybatpho::info "without an application name: $(dybatpho::xdg_config_dir)"
+
+  # A real script would write into the directory it just made; this one keeps
+  # to a temporary root so it never touches the user's home.
+  local WORKDIR
+  dybatpho::create_temp_dir WORKDIR "xdg"
+  local state
+  state="$(XDG_STATE_HOME="${WORKDIR}/state" dybatpho::xdg_state_dir myapp)"
+  state="$(dybatpho::ensure_dir "${state}" 700)"
+  printf 'last-run=%s\n' "$(date +%s)" | dybatpho::file_write_atomic "${state}/run"
+  dybatpho::info "Wrote ${state#"${WORKDIR}"/}/run with mode $(stat -c %a "${state}" 2> /dev/null || stat -f %Lp "${state}")"
+}
+
+function _demo_inspect {
+  dybatpho::header "INSPECTING FILES AND TREES"
+  local WORKDIR
+  dybatpho::create_temp_dir WORKDIR "inspect"
+  mkdir -p "${WORKDIR}/tree/sub"
+  head -c 1000 /dev/zero > "${WORKDIR}/tree/a.bin"
+  printf 'some text\n' > "${WORKDIR}/tree/sub/notes.txt"
+  printf 'binary\000payload' > "${WORKDIR}/tree/sub/blob"
+
+  dybatpho::info "Tree total: $(dybatpho::dir_size "${WORKDIR}/tree") bytes"
+  dybatpho::info "One file  : $(dybatpho::file_size "${WORKDIR}/tree/a.bin") bytes"
+  dybatpho::info "Modified  : $(dybatpho::file_mtime "${WORKDIR}/tree/sub/notes.txt") (epoch seconds)"
+
+  # Checking before a text rewrite is the point of `file_is_binary`: the
+  # substitution below would otherwise mangle the binary file.
+  local candidate
+  for candidate in "${WORKDIR}/tree/sub/notes.txt" "${WORKDIR}/tree/sub/blob"; do
+    if dybatpho::file_is_binary "${candidate}"; then
+      dybatpho::warn "  $(dybatpho::path_basename "${candidate}") is binary, leaving it alone"
+    else
+      dybatpho::file_replace "${candidate}" 'some' 'edited'
+      dybatpho::print "  $(dybatpho::path_basename "${candidate}") rewritten: $(cat "${candidate}")"
+    fi
+  done
+}
+
 function _main {
   _demo_temp_file
   _demo_temp_dir
@@ -245,6 +292,8 @@ function _main {
   _demo_find_up
   _demo_ensure_dir
   _demo_symlinked_dotfile
+  _demo_xdg
+  _demo_inspect
   dybatpho::success "File operations demo complete"
 }
 

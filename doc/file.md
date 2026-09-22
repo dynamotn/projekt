@@ -58,6 +58,15 @@ the privilege to set it. These helpers honor `DRY_RUN`.
 - [`dybatpho::file_backup`](#dybatphofile_backup) — Copy a file next to itself under a timestamped name and print the copy's path, so that a caller can undo a change it is about to make.
 - [`dybatpho::find_up`](#dybatphofind_up) — Search a directory and each of its parents for an entry, and print the first one found. This is how a tool locates the root of the project it was invoked inside, from wherever the caller happened to be.
 - [`dybatpho::ensure_dir`](#dybatphoensure_dir) — Create a directory and every missing parent, then print its path. Running it again on an existing directory changes nothing, which lets a script call it before every write instead of guarding each one.
+- [`__dybatpho_xdg_dir`](#__dybatpho_xdg_dir) — Print a directory from the XDG Base Directory specification, optionally scoped to one application. The specification's own default is used whenever the variable is unset or holds a relative path, which it requires to be ignored.
+- [`dybatpho::xdg_config_dir`](#dybatphoxdg_config_dir) — Print the directory a program's configuration belongs in.
+- [`dybatpho::xdg_cache_dir`](#dybatphoxdg_cache_dir) — Print the directory a program's cache belongs in.
+- [`dybatpho::xdg_data_dir`](#dybatphoxdg_data_dir) — Print the directory a program's data belongs in.
+- [`dybatpho::xdg_state_dir`](#dybatphoxdg_state_dir) — Print the directory a program's state belongs in. State is what a program wants back on the next run but should not be backed up, such as logs and history, which is what separates it from data.
+- [`dybatpho::file_mtime`](#dybatphofile_mtime) — Print when a file was last modified, as a Unix timestamp.
+- [`dybatpho::dir_size`](#dybatphodir_size) — Print the total size of the regular files in a directory tree. The result is the sum of the files' sizes rather than the disk space they occupy, so it matches `dybatpho::file_size` instead of `du`, whose block accounting and flags differ between platforms.
+- [`dybatpho::file_is_binary`](#dybatphofile_is_binary) — Return success when a file looks like binary rather than text. A NUL byte in the first block is the signal `grep` and `git` use, and it is what makes a file unsafe to pass through line-oriented tools.
+- [`dybatpho::create_temp_dir`](#dybatphocreate_temp_dir) — Create a temporary directory and register it for cleanup on shell exit. This is `dybatpho::create_temp` with the argument that asks for a directory already supplied, because passing `/` as an extension reads like a mistake.
 
 <a id="see-also"></a>
 ## 🔗 See also
@@ -107,6 +116,26 @@ the privilege to set it. These helpers honor `DRY_RUN`.
 ### `dybatpho::ensure_dir`
 
 - A mode is applied whether the directory was just created or already existed, so the result does not depend on whether the script ran before
+
+### `dybatpho::xdg_config_dir`
+
+- These helpers only build a path; pair them with `dybatpho::ensure_dir` when the directory has to exist
+
+### `dybatpho::file_mtime`
+
+- `dybatpho::file_age_seconds` answers the same question relative to now
+
+### `dybatpho::dir_size`
+
+- Symbolic links are not counted at all, the way `du` treats them, so a link to a file inside the same tree cannot count its target twice
+
+### `dybatpho::file_is_binary`
+
+- Check this before a text rewrite, which would otherwise mangle a binary
+
+### `dybatpho::create_temp_dir`
+
+- The directory is removed with its contents when the shell exits
 
 <a id="reference"></a>
 ## 📚 Reference
@@ -834,4 +863,290 @@ dybatpho::ensure_dir "${HOME}/.config/myapp" 700 > /dev/null
 **🚦 Exit codes**
 
 - `1`: The path exists as something other than a directory, or cannot be created
+
+
+---
+
+### `__dybatpho_xdg_dir`
+
+Print a directory from the XDG Base Directory specification,
+  optionally scoped to one application.
+  The specification's own default is used whenever the variable is unset or
+  holds a relative path, which it requires to be ignored.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Variable name, such as `XDG_CONFIG_HOME` |
+| `$2` | string | Default path relative to the home directory |
+| `$3` | string | Optional application name appended to the directory |
+
+**📤 Output on stdout**
+
+- The resolved directory
+
+**🚦 Exit codes**
+
+- `1`: Neither the variable nor `HOME` is usable
+
+
+---
+
+### `dybatpho::xdg_config_dir`
+
+Print the directory a program's configuration belongs in.
+
+**🧪 Example**
+
+```bash
+config="$(dybatpho::ensure_dir "$(dybatpho::xdg_config_dir myapp)")"
+printf 'theme = dark\n' | dybatpho::file_write_atomic "${config}/settings.ini"
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Optional application name appended to the directory |
+
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`XDG_CONFIG_HOME`** | string | Base configuration directory, default is `~/.config` |
+
+**📤 Output on stdout**
+
+- The configuration directory
+
+**🚦 Exit codes**
+
+- `1`: Neither `XDG_CONFIG_HOME` nor `HOME` is set
+
+
+---
+
+### `dybatpho::xdg_cache_dir`
+
+Print the directory a program's cache belongs in.
+
+**🧪 Example**
+
+```bash
+cache="$(dybatpho::xdg_cache_dir myapp)"
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Optional application name appended to the directory |
+
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`XDG_CACHE_HOME`** | string | Base cache directory, default is `~/.cache` |
+
+**📤 Output on stdout**
+
+- The cache directory
+
+**🚦 Exit codes**
+
+- `1`: Neither `XDG_CACHE_HOME` nor `HOME` is set
+
+
+---
+
+### `dybatpho::xdg_data_dir`
+
+Print the directory a program's data belongs in.
+
+**🧪 Example**
+
+```bash
+data="$(dybatpho::xdg_data_dir myapp)"
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Optional application name appended to the directory |
+
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`XDG_DATA_HOME`** | string | Base data directory, default is `~/.local/share` |
+
+**📤 Output on stdout**
+
+- The data directory
+
+**🚦 Exit codes**
+
+- `1`: Neither `XDG_DATA_HOME` nor `HOME` is set
+
+
+---
+
+### `dybatpho::xdg_state_dir`
+
+Print the directory a program's state belongs in.
+  State is what a program wants back on the next run but should not be backed
+  up, such as logs and history, which is what separates it from data.
+
+**🧪 Example**
+
+```bash
+state="$(dybatpho::ensure_dir "$(dybatpho::xdg_state_dir myapp)")"
+printf '%s\n' "${run_id}" | dybatpho::file_write_atomic "${state}/last-run"
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Optional application name appended to the directory |
+
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`XDG_STATE_HOME`** | string | Base state directory, default is `~/.local/state` |
+
+**📤 Output on stdout**
+
+- The state directory
+
+**🚦 Exit codes**
+
+- `1`: Neither `XDG_STATE_HOME` nor `HOME` is set
+
+
+---
+
+### `dybatpho::file_mtime`
+
+Print when a file was last modified, as a Unix timestamp.
+
+**🧪 Example**
+
+```bash
+modified="$(dybatpho::file_mtime "${cache}")"
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | File path |
+
+**📤 Output on stdout**
+
+- Modification time in seconds since the epoch
+
+**🚦 Exit codes**
+
+- `1`: The file is missing or its modification time cannot be read
+
+
+---
+
+### `dybatpho::dir_size`
+
+Print the total size of the regular files in a directory tree.
+  The result is the sum of the files' sizes rather than the disk space they
+  occupy, so it matches `dybatpho::file_size` instead of `du`, whose block
+  accounting and flags differ between platforms.
+
+**🧪 Example**
+
+```bash
+bytes="$(dybatpho::dir_size ./build)"
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Directory path |
+
+**📤 Output on stdout**
+
+- Total size in bytes, `0` for a directory holding no files
+
+**🚦 Exit codes**
+
+- `1`: The directory is missing
+
+
+---
+
+### `dybatpho::file_is_binary`
+
+Return success when a file looks like binary rather than text.
+  A NUL byte in the first block is the signal `grep` and `git` use, and it is
+  what makes a file unsafe to pass through line-oriented tools.
+
+**🧪 Example**
+
+```bash
+if dybatpho::file_is_binary "${path}"; then
+  dybatpho::warn "Refusing to rewrite ${path}"
+else
+  dybatpho::file_replace "${path}" 'old' 'new'
+fi
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | File path |
+
+**🚦 Exit codes**
+
+- `0`: The file contains a NUL byte in its first block
+- `1`: The file looks like text, or is empty
+
+
+---
+
+### `dybatpho::create_temp_dir`
+
+Create a temporary directory and register it for cleanup on shell exit.
+  This is `dybatpho::create_temp` with the argument that asks for a directory
+  already supplied, because passing `/` as an extension reads like a mistake.
+
+**🧪 Example**
+
+```bash
+local workdir
+dybatpho::create_temp_dir workdir "build"
+printf 'artifact\n' > "${workdir}/out"
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Variable name that receives the created path |
+| `$2` | string | Name prefix, default is `temp` |
+| `$3` | string | Parent directory, default is `${TMPDIR:-/tmp}` |
+
+**🧩 Variable sets**
+
+- **`The`**: named variable, to the created directory
 
