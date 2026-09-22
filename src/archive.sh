@@ -314,6 +314,7 @@ function __dybatpho_archive_entry_is_safe {
   dybatpho::expect_args entry -- "$@"
   # Treat backslashes as separators so Windows-style entries can't hide a traversal.
   local normalized="${entry//\\//}"
+  # shellcheck disable=SC2088 # the `~/` branch matches a literal entry, it never expands
   case "${normalized}" in
     /* | '~/'* | [a-zA-Z]:/*) return 1 ;;
     .. | ../* | */../* | */..) return 1 ;;

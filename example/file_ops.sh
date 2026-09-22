@@ -129,6 +129,7 @@ function _demo_file_lines {
   local WORKDIR
   dybatpho::create_temp WORKDIR "/"
   local rc="${WORKDIR}/bashrc"
+  # shellcheck disable=SC2016 # writing the literal line into the file, not expanding it here
   printf 'export PATH="${HOME}/bin:${PATH}"\n' > "${rc}"
 
   # Running the same script twice must not duplicate the line, which is what
@@ -226,6 +227,7 @@ function _demo_symlinked_dotfile {
   # The writers follow the link, so editing the dotfile edits the file in the
   # repository it points at rather than detaching the link from it.
   dybatpho::file_replace "${WORKDIR}/.bashrc" 'EDITOR=vi' 'EDITOR=nvim'
+  # shellcheck disable=SC2088 # `~/.bashrc` is prose in a log line, not a path to expand
   dybatpho::info "~/.bashrc is still a symlink: $([[ -L "${WORKDIR}/.bashrc" ]] && echo yes || echo no)"
   dybatpho::info "Repository copy now holds  : $(cat "${WORKDIR}/dotfiles/bashrc")"
 }

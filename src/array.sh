@@ -33,6 +33,7 @@ function dybatpho::array_reverse {
   local -a indices=("${!input_arr[@]}")
 
   for ((i = ${#indices[@]} - 1; i >= 0; i--)); do
+    # shellcheck disable=SC2190 # result_arr is indexed; the nameref misleads ShellCheck
     result_arr+=("${input_arr[${indices[${i}]}]}")
   done
 

@@ -430,6 +430,7 @@ function dybatpho::curl_parse_response {
 
   DYBATPHO_HTTP_STATUS=""
   DYBATPHO_HTTP_HEADERS=()
+  # shellcheck disable=SC2034 # documented output variable, read by callers
   DYBATPHO_HTTP_BODY_FILE="${body_file}"
 
   local line key value

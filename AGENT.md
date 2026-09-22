@@ -108,8 +108,17 @@ isolated function calls. It must:
 
 When adding or changing a public API, update the corresponding example in the
 same change. If a module has no example, add one before considering the work
-complete. Validate every example with `bash -n example/*.sh` and execute new or
-changed examples.
+complete.
+
+`test/examples.bats` runs every example and fails when one exits non-zero or
+changes the working tree, so these rules hold automatically. A new example needs
+its own `@test` line there; the first test in that file fails when one is
+missing, which is what stops a new example from silently never being run.
+
+An example that needs the network must stub it. `example/network_ops.sh` shows
+the pattern: it writes a `curl` executable into a temporary directory and puts
+that directory first on `PATH`. A shell function is not enough — the network
+module calls `command curl` on purpose, which bypasses functions.
 
 | Module | Primary responsibility | Tests / documentation |
 | --- | --- | --- |
@@ -550,8 +559,11 @@ to the module convention.
 | Bootstrap/module loading | `test/init.bats`, a fresh shell per assertion, dependency order, cycle termination, and unknown-module failure. Spawn child shells from a script **file**, never `bash -c`: a `-c` shell has an empty `BASH_SOURCE`, which the kcov hook expands on every command and `set -u` then turns into a failure that only appears under `scripts/test.sh` |
 | External tool used by a module | A declaration in `DYBATPHO_DOCTOR_REQUIRED` or `DYBATPHO_DOCTOR_OPTIONAL` in `src/doctor.sh`, on the module that runs the command, plus a case in `test/doctor.bats` |
 | Bootstrap function or generated artifact | `test/init.bats` or `test/bundle.bats`, and a regenerated bundle check: `scripts/bundle.sh --modules all -o /tmp/bundle.sh` |
-| Documentation/spec | Correct links/references and `git diff --check` |
+| Documentation/spec | Correct links/references, `git diff --check`, and `scripts/lint.sh --stage doc` after regenerating |
 | New public function | `test/conventions.bats` — it must appear in `doc/<module>.md` and be named directly in `test/<module>.bats` |
+| New or changed example | `test/examples.bats` — it must run non-interactively, offline, and leave the working tree untouched |
+| Any shell script | `scripts/lint.sh --stage shell` — ShellCheck and `bash -n` over every tracked script |
+| `CHANGELOG.md` | `scripts/lint.sh --stage changelog` — Keep a Changelog headings, dates, and well-formed link reference URLs |
 | Any public behavior | `CHANGELOG.md` entry under `## [Unreleased]`, in the same change |
 
 ## Completion checklist
@@ -567,6 +579,7 @@ to the module convention.
    anything a consumer would notice, following the Changelog requirements
    above, and confirm `git diff --stat HEAD -- CHANGELOG.md` shows the file.
    A public-behavior change without its entry is not done.
-8. Run targeted tests, `bash -n example/*.sh`, changed examples, and
-   `git diff --check`.
+8. Run targeted tests, `scripts/lint.sh`, and `git diff --check`. `scripts/lint.sh`
+   covers ShellCheck, `bash -n`, the changelog format, documentation drift and
+   the bundle; `test/examples.bats` covers the examples.
 9. Review the final diff and remove temporary artifacts.

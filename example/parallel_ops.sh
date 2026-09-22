@@ -3,6 +3,7 @@
 # @brief Example showing bounded concurrency with ordered output
 # @description Demonstrates dybatpho::parallel_map, parallel_run,
 #   parallel_status, parallel_count, parallel_failed, fail-fast, and DRY_RUN
+# shellcheck disable=SC2034 # DYBATPHO_PARALLEL_FAILFAST is read by the parallel module
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 . "${SCRIPTDIR}/../init.sh" --modules parallel
 

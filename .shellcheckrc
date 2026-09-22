@@ -1,3 +1,11 @@
-disable=SC2155,SC2148
+# SC2155: declare and assign separately. The library assigns in `local` on
+#   purpose throughout; splitting every one would be churn without a bug behind
+#   it.
+# SC2148: missing shebang. Modules under `src/` are sourced, never executed.
+# SC2004: `$`/`${}` is unnecessary on arithmetic variables. This contradicts
+#   `require-variable-braces` below, which the project does want: one rule asks
+#   for `${index}` everywhere and the other rejects it inside `$(( ))`. Braces
+#   everywhere is the more useful of the two, so this one goes.
+disable=SC2155,SC2148,SC2004
 enable=require-variable-braces
 external-sources=true

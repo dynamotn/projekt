@@ -2,6 +2,8 @@
 # @file array_ops.sh
 # @brief Example showing array manipulation utilities
 # @description Demonstrates dybatpho::array_print, array_reverse, array_unique, array_compact, array_filter, array_map, array_reject, array_find, array_every, array_some, array_first, array_last, array_contains, array_index_of, array_join
+# shellcheck disable=SC2034 # every array here is passed to the library by name,
+#   which ShellCheck cannot follow through the nameref on the other side.
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
 . "${SCRIPTDIR}/../init.sh" --modules array

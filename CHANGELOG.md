@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`scripts/lint.sh` — the repository now checks its own shape.** One command
+  runs ShellCheck and `bash -n` over every tracked script, validates
+  `CHANGELOG.md` against the Keep a Changelog format it claims to follow,
+  fails when the generated `doc/*.md` has drifted from its sources, and
+  rebuilds the single-file bundle so the smoke test inside `scripts/bundle.sh`
+  finally runs somewhere. `--stage` narrows it to one check and `--list` prints
+  the scripts it found.
+
+  Scripts are discovered through `git ls-files`, admitted by a `.sh` suffix or
+  a Bash shebang, so nothing has to be registered by hand and the vendored Bats
+  submodules under `test/lib/` are never scanned. `.bats` files are excluded
+  from ShellCheck deliberately: `@test "name" {` is Bats syntax, not Bash.
+
+  A `lint` job in CI runs it, together with a `gitleaks` scan of the history.
+  `mise run lint` and a `pre-commit` hook run it locally.
+
+- **`scripts/doc.sh --check`.** Generates into a temporary directory and
+  compares instead of writing, so stale generated documentation fails a pull
+  request. Previously the only signal was a dirty tree at commit time, which no
+  reviewer ever saw.
+
+- **`test/examples.bats` — the examples are executed, not just shipped.**
+  `AGENT.md` has always required every example to run non-interactively,
+  offline, and without touching the repository. Nothing enforced it. Each
+  example now gets a test that runs it and compares the working tree before and
+  after, and a first test fails when an example has no test at all, so a new
+  example cannot be added and silently never run.
+
+### Changed
+
+- **`.shellcheckrc` disables SC2004.** It contradicts the
+  `require-variable-braces` rule the file enables: one asks for `${index}`
+  everywhere, the other rejects it inside `$(( ))`. Braces everywhere is the
+  more useful of the two.
+
+### Fixed
+
+- **`scripts/release.sh` wrote broken changelog links.** Normalising an SSH
+  remote prefixed `https://` and only then replaced the first `:` — which by
+  that point belonged to the scheme, not to the `host:owner/repo` separator.
+  Every link definition it generated came out as
+  `https///github.com:owner/repo`, and v3.0.0 shipped with two of them. The
+  substitution now runs before the scheme is added. `scripts/lint.sh` validates
+  the shape of each link reference, so a dead link fails the build instead of
+  being committed.
+
+- **`example/network_ops.sh` made real HTTP requests.** It called
+  `example.com`, `api.github.com` and `httpbin.org` on every run, against the
+  rule in `AGENT.md` that an example must not need network access — so it
+  failed on an offline machine and took a minute of retry backoff to do it. It
+  now installs a `curl` stub on `PATH`; retry, header parsing, checksum
+  verification and the circuit breaker are still the real code paths.
+
+- **`mise run demo` pointed at a file that does not exist.** The task ran
+  `doc/example.sh --help`; examples live in `example/`. It now runs
+  `example/cli_basic.sh --help`.
+
+- **A dead `case` branch in `cli.sh`.** `aliases:--help,-h` could never match,
+  because `aliases:--help,*` and `aliases:*,-h` both precede it. Behaviour is
+  unchanged; the branch is gone.
+
 ## [3.0.0] - 2026-09-22
 
 ### Added
@@ -611,6 +674,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dybatpho::safe_extract` validates an archive before extracting it. This blocks
   path-traversal entries such as `../../etc/passwd` in an untrusted archive.
 
-[Unreleased]: https///github.com:dynamotn/dybatpho/compare/v3.0.0...HEAD
-[3.0.0]: https///github.com:dynamotn/dybatpho/compare/v2.0.0...v3.0.0
+[Unreleased]: https://github.com/dynamotn/dybatpho/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/dynamotn/dybatpho/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/dynamotn/dybatpho/releases/tag/v2.0.0

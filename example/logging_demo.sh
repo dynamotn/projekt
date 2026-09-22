@@ -5,6 +5,8 @@
 #              progress, progress_bar, header, success, start/end trace, structured
 #              JSON output enriched with request ID/hostname/PID/duration, and
 #              file logging with rotation and independent verbosity
+# shellcheck disable=SC2030,SC2031 # the subshells scope LOG_* on purpose, so each demo
+#   section restores the caller's logging configuration by construction.
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
 . "${SCRIPTDIR}/../init.sh"

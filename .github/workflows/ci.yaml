@@ -3,6 +3,40 @@ name: CI
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
+  lint:
+    name: "Repository lint"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # gitleaks scans history, which needs more than the default shallow clone.
+          fetch-depth: 0
+
+      - name: "Install dependencies"
+        env:
+          YQ_VERSION: v4.53.3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --fix-missing shellcheck gawk jq
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo chmod +x /usr/local/bin/yq
+          shellcheck --version | head -n 2
+
+      - name: "Lint"
+        # ShellCheck over every tracked script, Keep a Changelog conformance,
+        # generated-documentation drift, and a bundle that still builds and loads.
+        run: bash scripts/lint.sh
+
+      - name: "Scan for committed secrets"
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   test:
     runs-on: ubuntu-latest
     permissions:

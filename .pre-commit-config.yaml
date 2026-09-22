@@ -1,17 +1,27 @@
 repos:
   - repo: local
     hooks:
-      - id: test
-        name: Test all test cases
-        entry: bash scripts/test.sh
+      # `gen-doc` runs first so the documentation it rewrites is already current
+      # by the time `lint` compares it against the sources.
+      - id: gen-doc
+        name: Generate documentation
+        entry: bash scripts/doc.sh
         language: system
         types:
           - file
         files: \.(sh|bats)$
         pass_filenames: false
-      - id: gen-doc
-        name: Generate documentation
-        entry: bash scripts/doc.sh
+      - id: lint
+        name: Lint the repository
+        entry: bash scripts/lint.sh
+        language: system
+        types:
+          - file
+        files: \.(sh|bats|md)$|^\.shellcheckrc$
+        pass_filenames: false
+      - id: test
+        name: Test all test cases
+        entry: bash scripts/test.sh
         language: system
         types:
           - file

@@ -5,6 +5,7 @@
 #              expect_args, expect_envs, require, command_exists_all, is,
 #              coalesce, coalesce_cmd, default_env, require_envs_any, assert,
 #              and error/signal handlers
+# shellcheck disable=SC2154 # `dybatpho::expect_args` assigns these names through a nameref
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
 . "${SCRIPTDIR}/../init.sh"
@@ -44,6 +45,7 @@ function _demo_dry_run {
   dybatpho::info "With DRY_RUN=true, commands are printed but NOT executed"
   DRY_RUN=true _deploy "my-server.example.com"
   dybatpho::info "With DRY_RUN unset, commands execute normally"
+  # shellcheck disable=SC1007 # clearing DRY_RUN for one command, not assigning a value
   DRY_RUN= _deploy "my-server.example.com" || true
 }
 

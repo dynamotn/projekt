@@ -4,11 +4,69 @@
 # @description Demonstrates dybatpho::curl_do, curl_download, curl_json,
 #   curl_head, curl_upload, curl_resume_download, verify_checksum,
 #   curl_request/curl_parse_response, curl_timeout, and circuit_breaker
+#
+#   Every request below is served by a stub, so the example runs offline and
+#   produces the same output on every machine. Only the transport is faked:
+#   retry, header parsing, checksum verification and the circuit breaker are the
+#   real code paths.
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=init.sh
 . "${SCRIPTDIR}/../init.sh" --modules network
 
 dybatpho::register_common_handlers
+
+# @description Install a `curl` stub on PATH so the example needs no network.
+#   `dybatpho::curl_do` runs `command curl`, which deliberately bypasses shell
+#   functions, so the stub has to be a real executable earlier on PATH.
+#
+#   The stub reproduces the three things the module asks curl for: the body at
+#   the path after `-o`, the response headers at the path after `-D`, and the
+#   status code on stdout via `-w '%{http_code}'`.
+function _install_curl_stub {
+  local stub_dir
+  dybatpho::create_temp_dir stub_dir "curl-stub"
+
+  cat > "${stub_dir}/curl" << 'STUB'
+#!/usr/bin/env bash
+output=""
+header_file=""
+prev=""
+url="${!#}"
+for arg in "$@"; do
+  case "${prev}" in
+    -o) output="${arg}" ;;
+    -D) header_file="${arg}" ;;
+  esac
+  prev="${arg}"
+done
+
+content_type='text/plain'
+case "${url}" in
+  *api.github.com*)
+    content_type='application/json'
+    body='{"name":"dybatpho","stargazers_count":42,"license":{"key":"wtfpl"}}'
+    ;;
+  *httpbin.org/post*)
+    content_type='application/json'
+    body='{"form":{"note":"nightly run"},"files":{"report":"metric,value"}}'
+    ;;
+  *hello.txt) body='hello dybatpho' ;;
+  *) body='<!doctype html><title>Example Domain</title>' ;;
+esac
+
+if [[ -n "${header_file}" ]]; then
+  printf 'HTTP/2 200\r\ncontent-type: %s\r\ncontent-length: %s\r\n\r\n' \
+    "${content_type}" "${#body}" > "${header_file}"
+fi
+if [[ -n "${output}" && "${output}" != "/dev/null" ]]; then
+  printf '%s' "${body}" > "${output}"
+fi
+printf '200'
+STUB
+
+  chmod +x "${stub_dir}/curl"
+  export PATH="${stub_dir}:${PATH}"
+}
 
 function _demo_head_request {
   dybatpho::header "HEAD REQUEST"
@@ -103,6 +161,7 @@ function _demo_circuit_breaker {
 }
 
 function _main {
+  _install_curl_stub
   _demo_head_request
   _demo_json_request
   _demo_upload

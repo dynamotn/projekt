@@ -102,7 +102,9 @@ function __dybatpho_table_measure_widths {
 function __dybatpho_table_parse_alignments {
   local spec widths_var alignments_var
   dybatpho::expect_args spec widths_var alignments_var -- "$@"
+  # shellcheck disable=SC2178 # nameref to the caller's array
   local -n widths_ref="${widths_var}"
+  # shellcheck disable=SC2178 # nameref to the caller's array
   local -n alignments_ref="${alignments_var}"
   local -a requested=()
   local index alignment
@@ -112,6 +114,7 @@ function __dybatpho_table_parse_alignments {
     mapfile -t requested < <(dybatpho::split "${spec}" ",")
   fi
 
+  # shellcheck disable=SC2034 # alignments_ref is a nameref: assigning it is the output
   for index in "${!widths_ref[@]}"; do
     alignment="$(dybatpho::lower "$(dybatpho::trim "${requested[${index}]-left}")")"
     case "${alignment}" in
@@ -175,6 +178,7 @@ function __dybatpho_table_format_cell {
 function __dybatpho_table_rule {
   local left join right widths_var
   dybatpho::expect_args left join right widths_var -- "$@"
+  # shellcheck disable=SC2178 # nameref to the caller's array
   local -n widths_ref="${widths_var}"
   local rule="${left}" index segment
 

@@ -195,6 +195,7 @@ function __dybatpho_bundle_module {
 #######################################
 function __dybatpho_bundle_run {
   local _modules _module _count=0
+  # shellcheck disable=SC2153 # MODULES is the option variable the CLI spec declares
   _modules="$(__dybatpho_bundle_resolve "${MODULES}" | tr '\n' ' ')"
   _modules="$(dybatpho::trim "${_modules}")"
   for _module in ${_modules}; do _count=$((_count + 1)); done
@@ -236,6 +237,7 @@ function __dybatpho_bundle_run {
 # @arg $2 string The module names it is expected to report, in load order
 # @exitcode 1 Stop the script when sourcing the bundle fails or reports the wrong set
 #######################################
+# shellcheck disable=SC2016 # the printf literals below are generated shell source
 function __dybatpho_bundle_smoke {
   local _bundle="$1" _expected="$2" _script _loaded
   dybatpho::create_temp _script ".sh" "bundle-smoke"

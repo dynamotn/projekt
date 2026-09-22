@@ -94,7 +94,10 @@ function __dybatpho_release_repo_url {
     || dybatpho::die "No URL for remote '${_remote}'"
   _url="${_url%.git}"
   case "${_url}" in
-    git@*) _url="https://${_url#git@}" && _url="${_url/://}" ;;
+    # Turn the `host:owner/repo` separator into a `/` *before* prefixing the
+    # scheme. Doing it after leaves `https:` as the first colon in the string,
+    # so the substitution mangles the scheme instead of the separator.
+    git@*) _url="${_url#git@}" && _url="https://${_url/://}" ;;
     ssh://git@*) _url="https://${_url#ssh://git@}" ;;
   esac
   printf '%s\n' "${_url}"

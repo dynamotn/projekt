@@ -312,6 +312,7 @@ function dybatpho::default_env {
   [[ "${env_name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || dybatpho::die "Invalid environment variable name: ${env_name}"
   if [[ -z "${!env_name:-}" ]]; then
     printf -v "${env_name}" '%s' "${default_value}"
+    # shellcheck disable=SC2163 # exporting the variable this name refers to, as intended
     export "${env_name}"
   fi
   printf '%s\n' "${!env_name}"

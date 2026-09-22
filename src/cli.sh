@@ -1192,6 +1192,7 @@ function __dybatpho_cli_generate_help {
   __dybatpho_cli_replay_persistent_defs
   local __persistent_def
   local __persistent_replay=true
+  # shellcheck disable=SC2154 # populated by __dybatpho_cli_replay_persistent_defs
   for __persistent_def in "${__persistent_help_defs[@]}"; do
     eval "${__persistent_def}"
   done
@@ -1411,6 +1412,7 @@ function __dybatpho_cli_generate_man_command {
     printf '.SH COMMANDS\n'
     for item in "${commands[@]}"; do
       local cmd child aliases child_hidden child_deprecated
+      # shellcheck disable=SC2034 # child_deprecated fills a field slot this loop doesn't read
       IFS=$'\t' read -r cmd child aliases child_hidden child_deprecated <<< "${item}"
       [ "${child_hidden:-false}" = true ] && continue
       printf '.TP\n.B %s\n' "${cmd}"
@@ -1499,6 +1501,7 @@ function __dybatpho_cli_completion_words {
 }
 
 function __dybatpho_cli_generate_completion_command {
+  # shellcheck disable=SC2034 # root keeps the positional signature uniform across generators
   local spec="$1" shell="$2" name="$3" root="$4" description
   local -a options=() commands=() words=()
   __dybatpho_cli_collect_spec_metadata "${spec}" options commands description
@@ -1511,7 +1514,9 @@ function __dybatpho_cli_generate_completion_command {
       # user can ever type.
       [ "${aliases}" = "@none" ] && aliases=""
       cmd_list+=" ${cmd}${aliases:+ ${aliases}}"
+      # shellcheck disable=SC2034 # out-params required by collect_spec_metadata's signature
       local -a child_options=() child_commands=()
+      # shellcheck disable=SC2034 # out-param required by collect_spec_metadata's signature
       local child_description
       __dybatpho_cli_collect_spec_metadata "${child}" child_options child_commands child_description
       __dybatpho_cli_completion_words words "${child_options[@]}"
@@ -1520,6 +1525,7 @@ function __dybatpho_cli_generate_completion_command {
   word_list="${words[*]}"
   case "${shell}" in
     bash)
+      # shellcheck disable=SC2016 # this is generated shell source, expanded by the caller's shell
       printf '_%s_completion() {\n  local cur="${COMP_WORDS[COMP_CWORD]}"\n  COMPREPLY=( $(compgen -W %q -- "${cur}") )\n}\ncomplete -F _%s_completion %s\n' \
         "${name//[^a-zA-Z0-9_]/_}" "${word_list} ${cmd_list} --help -h" \
         "${name//[^a-zA-Z0-9_]/_}" "${name}"
@@ -2051,6 +2057,7 @@ function __dybatpho_cli_generate_child_logic {
 # @stdout Generated parser code
 # @exitcode 0 Rule accepted and code emitted
 #######################################
+# shellcheck disable=SC2016 # every literal here is generated shell source, expanded by the caller
 function __dybatpho_cli_print_args_check {
   local rule="${1:-any}"
   local expected min max noun
@@ -2398,7 +2405,7 @@ function dybatpho::opts::disp {
     local __help_arg
     for __help_arg in "${@:2}"; do
       case "${__help_arg}" in
-        --help | -h | alias:--help | alias:-h | aliases:--help,* | aliases:*,-h | aliases:--help,-h)
+        --help | -h | alias:--help | alias:-h | aliases:--help,* | aliases:*,-h)
           __has_help=true
           break
           ;;
