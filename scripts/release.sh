@@ -189,11 +189,13 @@ function __dybatpho_release_render_changelog {
 # @exitcode 1 Otherwise
 #######################################
 function __dybatpho_release_changelog_breaking {
+  # `exit` runs the END block, so the answer is carried in a flag rather than in
+  # the status of the rule that found it.
   awk '
     /^## \[Unreleased\]/ { capturing = 1; next }
-    capturing && (/^## \[/ || /^\[Unreleased\]:/) { exit 1 }
-    capturing && /BREAKING/ { exit 0 }
-    END { exit 1 }
+    capturing && (/^## \[/ || /^\[Unreleased\]:/) { exit }
+    capturing && /BREAKING/ { breaking = 1; exit }
+    END { exit breaking ? 0 : 1 }
   ' "${CHANGELOG_FILE}"
 }
 
