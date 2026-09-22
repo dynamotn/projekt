@@ -71,6 +71,9 @@
 #   | `persistent:<bool>` | `flag`, `param`, `disp` | Make the option available in descendant subcommands |
 #   | `export:<bool>` | `flag`, `param` | Export the variable |
 #   | `env:<NAME>` | `flag`, `param` | Use environment variable `NAME` as the option's initial value |
+#   | `config:<key>` | `flag`, `param` | Use configuration key `key` as the option's initial value, below `env:` and above `init:` |
+#   | `negatable:<bool>` | `flag` | Also accept a generated `--no-<name>` for every long switch |
+#   | `count:<bool>` | `flag` | Count repeats instead of storing a value, so `-vv` yields `2` |
 #   | `optional:<bool>` | `param` | Whether the option value is optional when the switch appears |
 #   | `required:<bool>` | `param` | Whether the option itself must appear |
 #   | `prompt:<text>` | `param` | Prompt for a missing value with the supplied text |
@@ -120,14 +123,48 @@
 #
 #   ### Help generation
 #
-#   `dybatpho::generate_help` automatically handles:
+#   `dybatpho::generate_help` renders the layout a conventional command-line
+#   tool uses:
 #
-#   - usage line
+#   ```text
+#   Usage: deploy-tool deploy [OPTIONS] <SERVICE> [TARGETS]...
+#
+#   Deploy selected components
+#
+#   Arguments:
+#     <SERVICE>                       Service to deploy
+#     [TARGETS]...                    Extra targets
+#
+#   Commands:
+#     rollback                        Undo the last deploy
+#
+#   Options:
+#     -e, --environment <DEPLOY_ENV>  Target environment (required)
+#                                     [env: DEPLOY_ENV]
+#                                     [config: deploy.environment]
+#                                     [choices: staging, production]
+#                                     [default: staging]
+#     -h, --help                      Show this help
+#
+#   Run 'deploy-tool COMMAND --help' for more information on a command.
+#   ```
+#
+#   It automatically handles:
+#
+#   - a usage line that names `COMMAND` only when there are subcommands, and
+#     shows the arguments declared with `dybatpho::opts::arg`
 #   - description from `dybatpho::opts::setup`
-#   - option rows
-#   - command rows
+#   - argument, command, and option rows aligned to one shared column
+#   - the `-h, --help` row every command gets for free
 #   - current subcommand path
 #   - automatic `(required)` suffix for `required:true` params
+#   - `[env: ...]`, `[config: ...]`, `[choices: ...]`, `[default: ...]`,
+#     `[repeatable]`, and `[repeat to increase]` annotations, each on its own
+#     line under the description
+#
+#   A `[default: ...]` annotation is only shown for a literal `init:` value. A
+#   default built from a command substitution or a variable is resolved at run
+#   time, so printing the expression would mislead more than it helps.
 #
 #   By default:
 #
@@ -205,6 +242,65 @@
 #   dybatpho::opts::flag "Color output" COLOR --{no-}color on:true off:false init:="true"
 #   ```
 #
+#   `negatable:true` generates the negative switch instead of spelling both out.
+#   Without an explicit `off:`, a negatable flag turns off to `false` rather
+#   than to the empty string, so `--no-color` lands on a value worth testing:
+#
+#   ```bash
+#   dybatpho::opts::flag "Color output" COLOR --color negatable:true init:="true"
+#   # accepts --color and --no-color; aliases get their own --no- form too
+#   ```
+#
+#   #### Counting verbosity
+#
+#   A `count:true` flag records how often it appeared instead of storing a
+#   value, so `-v`, `-vv`, and `-v -v` yield `1`, `2`, and `2`. It starts at `0`
+#   unless `init:` says otherwise.
+#
+#   ```bash
+#   dybatpho::opts::flag "Increase verbosity" VERBOSITY -v alias:--verbose count:true
+#
+#   function _run {
+#     dybatpho::cli_apply_verbosity "${VERBOSITY}" # info -> debug -> trace
+#   }
+#   ```
+#
+#   #### Binding an option to a configuration key
+#
+#   `config:<key>` reads the key from the configuration `src/config.sh` loaded,
+#   giving one precedence chain across the whole CLI:
+#
+#   **flag > `env:` > `config:` > `init:`**
+#
+#   ```bash
+#   dybatpho::config_load ./app.yaml          # before generate_from_spec
+#
+#   function _spec {
+#     dybatpho::opts::setup "Serve" ARGS action:"_run"
+#     dybatpho::opts::param "Port to listen on" PORT --port \
+#       env:APP_PORT config:server.port init:="8080"
+#   }
+#   ```
+#
+#   The configuration has to be loaded before `dybatpho::generate_from_spec`,
+#   because that is when the parser resolves an option's initial value. A key
+#   that is absent, or a CLI that never loaded any configuration at all, simply
+#   falls through to `init:`.
+#
+#   #### Documented positional arguments
+#
+#   ```bash
+#   function _spec {
+#     dybatpho::opts::setup "Copy a file" ARGS action:"_run"
+#     dybatpho::opts::arg "File to read" SOURCE
+#     dybatpho::opts::arg "Where to write it" TARGET required:false
+#   }
+#   # Usage: tool [OPTIONS] <SOURCE> [TARGET]
+#   ```
+#
+#   Declaring arguments also derives the `args:<rule>` count check, so the two
+#   never disagree. State `args:` explicitly to override the derived rule.
+#
 #   #### Validation
 #
 #   ```bash
@@ -242,6 +338,20 @@
 #   - `Invalid command: ...`
 #   - `Validation error (...): ...`
 #
+#   `Unrecognized option` and `Invalid command` carry a suggestion when the
+#   input is close to something the command accepts, compared by Levenshtein
+#   distance with leading dashes ignored:
+#
+#   ```text
+#   Unrecognized option: --colr. Did you mean '--color'?
+#   Invalid command: depoy. Did you mean 'deploy'?
+#   ```
+#
+#   A command that declares at least one switch rejects any unmatched `-x` or
+#   `--xy` rather than collecting it as a positional argument. Use `--` to pass
+#   dashed values through. A command that declares no switches at all is a
+#   passthrough wrapper and keeps collecting them.
+#
 #   ### Debugging
 #
 #   Set `DYBATPHO_CLI_DEBUG=true` to print the generated parser script.
@@ -261,8 +371,8 @@
 #
 #   `example/cli_ux.sh` is a complete spec-driven CLI example:
 #
-#   - `_spec_root` declares the root command plus `deploy`, `completion`, `schema`, and `man` subcommands.
-#   - `_spec_deploy` demonstrates `env:`, `choices:`, `prompt:`, `multiple:`, and boolean toggles.
+#   - `_spec_root` declares the root command, a persistent `count:true` verbosity flag, plus `deploy`, `completion`, `schema`, and `man` subcommands.
+#   - `_spec_deploy` demonstrates `arg`, `env:`, `config:`, `choices:`, `prompt:`, `multiple:`, `negatable:`, and boolean toggles.
 #   - `_spec_completion`, `_spec_schema`, and `_spec_man` define the artifact subcommands.
 #   - `_run_root`, `_run_completion`, `_run_schema`, and `_run_man` implement their actions.
 #   - `_run_deploy` consumes the parsed values and performs the deploy action.
@@ -270,11 +380,23 @@
 #   Run it with:
 #
 #   ```bash
-#   bash example/cli_ux.sh deploy
+#   bash example/cli_ux.sh deploy --component api api
+#   bash example/cli_ux.sh deploy -vv --no-color --component api api
+#   bash example/cli_ux.sh depoy                      # suggests 'deploy'
 #   bash example/cli_ux.sh completion --shell bash
 #   bash example/cli_ux.sh schema
 #   bash example/cli_ux.sh man
 #   ```
+#
+#   ### Completion cache
+#
+#   `dybatpho::generate_completion` caches its output under
+#   `DYBATPHO_CLI_CACHE_DIR`, so a shell startup that sources a generated
+#   completion does not walk the whole spec tree again. The cache key hashes the
+#   script that declares the spec, so editing that script invalidates the entry
+#   by itself and there is nothing to clear by hand. Set
+#   `DYBATPHO_CLI_CACHE=false` to regenerate every time, and note that a spec
+#   declared somewhere with no readable source file is never cached.
 #
 # @see
 #   - `example/cli_basic.sh`
@@ -285,6 +407,10 @@
 
 # @env DYBATPHO_CLI_DEBUG bool Set to `true` to dump generated parser details while developing specs
 DYBATPHO_CLI_DEBUG="${DYBATPHO_CLI_DEBUG:-false}"
+# @env DYBATPHO_CLI_CACHE bool Set to `false` to regenerate completion output instead of reusing the cached copy. Default is `true`
+DYBATPHO_CLI_CACHE="${DYBATPHO_CLI_CACHE:-true}"
+# @env DYBATPHO_CLI_CACHE_DIR string Directory holding cached completion output. Default is `${XDG_CACHE_HOME:-$HOME/.cache}/dybatpho/cli`
+DYBATPHO_CLI_CACHE_DIR="${DYBATPHO_CLI_CACHE_DIR:-${XDG_CACHE_HOME:-${HOME}/.cache}/dybatpho/cli}"
 
 #######################################
 # @description Read a line from the terminal (or stdin) with an optional default.
@@ -382,8 +508,161 @@ function dybatpho::opts::validate_choice {
   return 1
 }
 
+#######################################
+# @description Compute the Levenshtein edit distance between two strings.
+# @example
+#   distance="$(dybatpho::cli_levenshtein color colour)"
+#
+# @arg $1 string First string
+# @arg $2 string Second string
+# @stdout Edit distance as a decimal number
+# @exitcode 0
+#######################################
+function dybatpho::cli_levenshtein {
+  local a="${1-}" b="${2-}"
+  local -i la=${#a} lb=${#b} i j cost del ins sub
+  ((la == 0)) && {
+    printf '%s\n' "${lb}"
+    return 0
+  }
+  ((lb == 0)) && {
+    printf '%s\n' "${la}"
+    return 0
+  }
+  local -a prev=() cur=()
+  for ((j = 0; j <= lb; j++)); do prev[j]=${j}; done
+  for ((i = 1; i <= la; i++)); do
+    cur=("${i}")
+    for ((j = 1; j <= lb; j++)); do
+      cost=1
+      [[ "${a:i-1:1}" == "${b:j-1:1}" ]] && cost=0
+      del=$((prev[j] + 1))
+      ins=$((cur[j - 1] + 1))
+      sub=$((prev[j - 1] + cost))
+      if ((del < ins)); then cur[j]=${del}; else cur[j]=${ins}; fi
+      ((sub < cur[j])) && cur[j]=${sub}
+    done
+    prev=("${cur[@]}")
+  done
+  printf '%s\n' "${prev[lb]}"
+}
+
+#######################################
+# @description Print the candidates closest to a mistyped switch or command name.
+#              Leading dashes are ignored while comparing, so `--colr` still
+#              matches `--color`, and a candidate that shares a prefix with the
+#              input always wins over a pure edit-distance match.
+# @example
+#   dybatpho::cli_suggest --colr --color --cold --verbose
+#
+# @arg $1 string Mistyped input
+# @arg $@ string Known candidates
+# @stdout Up to three closest candidates, one per line
+# @exitcode 0 At least one close candidate was found
+# @exitcode 1 Nothing was close enough to suggest
+#######################################
+function dybatpho::cli_suggest {
+  local input="${1-}"
+  shift || true
+  local candidate plain lowered_input lowered_candidate entry
+  local -i threshold=2 best=-1 distance emitted=0 entry_distance
+  local stripped="${input#--}"
+  stripped="${stripped#-}"
+  ((${#stripped} < 2)) && return 1
+  ((${#stripped} > 5)) && threshold=3
+  lowered_input="$(dybatpho::lower "${stripped}")"
+  local -a seen=() scored=()
+  for candidate in "$@"; do
+    [ -n "${candidate}" ] || continue
+    [ "${candidate}" = "${input}" ] && continue
+    [[ " ${seen[*]-} " == *" ${candidate} "* ]] && continue
+    seen+=("${candidate}")
+    plain="${candidate#--}"
+    plain="${plain#-}"
+    lowered_candidate="$(dybatpho::lower "${plain}")"
+    # Typing a prefix of a longer switch is an abbreviation, not a typo, so it
+    # outranks every edit-distance match. The reverse is not true: `-e` is a
+    # prefix of `--enviroment` without being a plausible correction for it.
+    if [[ "${lowered_candidate}" == "${lowered_input}"* ]]; then
+      distance=0
+    else
+      distance="$(dybatpho::cli_levenshtein "${lowered_input}" "${lowered_candidate}")"
+    fi
+    ((distance > threshold)) && continue
+    if ((best < 0 || distance < best)); then best=${distance}; fi
+    scored+=("${distance} ${candidate}")
+  done
+  ((best < 0)) && return 1
+  for entry in "${scored[@]}"; do
+    entry_distance="${entry%% *}"
+    ((entry_distance == best)) || continue
+    printf '%s\n' "${entry#* }"
+    emitted+=1
+    ((emitted >= 3)) && break
+  done
+  return 0
+}
+
+#######################################
+# @description Raise a log level by the number of times a counting `-v` flag was repeated.
+# @example
+#   LOG_LEVEL="$(dybatpho::cli_verbosity_level 2)" # info -> trace
+#
+# @arg $1 number Repeat count, default `0`
+# @arg $2 string Base level, default `LOG_LEVEL`
+# @stdout Resulting log level, capped at `trace`
+# @exitcode 0
+#######################################
+function dybatpho::cli_verbosity_level {
+  local -i count="${1:-0}" index=3 position
+  local base
+  base="$(dybatpho::lower "${2:-${LOG_LEVEL:-info}}")"
+  local -a ladder=(fatal error warn info debug trace)
+  for position in "${!ladder[@]}"; do
+    [ "${ladder[position]}" = "${base}" ] && index=${position} && break
+  done
+  ((count < 0)) && count=0
+  index=$((index + count))
+  ((index > 5)) && index=5
+  printf '%s\n' "${ladder[index]}"
+}
+
+#######################################
+# @description Apply a repeat count from a counting `-v` flag to `LOG_LEVEL`.
+# @example
+#   dybatpho::opts::flag "Increase verbosity" VERBOSITY -v alias:--verbose count:true
+#   # then, from the command action or a prerun hook:
+#   dybatpho::cli_apply_verbosity "${VERBOSITY}"
+#
+# @arg $1 number Repeat count, default `0`
+# @arg $2 string Base level, default `LOG_LEVEL`
+# @set LOG_LEVEL string Raised log level
+# @exitcode 0
+#######################################
+function dybatpho::cli_apply_verbosity {
+  LOG_LEVEL="$(dybatpho::cli_verbosity_level "${1:-0}" "${2:-${LOG_LEVEL:-info}}")"
+  export LOG_LEVEL
+}
+
 # @section Internal functions
 # @description Functions are triggered by `dybatpho::generate_from_spec`
+
+#######################################
+# @description Read a key bound with `config:<key>` out of the configuration
+#              loaded by `src/config.sh`. Missing keys and an unloaded config
+#              module both report failure so the generated parser falls through
+#              to the option's declared default.
+# @arg $1 string Configuration key
+# @stdout Configuration value
+# @exitcode 0 The key is present
+# @exitcode 1 The key is absent, or no configuration has been loaded
+#######################################
+function __dybatpho_cli_config_get {
+  local key="${1-}"
+  [ -n "${key}" ] || return 1
+  [[ -v "DYBATPHO_CONFIG[${key}]" ]] || return 1
+  printf '%s' "${DYBATPHO_CONFIG[${key}]}"
+}
 
 #######################################
 # @description Parse options with a spec from `dybatpho::opts::flag`,
@@ -398,8 +677,30 @@ function __dybatpho_cli_parse_opt {
   local skip_meta=$2
   shift 2
 
+  # `negatable:` and `count:` change how the switches that precede them in the
+  # argument list are expanded, so they are read before the ordered pass below.
+  __negatable="false" __count="false"
+  local __scan __has_explicit_off=false
+  for __scan in "$@"; do
+    case ${__scan} in
+      negatable:*) __negatable="${__scan#negatable:}" ;;
+      count:*) __count="${__scan#count:}" ;;
+      off:*) __has_explicit_off=true ;;
+    esac
+  done
+  # A generated `--no-x` is only useful if it lands on a falsy value, so a
+  # negatable option without an explicit `off:` turns off to `false` instead of
+  # the empty string every other option defaults to.
+  local __negatable_off=false
+  if dybatpho::is true "${__negatable}" && dybatpho::is false "${__has_explicit_off}"; then
+    __negatable_off=true
+  fi
+
   if dybatpho::is false "${__done_initial}"; then
-    __on="true" __off="" __init="@empty" __export="true" __required="false" __persistent="false" __hidden="false" __deprecated="" __label="" __env="" __multiple="false" __prompt="" __choices=""
+    __on="true" __off="" __init="@empty" __export="true" __required="false" __persistent="false" __hidden="false" __deprecated="" __label="" __env="" __multiple="false" __prompt="" __choices="" __config=""
+    # A counting flag accumulates repeats, so it starts from zero rather than
+    # from the empty string every other option type uses.
+    if dybatpho::is true "${__count}"; then __init="=0"; fi
     shift "${skip_meta}"
     while (($#)); do
       case $1 in
@@ -460,8 +761,9 @@ function __dybatpho_cli_parse_opt {
       esac
       shift
     done
+    if dybatpho::is true "${__negatable_off}"; then __off="false"; fi
   else
-    __validate="" __on="true" __off="" __export="true" __optional="false" __required="false" __persistent="false" __hidden="false" __deprecated="" __switch="" __env="" __multiple="false" __prompt="" __choices=""
+    __validate="" __on="true" __off="" __export="true" __optional="false" __required="false" __persistent="false" __hidden="false" __deprecated="" __switch="" __env="" __multiple="false" __prompt="" __choices="" __config=""
     shift "${skip_meta}"
     while (($#)); do
       case $1 in
@@ -475,7 +777,7 @@ function __dybatpho_cli_parse_opt {
               i=${1#alias:--*-}
               __dybatpho_cli_add_switch "'--with-${i}'|'--without-${i}'"
               ;;
-            -? | --*) __dybatpho_cli_add_switch "'${1#alias:}'" ;;
+            -? | --*) __dybatpho_cli_add_plain_switch "${1#alias:}" ;;
             *) dybatpho::die "Invalid switch alias: ${1#alias:}" ;; # kcov(skip)
           esac
           ;;
@@ -493,7 +795,7 @@ function __dybatpho_cli_parse_opt {
                 i=${__opt_alias#--*-}
                 __dybatpho_cli_add_switch "'--with-${i}'|'--without-${i}'"
                 ;;
-              -? | --*) __dybatpho_cli_add_switch "'${__opt_alias}'" ;;
+              -? | --*) __dybatpho_cli_add_plain_switch "${__opt_alias}" ;;
               *) dybatpho::die "Invalid switch alias: ${__opt_alias}" ;; # kcov(skip)
             esac
           done
@@ -506,11 +808,12 @@ function __dybatpho_cli_parse_opt {
           i=${1#--*-}
           __dybatpho_cli_add_switch "'--with-${i}'|'--without-${i}'"
           ;;
-        -? | --*) __dybatpho_cli_add_switch "'$1'" ;;
+        -? | --*) __dybatpho_cli_add_plain_switch "$1" ;;
         *) __dybatpho_cli_parse_key_value "$1" "__" ;;
       esac
       shift
     done
+    if dybatpho::is true "${__negatable_off}"; then __off="false"; fi
     __dybatpho_cli_assign_quoted __on "${__on}"
     __dybatpho_cli_assign_quoted __off "${__off}"
   fi
@@ -581,6 +884,7 @@ function __dybatpho_cli_define_var {
   if [ "${__env_name}" = "true" ]; then __env_name="$1"; fi
   [ "${__env_name}" = "false" ] && __env_name=""
   [ -z "${__env_name}" ] || __dybatpho_cli_require_shell_name "${__env_name}"
+  local __config_key="${__config:-}"
   if [ -n "${__env_name}" ] && [ "${__init}" != "@unset" ]; then
     __dybatpho_cli_print_indent 0 "if [ \"\${${__env_name}+x}\" ]; then"
     __dybatpho_cli_print_indent 1 "$(__dybatpho_cli_prepend_export "$1=\${${__env_name}}")"
@@ -591,6 +895,27 @@ function __dybatpho_cli_define_var {
     __fallback="$(__dybatpho_cli_define_var "$1")"
     __env="${__saved_env}"
     __dybatpho_cli_print_indent 1 "${__fallback}"
+    __dybatpho_cli_print_indent 0 "fi"
+    return 0
+  fi
+  # Config keys sit between the environment fallback above and the declared
+  # default below, so the precedence is flag > env > config file > default.
+  if [ -n "${__config_key}" ] && [ "${__init}" != "@unset" ]; then
+    local __config_quoted
+    __dybatpho_cli_assign_quoted __config_quoted "${__config_key}"
+    __dybatpho_cli_print_indent 0 "if $1=\"\$(__dybatpho_cli_config_get ${__config_quoted})\"; then"
+    if dybatpho::is true "${__export}"; then
+      __dybatpho_cli_print_indent 1 "export $1"
+    else
+      __dybatpho_cli_print_indent 1 ":"
+    fi
+    __dybatpho_cli_print_indent 0 "else"
+    local __saved_config="${__config}"
+    local __config_fallback
+    __config=""
+    __config_fallback="$(__dybatpho_cli_define_var "$1")"
+    __config="${__saved_config}"
+    __dybatpho_cli_print_indent 1 "${__config_fallback}"
     __dybatpho_cli_print_indent 0 "fi"
     return 0
   fi
@@ -660,6 +985,8 @@ function __dybatpho_cli_generate_logic {
   local __has_help="false"
   declare -a __sub_specs=()
   declare -a __prompt_defs=()
+  declare -a __known_switches=()
+  declare -a __declared_args=()
 
   #######################################
   # @description Emit generated code that rebuilds positional parameters from a serialized argument list.
@@ -689,6 +1016,13 @@ function __dybatpho_cli_generate_logic {
   local __done_initial=false
   __dybatpho_cli_replay_persistent_defs
   "${spec}" "$*"
+  # An explicit `args:<rule>` always wins; otherwise the declared positional
+  # arguments describe the count well enough to validate it.
+  case "${__args}" in
+    "" | any | arbitrary)
+      __dybatpho_cli_derive_args_rule __args ${__declared_args[@]+"${__declared_args[@]}"}
+      ;;
+  esac
   __dybatpho_cli_print_indent 0 "dybatpho::opts::parse::${spec}() {"
   __dybatpho_cli_print_indent 1 'local __rest_argc=0'
   __dybatpho_cli_print_persistent_help_defs
@@ -735,6 +1069,13 @@ function __dybatpho_cli_generate_logic {
   __dybatpho_cli_print_rest
   __dybatpho_cli_print_indent 3 "*)"
   if dybatpho::is false "${__has_sub_cmd}"; then
+    # Anything still starting with a dash matched no declared switch, so it is
+    # a typo rather than a positional argument. A lone `-` keeps its usual
+    # stdin meaning, and `--` is still the way to pass dashed values through.
+    # A command that declares no switches at all is a passthrough wrapper
+    # though, and has no option list to have mistyped in the first place.
+    ((${#__known_switches[@]})) \
+      && __dybatpho_cli_print_indent 4 'case $1 in -?*) set "unknown" "$1"; break ;; esac'
     __dybatpho_cli_print_rest
   else
     __dybatpho_cli_print_indent 4 "case \$1 in"
@@ -749,7 +1090,12 @@ function __dybatpho_cli_generate_logic {
       __dybatpho_cli_print_indent 6 ";;"
     done
     __dybatpho_cli_print_indent 5 "*)"
-    __dybatpho_cli_print_indent 6 'set "notcmd" "$1"'
+    # A leftover switch is a mistyped option, not a mistyped command, so it is
+    # reported against the option list to get a useful suggestion.
+    __dybatpho_cli_print_indent 6 'case $1 in'
+    __dybatpho_cli_print_indent 7 '-?*) set "unknown" "$1" ;;'
+    __dybatpho_cli_print_indent 7 '*) set "notcmd" "$1" ;;'
+    __dybatpho_cli_print_indent 6 'esac'
     __dybatpho_cli_print_indent 6 "break"
     __dybatpho_cli_print_indent 6 ";;"
     __dybatpho_cli_print_indent 4 "esac"
@@ -793,13 +1139,16 @@ function __dybatpho_cli_generate_logic {
   __dybatpho_cli_print_indent 3 'return 0'
   __dybatpho_cli_print_indent 2 '}'
   __dybatpho_cli_print_indent 1 '}'
+  # The parser knows every switch and command name it accepts, so a typo can be
+  # answered with the closest match instead of a bare "Unrecognized option".
+  __dybatpho_cli_print_known_candidates
   __dybatpho_cli_print_indent 1 'case $1 in'
-  __dybatpho_cli_print_indent 2 'unknown) set "Unrecognized option: $2" "$@" ;;'
+  __dybatpho_cli_print_indent 2 'unknown) set "Unrecognized option: $2$(__dybatpho_cli_suggest_suffix "$2" ${__cli_known_opts[@]+"${__cli_known_opts[@]}"})" "$@" ;;'
   __dybatpho_cli_print_indent 2 'noarg) set "Does not allow an argument: $2" "$@" ;;'
   __dybatpho_cli_print_indent 2 'needarg) set "Requires an argument: $2" "$@" ;;'
   __dybatpho_cli_print_indent 2 'missingopt) set "Missing required option: $2" "$@" ;;'
   __dybatpho_cli_print_indent 2 'argcount) set "$2" "$@" ;;'
-  __dybatpho_cli_print_indent 2 'notcmd) set "Invalid command: $2" "$@" ;;'
+  __dybatpho_cli_print_indent 2 'notcmd) set "Invalid command: $2$(__dybatpho_cli_suggest_suffix "$2" ${__cli_known_cmds[@]+"${__cli_known_cmds[@]}"})" "$@" ;;'
   __dybatpho_cli_print_indent 2 '*) set "Validation error ($1): $2" "$@"'
   __dybatpho_cli_print_indent 1 "esac"
   [ "${__error}" ] && __dybatpho_cli_print_indent 1 "${__error}" '"$@" >&2 || exit $?'
@@ -847,21 +1196,66 @@ function __dybatpho_cli_generate_help {
     eval "${__persistent_def}"
   done
   "${spec}"
+  # A command that declares no help option of its own is still given `--help`
+  # and `-h` by the parser, so the generated help lists them too.
+  if dybatpho::is false "${__has_help}"; then
+    __help_opt_rows+=("$(__dybatpho_cli_help_row disp "-" "Show this help" -h alias:--help)")
+  fi
   __help_mode=false
+  # A command that declares a persistent option sees it twice: once replayed as
+  # an inherited definition, once from its own spec. Both rows are identical, so
+  # the later one is dropped.
+  __dybatpho_cli_help_dedupe __help_opt_rows
 
-  dybatpho::print "${__help_usage}"
+  local __width
+  __dybatpho_cli_help_width_for __width \
+    ${__help_arg_rows[@]+"${__help_arg_rows[@]}"} \
+    ${__help_cmd_rows[@]+"${__help_cmd_rows[@]}"} \
+    ${__help_opt_rows[@]+"${__help_opt_rows[@]}"}
+
+  dybatpho::print "$(__dybatpho_cli_help_usage)"
   if [ -n "${__help_description}" ]; then
     dybatpho::print ""
     dybatpho::print "${__help_description}"
   fi
-  dybatpho::print ""
-  dybatpho::print "Options:"
-  printf "%s" "${__help_opts_output}"
-  if [ -n "${__help_cmds_output}" ]; then
+  if ((${#__help_arg_rows[@]})); then
+    dybatpho::print ""
+    dybatpho::print "Arguments:"
+    __dybatpho_cli_help_render_rows "${__width}" "${__help_arg_rows[@]}"
+  fi
+  if ((${#__help_cmd_rows[@]})); then
     dybatpho::print ""
     dybatpho::print "Commands:"
-    printf "%s" "${__help_cmds_output}"
+    __dybatpho_cli_help_render_rows "${__width}" "${__help_cmd_rows[@]}"
   fi
+  dybatpho::print ""
+  dybatpho::print "Options:"
+  __dybatpho_cli_help_render_rows "${__width}" ${__help_opt_rows[@]+"${__help_opt_rows[@]}"}
+  if ((${#__help_cmd_rows[@]})); then
+    dybatpho::print ""
+    dybatpho::print "Run '${0##*/}${__help_subcmd:+ ${__help_subcmd}} COMMAND --help' for more information on a command."
+  fi
+}
+
+#######################################
+# @description Build the usage line from what the command actually accepts, so
+#              it names a COMMAND only when there are subcommands and shows the
+#              declared positional arguments when there are any.
+# @noargs
+# @stdout Usage line
+#######################################
+function __dybatpho_cli_help_usage {
+  local usage="Usage: ${0##*/}${__help_subcmd:+ ${__help_subcmd}} [OPTIONS]"
+  ((${#__help_cmd_rows[@]})) && usage="${usage} COMMAND"
+  if [ -n "${__help_arg_usage}" ]; then
+    usage="${usage} ${__help_arg_usage}"
+  else
+    case "${__help_args_rule,,}" in
+      none | noargs) ;;
+      *) usage="${usage} [ARGS]..." ;;
+    esac
+  fi
+  printf '%s' "${usage}"
 }
 
 #######################################
@@ -879,9 +1273,11 @@ function dybatpho::generate_schema {
 
 function __dybatpho_cli_generate_schema_command {
   local spec="$1" name="$2" command_aliases="${3:-}" description
-  local -a options=() commands=()
-  __dybatpho_cli_collect_spec_metadata "${spec}" options commands description
+  local -a options=() commands=() arguments=()
+  __dybatpho_cli_collect_spec_metadata "${spec}" options commands description arguments
   local q_name q_description item first=true aliases="${command_aliases}"
+  # `@none` is the sentinel an alias-less command records, not a real alias.
+  [ "${aliases}" = "@none" ] && aliases=""
   __dybatpho_cli_json_quote q_name "${name}"
   __dybatpho_cli_json_quote q_description "${description}"
   local alias alias_first=true
@@ -894,14 +1290,16 @@ function __dybatpho_cli_generate_schema_command {
   done
   printf '],"options":['
   for item in "${options[@]}"; do
-    local type var desc switches env multiple choices prompt hidden required deprecated label
-    IFS=$'\t' read -r type var desc switches env multiple choices prompt hidden required deprecated label <<< "${item}"
+    local type var desc switches env multiple choices prompt hidden required deprecated label config count negatable
+    IFS=$'\t' read -r type var desc switches env multiple choices prompt hidden required deprecated label config count negatable <<< "${item}"
     [ "${env}" = "@none" ] && env=""
     [ "${choices}" = "@none" ] && choices=""
     [ "${prompt}" = "@none" ] && prompt=""
     [ "${deprecated}" = "@none" ] && deprecated=""
     [ "${label}" = "@none" ] && label=""
-    local q_type q_var q_desc q_env q_choices q_prompt q_deprecated q_label
+    [ "${config}" = "@none" ] && config=""
+    local q_type q_var q_desc q_env q_choices q_prompt q_deprecated q_label q_config
+    __dybatpho_cli_json_quote q_config "${config}"
     __dybatpho_cli_json_quote q_type "${type}"
     __dybatpho_cli_json_quote q_var "${var}"
     __dybatpho_cli_json_quote q_desc "${desc}"
@@ -920,8 +1318,21 @@ function __dybatpho_cli_generate_schema_command {
       switch_first=false
       printf "%s" "${switch}"
     done
-    printf '],"env":%s,"multiple":%s,"choices":%s,"prompt":%s,"hidden":%s,"required":%s,"deprecated":%s,"label":%s}' \
-      "${q_env}" "${multiple:-false}" "${q_choices}" "${q_prompt}" "${hidden:-false}" "${required:-false}" "${q_deprecated}" "${q_label}"
+    printf '],"env":%s,"config":%s,"multiple":%s,"count":%s,"negatable":%s,"choices":%s,"prompt":%s,"hidden":%s,"required":%s,"deprecated":%s,"label":%s}' \
+      "${q_env}" "${q_config}" "${multiple:-false}" "${count:-false}" "${negatable:-false}" \
+      "${q_choices}" "${q_prompt}" "${hidden:-false}" "${required:-false}" "${q_deprecated}" "${q_label}"
+  done
+  printf '],"arguments":['
+  first=true
+  for item in ${arguments[@]+"${arguments[@]}"}; do
+    local arg_name arg_desc arg_required arg_variadic q_arg_name q_arg_desc
+    IFS=$'\t' read -r arg_name arg_desc arg_required arg_variadic <<< "${item}"
+    __dybatpho_cli_json_quote q_arg_name "${arg_name}"
+    __dybatpho_cli_json_quote q_arg_desc "${arg_desc}"
+    [ "${first}" = true ] || printf ","
+    first=false
+    printf '{"name":%s,"description":%s,"required":%s,"variadic":%s}' \
+      "${q_arg_name}" "${q_arg_desc}" "${arg_required:-true}" "${arg_variadic:-false}"
   done
   printf '],"commands":['
   first=true
@@ -950,31 +1361,50 @@ function dybatpho::generate_man {
 
 function __dybatpho_cli_generate_man_command {
   local spec="$1" name="$2" section="${3:-1}" nested="${4:-false}" description
-  local -a options=() commands=()
-  __dybatpho_cli_collect_spec_metadata "${spec}" options commands description
+  local -a options=() commands=() arguments=()
+  __dybatpho_cli_collect_spec_metadata "${spec}" options commands description arguments
   local escaped
   escaped="${name//\\/\\\\}"
   escaped="${escaped//\"/\\\"}"
+  local synopsis="${escaped} [OPTIONS]"
+  local arg_item arg_name arg_desc arg_required arg_variadic arg_placeholder
+  for arg_item in ${arguments[@]+"${arguments[@]}"}; do
+    IFS=$'\t' read -r arg_name arg_desc arg_required arg_variadic <<< "${arg_item}"
+    arg_placeholder="$(__dybatpho_cli_arg_placeholder "${arg_name}" "${arg_required}" "${arg_variadic}")"
+    synopsis="${synopsis} ${arg_placeholder}"
+  done
   if [ "${nested}" = false ]; then
     printf '.TH "%s" "%s" "" "" "dybatpho"\n' "${escaped}" "${section}"
     printf '.SH NAME\n%s \\- %s\n' "${escaped}" "${description}"
-    printf '.SH SYNOPSIS\n.B %s\n' "${escaped}"
+    printf '.SH SYNOPSIS\n.B %s\n' "${synopsis}"
+    if ((${#arguments[@]})); then
+      printf '.SH ARGUMENTS\n'
+      for arg_item in "${arguments[@]}"; do
+        IFS=$'\t' read -r arg_name arg_desc arg_required arg_variadic <<< "${arg_item}"
+        arg_placeholder="$(__dybatpho_cli_arg_placeholder "${arg_name}" "${arg_required}" "${arg_variadic}")"
+        printf '.TP\n.B %s\n%s\n' "${arg_placeholder}" "${arg_desc}"
+      done
+    fi
     printf '.SH OPTIONS\n'
   else
     printf '.SS %s\n%s\n' "${escaped}" "${description}"
   fi
   for item in "${options[@]}"; do
-    local type var desc switches env multiple choices prompt hidden required deprecated label
-    IFS=$'\t' read -r type var desc switches env multiple choices prompt hidden required deprecated label <<< "${item}"
+    local type var desc switches env multiple choices prompt hidden required deprecated label config count negatable
+    IFS=$'\t' read -r type var desc switches env multiple choices prompt hidden required deprecated label config count negatable <<< "${item}"
     [ "${env}" = "@none" ] && env=""
     [ "${deprecated}" = "@none" ] && deprecated=""
     [ "${label}" = "@none" ] && label=""
+    [ "${config}" = "@none" ] && config=""
+    [ "${choices}" = "@none" ] && choices=""
     [ "${hidden:-false}" = true ] && continue
     local option_label="${switches// /, }"
     [ "${type}" = param ] && option_label="${option_label} <${var}>"
     printf '.TP\n.B %s\n%s' "${option_label}" "${desc}"
     [ "${required:-false}" = true ] && printf ' (required)'
+    [ -n "${choices}" ] && printf ' [choices: %s]' "${choices//,/, }"
     [ -n "${env}" ] && printf ' [env: %s]' "${env}"
+    [ -n "${config}" ] && printf ' [config: %s]' "${config}"
     printf '\n'
   done
   if [ "${#commands[@]}" -gt 0 ]; then
@@ -996,6 +1426,9 @@ function __dybatpho_cli_generate_man_command {
 # @arg $3 string Optional command name
 # @tip Keep completion generation in a display option declared inside the spec when the CLI should complete itself.
 # @tip Generate completion from the root spec so subcommand options and aliases are included.
+# @note Output is cached under `DYBATPHO_CLI_CACHE_DIR`, keyed by the hash of the
+#       script that declares the spec, so editing the script invalidates the
+#       entry on its own. Set `DYBATPHO_CLI_CACHE=false` to bypass the cache.
 # @stdout Completion script
 #######################################
 function dybatpho::generate_completion {
@@ -1005,14 +1438,61 @@ function dybatpho::generate_completion {
     bash | zsh | fish) ;;                                          # kcov(skip)
     *) dybatpho::die "Unsupported completion shell: ${shell}" 1 ;; # kcov(skip)
   esac
-  __dybatpho_cli_generate_completion_command "${spec}" "${shell}" "${name}" "${name}"
+
+  local cache_file=""
+  if __dybatpho_cli_cache_file cache_file completion "${spec}" "${shell}" "${name}" \
+    && [ -s "${cache_file}" ]; then
+    dybatpho::debug "Reusing cached ${shell} completion at ${cache_file}"
+    cat -- "${cache_file}"
+    return 0
+  fi
+
+  local generated
+  generated="$(__dybatpho_cli_generate_completion_command "${spec}" "${shell}" "${name}" "${name}")"
+  printf '%s\n' "${generated}"
+  if [ -n "${cache_file}" ]; then
+    printf '%s\n' "${generated}" > "${cache_file}" 2> /dev/null || true
+  fi
+  return 0
+}
+
+#######################################
+# @description Resolve the cache file for a generated artifact, creating the
+#              cache directory when needed. The key hashes the script that
+#              declares the spec, so a spec change produces a new key instead of
+#              a stale hit; a spec declared from an unreadable source (a `bash -c`
+#              one-liner, for example) is simply not cached.
+# @arg $1 string Name of the variable receiving the cache file path
+# @arg $@ string Key parts, such as the artifact kind, spec, shell, and command name
+# @exitcode 0 A cache file path was resolved
+# @exitcode 1 Caching is disabled or unavailable for this invocation
+#######################################
+function __dybatpho_cli_cache_file {
+  __dybatpho_cli_require_shell_name "$1"
+  local target="$1"
+  printf -v "${target}" '%s' ""
+  dybatpho::is true "${DYBATPHO_CLI_CACHE}" || return 1
+  shift
+
+  local source="${0}"
+  [ -f "${source}" ] || source="${BASH_SOURCE[-1]:-}"
+  [ -f "${source}" ] || return 1
+  local digest
+  digest="$(dybatpho::file_hash "${source}" 2> /dev/null)" || return 1
+  [ -n "${digest}" ] || return 1
+
+  local key="${digest:0:32}-$*"
+  key="${key//[^a-zA-Z0-9._-]/_}"
+  mkdir -p -- "${DYBATPHO_CLI_CACHE_DIR}" 2> /dev/null || return 1
+  printf -v "${target}" '%s' "${DYBATPHO_CLI_CACHE_DIR}/${key}"
+  return 0
 }
 
 function __dybatpho_cli_completion_words {
   local -n __completion_out="$1"
   local -a options=("${@:2}") item switches switch
   for item in "${options[@]}"; do
-    IFS=$'\t' read -r _ _ _ switches _ _ _ _ hidden _ _ _ <<< "${item}"
+    IFS=$'\t' read -r _ _ _ switches _ _ _ _ hidden _ _ _ _ _ _ <<< "${item}"
     [ "${hidden:-false}" = true ] && continue
     for switch in ${switches}; do __completion_out+=("${switch}"); done
   done
@@ -1027,7 +1507,10 @@ function __dybatpho_cli_generate_completion_command {
   for item in "${commands[@]}"; do
     IFS=$'\t' read -r cmd child aliases hidden deprecated <<< "${item}"
     if [ "${hidden:-false}" != true ]; then
-      cmd_list+=" ${cmd} ${aliases}"
+      # `@none` is the sentinel an alias-less command records, not a word the
+      # user can ever type.
+      [ "${aliases}" = "@none" ] && aliases=""
+      cmd_list+=" ${cmd}${aliases:+ ${aliases}}"
       local -a child_options=() child_commands=()
       local child_description
       __dybatpho_cli_collect_spec_metadata "${child}" child_options child_commands child_description
@@ -1088,77 +1571,63 @@ function __dybatpho_cli_help_sw {
 }
 
 #######################################
-# @description Format one help row and print to stdout
+# @description Build one help row and print it as a record for later rendering.
+#              Rendering is deferred because the column width is only known once
+#              every row of every section has been collected.
 # @arg $1 string Type: flag | param | disp | cmd
 # @arg $2 string Variable name (or command name for cmd type)
 # @arg $3 string Description
 # @arg $@ switch|key:value Switches and settings of this option
-# @stdout Formatted help row
+# @stdout Record of `label<TAB>description<TAB>annotations`, where annotations
+#         are separated by a unit separator. Nothing for a hidden row.
 #######################################
 function __dybatpho_cli_help_row {
   local _type=$1 _var=$2 _desc=$3
   shift 3
   local sw="" label="" hidden="" required="false" deprecated=""
+  local _env="" _config="" _choices="" _default="" _multiple="false" _count="false"
+  local _negatable=false _i
+  # Switches are buffered by length so the label reads `-s, --long` whichever
+  # order the spec declared them in.
+  local -a _short_forms=() _long_forms=()
+  for _i in "$@"; do
+    case ${_i} in
+      negatable:*) _negatable="${_i#negatable:}" ;;
+    esac
+  done
   while [ $# -gt 0 ]; do
     local _i=$1 && shift
     case ${_i} in
-      alias:*)
-        case ${_i#alias:} in
-          --\{no-\}*)
-            local _name="${_i#alias:--?no-?}"
-            __dybatpho_cli_help_sw 4 "--${_name}"
-            __dybatpho_cli_help_sw 4 "--no-${_name}"
-            ;;
-          --with\{out\}-*)
-            local _name="${_i#alias:--*-}"
-            __dybatpho_cli_help_sw 4 "--with-${_name}"
-            __dybatpho_cli_help_sw 4 "--without-${_name}"
-            ;;
-          --*) __dybatpho_cli_help_sw 4 "${_i#alias:}" ;;
-          -?) __dybatpho_cli_help_sw 0 "${_i#alias:}" ;;
-          *) : ;; # kcov(skip)
-        esac
-        ;;
+      alias:*) __dybatpho_cli_help_add_switch "${_i#alias:}" "${_negatable}" ;;
       aliases:*)
         local -a _aliases=()
         local _alias_item
         __dybatpho_cli_parse_alias_list _aliases "${_i#aliases:}"
         for _alias_item in "${_aliases[@]}"; do
-          case ${_alias_item} in
-            --\{no-\}*)
-              local _name="${_alias_item#--?no-?}"
-              __dybatpho_cli_help_sw 4 "--${_name}"
-              __dybatpho_cli_help_sw 4 "--no-${_name}"
-              ;;
-            --with\{out\}-*)
-              local _name="${_alias_item#--*-}"
-              __dybatpho_cli_help_sw 4 "--with-${_name}"
-              __dybatpho_cli_help_sw 4 "--without-${_name}"
-              ;;
-            --*) __dybatpho_cli_help_sw 4 "${_alias_item}" ;;
-            -?) __dybatpho_cli_help_sw 0 "${_alias_item}" ;;
-            *) : ;; # kcov(skip)
-          esac
+          __dybatpho_cli_help_add_switch "${_alias_item}" "${_negatable}"
         done
         ;;
-      --\{no-\}*)
-        local _name="${_i#--?no-?}"
-        __dybatpho_cli_help_sw 4 "--${_name}"
-        __dybatpho_cli_help_sw 4 "--no-${_name}"
-        ;;
-      --with\{out\}-*)
-        local _name="${_i#--*-}"
-        __dybatpho_cli_help_sw 4 "--with-${_name}"
-        __dybatpho_cli_help_sw 4 "--without-${_name}"
-        ;;
-      --*) __dybatpho_cli_help_sw 4 "${_i}" ;;
-      -?) __dybatpho_cli_help_sw 0 "${_i}" ;;
+      -*) __dybatpho_cli_help_add_switch "${_i}" "${_negatable}" ;;
       hidden:*) hidden="${_i#hidden:}" ;;
       label:*) label="${_i#label:}" ;;
       required:*) required="${_i#required:}" ;;
       deprecated:*) deprecated="${_i#deprecated:}" ;;
+      env:*) _env="${_i#env:}" ;;
+      config:*) _config="${_i#config:}" ;;
+      choices:*) _choices="${_i#choices:}" ;;
+      init:*) _default="${_i#init:}" ;;
+      multiple:*) _multiple="${_i#multiple:}" ;;
+      count:*) _count="${_i#count:}" ;;
       *) : ;;
     esac
+  done
+
+  local _form
+  for _form in ${_short_forms[@]+"${_short_forms[@]}"}; do
+    __dybatpho_cli_help_sw 0 "${_form}"
+  done
+  for _form in ${_long_forms[@]+"${_long_forms[@]}"}; do
+    __dybatpho_cli_help_sw 4 "${_form}"
   done
 
   dybatpho::is true "${hidden}" && return 0
@@ -1169,24 +1638,172 @@ function __dybatpho_cli_help_row {
     _desc="${_desc:+${_desc} }(deprecated: ${deprecated})"
   fi
 
-  local len=${__help_width%,*}
   [ "${label}" ] || case ${_type} in
-    flag | disp) label="${sw} " ;;
-    param) label="${sw} <${_var}> " ;;
-    cmd) label="${_var} " len=${__help_width#*,} ;;
+    flag | disp) label="${sw}" ;;
+    param) label="${sw} <${_var}>" ;;
+    cmd) label="${_var}" ;;
   esac
 
-  __dybatpho_cli_help_pad label "${label:+${__help_leading}}${label}" "${len}"
-  if [ "${#label}" -le "${len}" ]; then
-    printf "%s\n" "${label}${_desc}"
-  else
-    printf "%s\n" "${label}"
-    if [ -n "${_desc}" ]; then
-      local _pad
-      __dybatpho_cli_help_pad _pad "" "${len}"
-      printf "%s\n" "${_pad}${_desc}"
+  # `env:true` reuses the variable name, and `env:false` disables the fallback.
+  case "${_env}" in
+    true) _env="${_var}" ;;
+    false | "") _env="" ;;
+  esac
+
+  local _annotations=""
+  __dybatpho_cli_help_annotate _annotations "env" "${_env}"
+  __dybatpho_cli_help_annotate _annotations "config" "${_config}"
+  __dybatpho_cli_help_annotate _annotations "choices" "${_choices//,/, }"
+  __dybatpho_cli_help_annotate _annotations "default" "$(__dybatpho_cli_help_default "${_default}")"
+  dybatpho::is true "${_multiple}" \
+    && _annotations="${_annotations}${_annotations:+$'\x1f'}[repeatable]"
+  dybatpho::is true "${_count}" \
+    && _annotations="${_annotations}${_annotations:+$'\x1f'}[repeat to increase]"
+
+  printf '%s\t%s\t%s\n' "${label}" "${_desc}" "${_annotations}"
+}
+
+#######################################
+# @description Sort one declared switch into the caller-local `_short_forms` and
+#              `_long_forms` buffers, expanding bracketed and `negatable:true`
+#              forms on the way.
+# @arg $1 switch Declared switch
+# @arg $2 bool Whether the owning option is negatable
+#######################################
+function __dybatpho_cli_help_add_switch {
+  local -a _forms=()
+  local _form
+  __dybatpho_cli_expand_switch _forms "$1" "${2:-false}"
+  for _form in ${_forms[@]+"${_forms[@]}"}; do
+    case ${_form} in
+      -?) _short_forms+=("${_form}") ;;
+      *) _long_forms+=("${_form}") ;;
+    esac
+  done
+  return 0
+}
+
+#######################################
+# @description Append a `[name: value]` annotation to a caller variable, or do
+#              nothing when the value is empty.
+# @arg $1 string Name of the variable holding the annotation list
+# @arg $2 string Annotation name
+# @arg $3 string Annotation value
+#######################################
+function __dybatpho_cli_help_annotate {
+  __dybatpho_cli_require_shell_name "$1"
+  local _value="${3-}"
+  [ -n "${_value}" ] || return 0
+  local _current="${!1}"
+  printf -v "$1" '%s' "${_current}${_current:+$'\x1f'}[$2: ${_value}]"
+}
+
+#######################################
+# @description Render the literal default of an `init:` form, or nothing when
+#              the default is empty, dynamic, or an `init:@...` directive that
+#              has no value to show.
+# @arg $1 string Raw `init:` value
+# @stdout Literal default value
+#######################################
+function __dybatpho_cli_help_default {
+  local _raw="${1-}"
+  case "${_raw}" in
+    "" | @*) return 0 ;;
+    action:*) return 0 ;;
+  esac
+  _raw="${_raw#=}"
+  case "${_raw}" in
+    \"*\") _raw="${_raw:1:${#_raw}-2}" ;;
+    \'*\') _raw="${_raw:1:${#_raw}-2}" ;;
+  esac
+  # A command substitution or variable reference is resolved at run time, so
+  # printing the expression itself would mislead more than it helps.
+  case "${_raw}" in
+    *'$'* | *'`'*) return 0 ;;
+  esac
+  [ -n "${_raw}" ] || return 0
+  printf '%s' "${_raw}"
+}
+
+#######################################
+# @description Print every collected help row, aligned to a shared column.
+# @arg $1 number Description column width
+# @arg $@ string Row records from `__dybatpho_cli_help_row`
+# @stdout Rendered rows
+#######################################
+function __dybatpho_cli_help_render_rows {
+  local _width="$1"
+  shift
+  local _row _label _desc _annotations _padded _blank _annotation
+  __dybatpho_cli_help_pad _blank "" "${_width}"
+  for _row in "$@"; do
+    [ -n "${_row}" ] || continue
+    IFS=$'\t' read -r _label _desc _annotations <<< "${_row}"
+    __dybatpho_cli_help_pad _padded "${__help_leading}${_label}" "${_width}"
+    if [ "${#_padded}" -le "${_width}" ]; then
+      printf '%s\n' "${_padded}${_desc}"
+    else
+      printf '%s\n' "${_padded}"
+      [ -n "${_desc}" ] && printf '%s\n' "${_blank}${_desc}"
     fi
-  fi
+    if [ -n "${_annotations}" ]; then
+      # Annotations are read into an array rather than word-split in place:
+      # they look like `[env: NAME]`, which pathname expansion would treat as a
+      # bracket glob and drop entirely under `nullglob`.
+      local -a _parts=()
+      IFS=$'\x1f' read -r -a _parts <<< "${_annotations}"
+      for _annotation in ${_parts[@]+"${_parts[@]}"}; do
+        [ -n "${_annotation}" ] && printf '%s\n' "${_blank}${_annotation}"
+      done
+    fi
+  done
+  return 0
+}
+
+#######################################
+# @description Drop rows whose label was already collected, keeping the first.
+# @arg $1 string Name of the array of row records to rewrite in place
+#######################################
+function __dybatpho_cli_help_dedupe {
+  __dybatpho_cli_require_shell_name "$1"
+  local -n _rows="$1"
+  ((${#_rows[@]})) || return 0
+  local -a _unique=()
+  local -A _seen=()
+  local _row _label
+  for _row in "${_rows[@]}"; do
+    [ -n "${_row}" ] || continue
+    _label="${_row%%$'\t'*}"
+    [[ -v "_seen[${_label}]" ]] && continue
+    _seen["${_label}"]=1
+    _unique+=("${_row}")
+  done
+  _rows=(${_unique[@]+"${_unique[@]}"})
+  return 0
+}
+
+#######################################
+# @description Choose the description column width that fits every row, so the
+#              Arguments, Commands, and Options sections line up with each other.
+# @arg $1 string Name of the variable receiving the width
+# @arg $@ string Row records from `__dybatpho_cli_help_row`
+#######################################
+function __dybatpho_cli_help_width_for {
+  __dybatpho_cli_require_shell_name "$1"
+  local _target="$1" _row _label
+  local -i _width=0 _length
+  shift
+  for _row in "$@"; do
+    [ -n "${_row}" ] || continue
+    _label="${_row%%$'\t'*}"
+    _length=$((${#_label} + ${#__help_leading} + 2))
+    ((_length > _width)) && _width=${_length}
+  done
+  # Below the floor the descriptions crowd the labels; above the ceiling a
+  # single long switch would push every description off the right of the screen.
+  ((_width < 12)) && _width=12
+  ((_width > 36)) && _width=36
+  printf -v "${_target}" '%s' "${_width}"
 }
 
 #######################################
@@ -1195,6 +1812,91 @@ function __dybatpho_cli_help_row {
 #######################################
 function __dybatpho_cli_add_switch {
   __switch="${__switch}${__switch:+|}$1"
+  # The same switches feed the "did you mean" suggestion list, so they are
+  # recorded here rather than walked a second time.
+  local __token
+  for __token in ${1//|/ }; do
+    __token="${__token#\'}"
+    __token="${__token%\'}"
+    [ -n "${__token}" ] && __known_switches+=("${__token}")
+  done
+  return 0
+}
+
+#######################################
+# @description Build the `Did you mean ...` suffix appended to an unrecognized
+#              option or command error. Called from generated parser code.
+# @arg $1 string Mistyped input
+# @arg $@ string Known candidates
+# @stdout Suggestion suffix, or nothing when no candidate is close enough
+# @exitcode 0
+#######################################
+function __dybatpho_cli_suggest_suffix {
+  local input="${1-}"
+  shift || true
+  (($#)) || return 0
+  local -a matches=()
+  mapfile -t matches < <(dybatpho::cli_suggest "${input}" "$@" || true)
+  ((${#matches[@]})) || return 0
+  if ((${#matches[@]} == 1)); then
+    printf ". Did you mean '%s'?" "${matches[0]}"
+  else
+    local joined="" match
+    for match in "${matches[@]}"; do joined="${joined}${joined:+, }'${match}'"; done
+    printf ". Did you mean one of %s?" "${joined}"
+  fi
+  return 0
+}
+
+#######################################
+# @description Add a literal switch to the switches list, pairing a long switch
+#              with its `--no-` form when the option is declared `negatable:true`.
+#              Short switches and switches that already carry a negative prefix
+#              are added unchanged.
+# @arg $1 switch Switch such as `-c` or `--color`
+#######################################
+function __dybatpho_cli_add_plain_switch {
+  local __plain="$1"
+  if dybatpho::is true "${__negatable:-false}"; then
+    case ${__plain} in
+      --no-* | --without-*) ;;
+      --*)
+        __dybatpho_cli_add_switch "'${__plain}'|'--no-${__plain#--}'"
+        return 0
+        ;;
+    esac
+  fi
+  __dybatpho_cli_add_switch "'${__plain}'"
+}
+
+#######################################
+# @description Expand one declared switch into the concrete switches a user can
+#              type, honouring `--{no-}name`, `--with{out}-name`, and
+#              `negatable:true`. Results are appended to a caller-provided array.
+# @arg $1 string Name of destination array variable
+# @arg $2 switch Declared switch
+# @arg $3 bool Whether the owning option is `negatable:true`, default `false`
+#######################################
+function __dybatpho_cli_expand_switch {
+  __dybatpho_cli_require_shell_name "$1"
+  local -n __expand_out="$1"
+  local __declared="$2" __expand_negatable="${3:-false}"
+  case ${__declared} in
+    --\{no-\}*)
+      __expand_out+=("--${__declared#--\{no-\}}" "--no-${__declared#--\{no-\}}")
+      ;;
+    --with\{out\}-*)
+      __expand_out+=("--with-${__declared#--with\{out\}-}" "--without-${__declared#--with\{out\}-}")
+      ;;
+    --no-* | --without-*) __expand_out+=("${__declared}") ;;
+    --*)
+      __expand_out+=("${__declared}")
+      dybatpho::is true "${__expand_negatable}" \
+        && __expand_out+=("--no-${__declared#--}")
+      ;;
+    -?) __expand_out+=("${__declared}") ;;
+  esac
+  return 0
 }
 
 #######################################
@@ -1212,7 +1914,12 @@ function __dybatpho_cli_print_validate {
   fi
   [ "$1" ] && __dybatpho_cli_print_indent 4 "$1 || { set -- ${1%% *}:\$? \"\$1\" $1; break; }"
   if [ "$2" != "-" ]; then
-    if dybatpho::is true "${__multiple:-false}"; then
+    if dybatpho::is true "${__count:-false}"; then
+      # A counting flag ignores the on/off value and records how often it was
+      # repeated, so `-vv` and `-v -v` both land on 2.
+      __dybatpho_cli_print_indent 4 "$2=\$(( \${$2:-0} + 1 ))"
+      [ "${__export}" = "true" ] && __dybatpho_cli_print_indent 4 "export $2"
+    elif dybatpho::is true "${__multiple:-false}"; then
       __dybatpho_cli_print_indent 4 "[ -n \"\${$2:-}\" ] && $2=\"\${$2} \$OPTARG\" || $2=\"\$OPTARG\""
       [ "${__export}" = "true" ] && __dybatpho_cli_print_indent 4 "export $2"
     else
@@ -1282,6 +1989,32 @@ function __dybatpho_cli_print_persistent_help_defs {
     __dybatpho_cli_assign_quoted __quoted_def "${__persistent_def}"
     __dybatpho_cli_print_indent 1 "__persistent_help_defs+=( ${__quoted_def} )"
   done
+}
+
+#######################################
+# @description Emit generated code declaring the switches and command names the
+#              current command accepts, used to suggest a close match when the
+#              user mistypes one.
+# @noargs
+# @stdout Generated parser code
+#######################################
+function __dybatpho_cli_print_known_candidates {
+  local __candidate __quoted __line=""
+  for __candidate in ${__known_switches[@]+"${__known_switches[@]}"} "--help" "-h"; do
+    printf -v __quoted '%q' "${__candidate}"
+    __line="${__line}${__line:+ }${__quoted}"
+  done
+  __dybatpho_cli_print_indent 1 "local -a __cli_known_opts=(${__line})"
+  __line=""
+  local __sub_entry __sub_name
+  for __sub_entry in ${__sub_specs[@]+"${__sub_specs[@]}"}; do
+    __sub_name="${__sub_entry#*$'\t'}"
+    __sub_name="${__sub_name%%$'\t'*}"
+    [ -n "${__sub_name}" ] || continue
+    printf -v __quoted '%q' "${__sub_name}"
+    __line="${__line}${__line:+ }${__quoted}"
+  done
+  __dybatpho_cli_print_indent 1 "local -a __cli_known_cmds=(${__line})"
 }
 
 #######################################
@@ -1378,42 +2111,28 @@ function __dybatpho_cli_print_args_check {
 #######################################
 function __dybatpho_cli_collect_switches {
   __dybatpho_cli_require_shell_name "$1"
-  local -n __switch_out="$1"
+  local __target="$1"
   shift
-  local __item __alias
+  local __item __alias __collect_negatable=false
   for __item in "$@"; do
     case "${__item}" in
-      alias:*) __alias="${__item#alias:}" ;;
+      negatable:*) __collect_negatable="${__item#negatable:}" ;;
+    esac
+  done
+  for __item in "$@"; do
+    case "${__item}" in
+      alias:*)
+        __dybatpho_cli_expand_switch "${__target}" "${__item#alias:}" "${__collect_negatable}"
+        ;;
       aliases:*)
         local -a __aliases=()
         __dybatpho_cli_parse_alias_list __aliases "${__item#aliases:}"
         for __alias in "${__aliases[@]}"; do
-          case "${__alias}" in
-            --\{no-\}*) __switch_out+=("--${__alias#--\{no-\}}" "--no-${__alias#--\{no-\}}") ;;
-            --with\{out\}-*) __switch_out+=("--with-${__alias#--with\{out\}-}" "--without-${__alias#--with\{out\}-}") ;;
-            -? | --*) __switch_out+=("${__alias}") ;;
-          esac
+          __dybatpho_cli_expand_switch "${__target}" "${__alias}" "${__collect_negatable}"
         done
-        continue
         ;;
-      --\{no-\}*)
-        __switch_out+=("--${__item#--\{no-\}}" "--no-${__item#--\{no-\}}")
-        continue
-        ;;
-      --with\{out\}-*)
-        __switch_out+=("--with-${__item#--with\{out\}-}" "--without-${__item#--with\{out\}-}")
-        continue
-        ;;
-      -? | --*)
-        __switch_out+=("${__item}")
-        continue
-        ;;
+      -*) __dybatpho_cli_expand_switch "${__target}" "${__item}" "${__collect_negatable}" ;;
       *) continue ;;
-    esac
-    case "${__alias}" in
-      --\{no-\}*) __switch_out+=("--${__alias#--\{no-\}}" "--no-${__alias#--\{no-\}}") ;;
-      --with\{out\}-*) __switch_out+=("--with-${__alias#--with\{out\}-}" "--without-${__alias#--with\{out\}-}") ;;
-      -? | --*) __switch_out+=("${__alias}") ;;
     esac
   done
 }
@@ -1438,12 +2157,19 @@ function __dybatpho_cli_json_quote {
 function __dybatpho_cli_collect_spec_metadata {
   local __meta_spec="$1"
   local -n __meta_options_out="$2" __meta_commands_out="$3" __meta_description_out="$4"
-  local __meta_mode=true __meta_description="" __meta_options=() __meta_commands=()
+  local __meta_mode=true __meta_description="" __meta_options=() __meta_commands=() __meta_args=()
   local __done_initial=false __flags="" __params=""
   "${__meta_spec}"
   __meta_options_out=("${__meta_options[@]}")
   __meta_commands_out=("${__meta_commands[@]}")
   __meta_description_out="${__meta_description}"
+  # The arguments array is optional so existing three-output callers keep
+  # working; only the schema and man generators ask for it.
+  if [ -n "${5-}" ]; then
+    local -n __meta_args_out="$5"
+    __meta_args_out=(${__meta_args[@]+"${__meta_args[@]}"})
+  fi
+  return 0
 }
 
 # @section Spec functions
@@ -1477,8 +2203,15 @@ function dybatpho::opts::setup {
   shift
 
   if dybatpho::is true "${__help_mode:-false}"; then
-    __help_usage="Usage: ${0##*/}${__help_subcmd:+ ${__help_subcmd}} [options...] [arguments...]"
     __help_description="${description}"
+    # The usage line is built once the whole spec has been walked, because it
+    # depends on subcommands and positional arguments declared after `setup`.
+    local __setup_item
+    for __setup_item in "$@"; do
+      case "${__setup_item}" in
+        args:*) __help_args_rule="${__setup_item#args:}" ;;
+      esac
+    done
     return 0
   fi
 
@@ -1522,7 +2255,7 @@ function dybatpho::opts::flag {
     __dybatpho_cli_parse_opt false 2 "$@"
     local -a __meta_switches=()
     __dybatpho_cli_collect_switches __meta_switches "${@:3}"
-    __meta_options+=("flag"$'\t'"${var}"$'\t'"${description}"$'\t'"${__meta_switches[*]}"$'\t'"${__env:-@none}"$'\t'"${__multiple:-false}"$'\t'"${__choices:-@none}"$'\t'"${__prompt:-@none}"$'\t'"${__hidden:-false}"$'\t'"${__required:-false}"$'\t'"${__deprecated:-@none}"$'\t'"${__label:-@none}")
+    __meta_options+=("flag"$'\t'"${var}"$'\t'"${description}"$'\t'"${__meta_switches[*]}"$'\t'"${__env:-@none}"$'\t'"${__multiple:-false}"$'\t'"${__choices:-@none}"$'\t'"${__prompt:-@none}"$'\t'"${__hidden:-false}"$'\t'"${__required:-false}"$'\t'"${__deprecated:-@none}"$'\t'"${__label:-@none}"$'\t'"${__config:-@none}"$'\t'"${__count:-false}"$'\t'"${__negatable:-false}")
     return 0
   fi
 
@@ -1531,7 +2264,7 @@ function dybatpho::opts::flag {
   if dybatpho::is true "${__help_mode:-false}"; then
     local _line
     _line=$(__dybatpho_cli_help_row flag "${var}" "${description}" "${@:3}")
-    __help_opts_output="${__help_opts_output}${_line}"$'\n'
+    [ -n "${_line}" ] && __help_opt_rows+=("${_line}")
     return 0
   fi
 
@@ -1575,7 +2308,7 @@ function dybatpho::opts::param {
     __dybatpho_cli_parse_opt true 2 "$@"
     local -a __meta_switches=()
     __dybatpho_cli_collect_switches __meta_switches "${@:3}"
-    __meta_options+=("param"$'\t'"${var}"$'\t'"${description}"$'\t'"${__meta_switches[*]}"$'\t'"${__env:-@none}"$'\t'"${__multiple:-false}"$'\t'"${__choices:-@none}"$'\t'"${__prompt:-@none}"$'\t'"${__hidden:-false}"$'\t'"${__required:-false}"$'\t'"${__deprecated:-@none}"$'\t'"${__label:-@none}")
+    __meta_options+=("param"$'\t'"${var}"$'\t'"${description}"$'\t'"${__meta_switches[*]}"$'\t'"${__env:-@none}"$'\t'"${__multiple:-false}"$'\t'"${__choices:-@none}"$'\t'"${__prompt:-@none}"$'\t'"${__hidden:-false}"$'\t'"${__required:-false}"$'\t'"${__deprecated:-@none}"$'\t'"${__label:-@none}"$'\t'"${__config:-@none}"$'\t'"${__count:-false}"$'\t'"${__negatable:-false}")
     return 0
   fi
 
@@ -1584,7 +2317,7 @@ function dybatpho::opts::param {
   if dybatpho::is true "${__help_mode:-false}"; then
     local _line
     _line=$(__dybatpho_cli_help_row param "${var}" "${description}" "${@:3}")
-    __help_opts_output="${__help_opts_output}${_line}"$'\n'
+    [ -n "${_line}" ] && __help_opt_rows+=("${_line}")
     return 0
   fi
 
@@ -1657,7 +2390,7 @@ function dybatpho::opts::disp {
     __dybatpho_cli_parse_opt false 1 "$@"
     local -a __meta_switches=()
     __dybatpho_cli_collect_switches __meta_switches "${@:2}"
-    __meta_options+=("disp"$'\t'"-"$'\t'"${description}"$'\t'"${__meta_switches[*]}"$'\t@none\tfalse\t@none\t@none\t'"${__hidden:-false}"$'\tfalse\t'"${__deprecated:-@none}"$'\t'"${__label:-@none}")
+    __meta_options+=("disp"$'\t'"-"$'\t'"${description}"$'\t'"${__meta_switches[*]}"$'\t@none\tfalse\t@none\t@none\t'"${__hidden:-false}"$'\tfalse\t'"${__deprecated:-@none}"$'\t'"${__label:-@none}"$'\t@none\tfalse\tfalse')
     return 0
   fi
 
@@ -1676,7 +2409,7 @@ function dybatpho::opts::disp {
   if dybatpho::is true "${__help_mode:-false}"; then
     local _line
     _line=$(__dybatpho_cli_help_row disp "-" "${description}" "${@:2}")
-    __help_opts_output="${__help_opts_output}${_line}"$'\n'
+    [ -n "${_line}" ] && __help_opt_rows+=("${_line}")
     return 0
   fi
 
@@ -1733,7 +2466,7 @@ function dybatpho::opts::cmd {
     done
     local _line
     _line=$(__dybatpho_cli_help_row cmd "${__cmd_label}" "${__cmd_desc}" "hidden:${__cmd_hidden}" "deprecated:${__cmd_deprecated}")
-    __help_cmds_output="${__help_cmds_output}${_line}"$'\n'
+    [ -n "${_line}" ] && __help_cmd_rows+=("${_line}")
     return 0
   fi
 
@@ -1744,6 +2477,117 @@ function dybatpho::opts::cmd {
       __sub_specs+=("${sub_spec}"$'\t'"${__cmd_alias}"$'\t'"${sub_cmd}"$'\t'"${__cmd_deprecated}")
     done
   fi
+}
+
+# shellcheck disable=2016
+#######################################
+# @description Document a positional argument. The values themselves still land
+#              in the rest variable named by `dybatpho::opts::setup`; declaring
+#              them here is what gives the usage line real placeholders and the
+#              generated help, schema, and man page an `Arguments` section.
+# @example
+#   dybatpho::opts::arg "File to read" SOURCE
+#   dybatpho::opts::arg "Where to write it" TARGET required:false
+#   dybatpho::opts::arg "Extra files" EXTRA required:false variadic:true
+#
+# @arg $1 string Description of the argument
+# @arg $2 string Placeholder name, shown uppercase in usage and help
+# @arg $@ key:value Settings: `required:<bool>` (default `true`) and `variadic:<bool>` (default `false`)
+# @note When `dybatpho::opts::setup` declares no `args:<rule>`, the rule is
+#       derived from the declared arguments, so the count is validated without
+#       stating it twice.
+# @tip Declare arguments in the order they are typed; a variadic argument must come last.
+# @exitcode 0 exit code
+#######################################
+function dybatpho::opts::arg {
+  local description var
+  dybatpho::expect_args description var -- "$@"
+  __dybatpho_cli_require_shell_name "${var}"
+  shift 2
+
+  local __arg_required="true" __arg_variadic="false" __arg_item
+  for __arg_item in "$@"; do
+    case "${__arg_item}" in
+      required:*) __arg_required="${__arg_item#required:}" ;;
+      variadic:*) __arg_variadic="${__arg_item#variadic:}" ;;
+    esac
+  done
+
+  if dybatpho::is true "${__meta_mode:-false}"; then
+    __meta_args+=("${var}"$'\t'"${description}"$'\t'"${__arg_required}"$'\t'"${__arg_variadic}")
+    return 0
+  fi
+
+  dybatpho::is true "${__cmd_desc_mode:-false}" && return 0
+
+  local __arg_placeholder
+  __arg_placeholder="$(__dybatpho_cli_arg_placeholder "${var}" "${__arg_required}" "${__arg_variadic}")"
+
+  if dybatpho::is true "${__help_mode:-false}"; then
+    __help_arg_rows+=("${__arg_placeholder}"$'\t'"${description}"$'\t')
+    __help_arg_usage="${__help_arg_usage:+${__help_arg_usage} }${__arg_placeholder}"
+    return 0
+  fi
+
+  # Only the first spec walk feeds the derived `args:` rule; the code-generating
+  # walk would otherwise count every argument twice.
+  if dybatpho::is false "${__done_initial:-false}"; then
+    __declared_args+=("${__arg_required}"$'\t'"${__arg_variadic}")
+  fi
+  return 0
+}
+
+#######################################
+# @description Render a positional argument the way usage lines conventionally
+#              do: angle brackets when it is required, square brackets when it
+#              is optional, and a trailing ellipsis when it is variadic.
+# @arg $1 string Placeholder name
+# @arg $2 bool Whether the argument is required
+# @arg $3 bool Whether the argument is variadic
+# @stdout Rendered placeholder
+#######################################
+function __dybatpho_cli_arg_placeholder {
+  local name="${1^^}" required="${2:-true}" variadic="${3:-false}" rendered
+  if dybatpho::is true "${required}"; then
+    rendered="<${name}>"
+  else
+    rendered="[${name}]"
+  fi
+  dybatpho::is true "${variadic}" && rendered="${rendered}..."
+  printf '%s' "${rendered}"
+}
+
+#######################################
+# @description Derive the `args:<rule>` a command would need to accept exactly
+#              the positional arguments it declared with `dybatpho::opts::arg`.
+# @arg $1 string Name of the variable receiving the rule
+# @arg $@ string Declared argument records of `required<TAB>variadic`
+# @exitcode 0 The variable is left untouched when nothing was declared
+#######################################
+function __dybatpho_cli_derive_args_rule {
+  __dybatpho_cli_require_shell_name "$1"
+  local __target="$1"
+  shift
+  (($#)) || return 0
+  local __entry __entry_required __entry_variadic __variadic=false
+  local -i __required=0 __optional=0
+  for __entry in "$@"; do
+    IFS=$'\t' read -r __entry_required __entry_variadic <<< "${__entry}"
+    dybatpho::is true "${__entry_variadic}" && __variadic=true
+    if dybatpho::is true "${__entry_required}"; then
+      __required+=1
+    else
+      __optional+=1
+    fi
+  done
+  if dybatpho::is true "${__variadic}"; then
+    printf -v "${__target}" '%s' "min:${__required}"
+  elif ((__optional > 0)); then
+    printf -v "${__target}" '%s' "range:${__required}:$((__required + __optional))"
+  else
+    printf -v "${__target}" '%s' "exact:${__required}"
+  fi
+  return 0
 }
 
 # @section Parse functions
@@ -1789,13 +2633,15 @@ function dybatpho::generate_help {
   # bash dynamic scoping (dybatpho::opts::* write, __dybatpho_cli_generate_help reads)
   local __help_mode=false
   local __cmd_desc_mode=false
-  local __help_width="30,16"
   local __help_leading="  "
   local __help_subcmd="${__current_cmd_path:-}"
-  local __help_usage=""
   local __help_description=""
-  local __help_opts_output=""
-  local __help_cmds_output=""
+  local __help_args_rule="any"
+  local __help_arg_usage=""
+  local __has_help=false
+  local -a __help_opt_rows=()
+  local -a __help_cmd_rows=()
+  local -a __help_arg_rows=()
 
   __dybatpho_cli_generate_help "${spec}"
 }

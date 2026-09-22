@@ -2,11 +2,23 @@
 # @file cli_ux.sh
 # @brief Example of the advanced CLI UX helpers
 # @description Demonstrates prompts, choices, multi-value parameters,
-#              environment fallbacks, completion, schema, and man generation.
+#              environment and configuration fallbacks, generated `--no-`
+#              switches, counting verbosity flags, documented positional
+#              arguments, typo suggestions, completion, schema, and man
+#              generation.
 #
 # Interactive usage:
-#   bash example/cli_ux.sh deploy
-#   DEPLOY_ENV=production bash example/cli_ux.sh deploy --tag api --tag worker
+#   bash example/cli_ux.sh deploy --component api api
+#   DEPLOY_ENV=production bash example/cli_ux.sh deploy --component api --component worker api
+#
+# Precedence of a bound option is flag > env > config file > default:
+#   bash example/cli_ux.sh deploy --component api api                      # default
+#   DEPLOY_ENV=production bash example/cli_ux.sh deploy --component api api # env wins over config
+#   bash example/cli_ux.sh deploy -e staging --component api api           # flag wins over both
+#
+# Typos are answered with the closest match:
+#   bash example/cli_ux.sh depoy
+#   bash example/cli_ux.sh deploy --enviroment staging
 #
 # Generate shell integrations and reference artifacts:
 #   bash example/cli_ux.sh completion --shell bash > cli_ux.bash
@@ -21,10 +33,26 @@ SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 
 dybatpho::register_common_handlers
 
+# Values loaded before the parser runs become the configuration layer that
+# `config:<key>` reads, underneath any environment variable or explicit flag.
+# A real CLI would reach this state through `dybatpho::config_load ./app.yaml`;
+# the keys are set directly here to keep the example free of a data file.
+# shellcheck disable=SC2034 # read by the generated parser through config:<key>
+DYBATPHO_CONFIG["deploy.environment"]="staging"
+# shellcheck disable=SC2034 # read by the generated parser through config:<key>
+DYBATPHO_CONFIG["deploy.color"]="true"
+
 function _run_deploy {
+  # A counting flag carries how often `-v` was repeated, which maps onto the
+  # log level: `-v` is debug and `-vv` is trace.
+  dybatpho::cli_apply_verbosity "${VERBOSITY}"
+
   dybatpho::header "DEPLOY ${DEPLOY_ENV}"
+  dybatpho::info "Service: ${DEPLOY_ARGS}"
   dybatpho::info "Selected components: ${COMPONENTS}"
+  dybatpho::info "Colorized output: ${COLOR}"
   dybatpho::info "Dry run: ${DRY_RUN}"
+  dybatpho::debug "Verbosity requested ${VERBOSITY} time(s), log level is ${LOG_LEVEL}"
   dybatpho::success "Deployment plan is ready"
   exit 0
 }
@@ -49,11 +77,17 @@ function _run_man {
 }
 
 function _spec_deploy {
-  dybatpho::opts::setup "Deploy selected components" DEPLOY_ARGS args:none action:"_run_deploy"
-  dybatpho::opts::param "Target environment" DEPLOY_ENV --environment env:DEPLOY_ENV \
+  dybatpho::opts::setup "Deploy selected components" DEPLOY_ARGS action:"_run_deploy"
+  dybatpho::opts::arg "Service to deploy" SERVICE
+  dybatpho::opts::param "Target environment" DEPLOY_ENV -e --environment \
+    env:DEPLOY_ENV config:deploy.environment \
     choices:staging,production prompt:"Choose the target environment"
   dybatpho::opts::param "Components to deploy" COMPONENTS --component \
     choices:api,worker,frontend multiple:true prompt:"Choose components"
+  # `negatable:true` generates `--no-color` alongside `--color`, so the toggle
+  # does not have to be spelled out as `--{no-}color`.
+  dybatpho::opts::flag "Colorize the deployment report" COLOR --color \
+    negatable:true config:deploy.color
   dybatpho::opts::flag "Preview without applying changes" DRY_RUN --dry-run on:true off:false init:="false"
 }
 
@@ -73,6 +107,9 @@ function _spec_man {
 
 function _spec_root {
   dybatpho::opts::setup "CLI UX demonstration" ROOT_ARGS action:"_run_root"
+  # A persistent counting flag every subcommand inherits.
+  dybatpho::opts::flag "Increase verbosity, repeat for more" VERBOSITY -v \
+    alias:--verbose count:true persistent:true
   dybatpho::opts::cmd deploy _spec_deploy
   dybatpho::opts::cmd completion _spec_completion
   dybatpho::opts::cmd schema _spec_schema

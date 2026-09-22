@@ -900,7 +900,7 @@ setup() {
   run_traced dybatpho::generate_help _spec_hu
   assert_success
   assert_line --index 0 --partial "Usage:"
-  assert_line --index 0 --partial "[options...]"
+  assert_line --index 0 --partial "[OPTIONS]"
 }
 
 @test "dybatpho::generate_help shows description" {
@@ -1373,4 +1373,477 @@ setup() {
   assert_output --partial '"--no-toggle"'
   assert_output --partial '"--without-extras"'
   assert_output --partial '"--version"'
+}
+
+# =============================================================================
+# Suggestions for mistyped switches and commands
+# =============================================================================
+
+@test "dybatpho::cli_levenshtein measures edit distance" {
+  assert_equal "$(dybatpho::cli_levenshtein color color)" "0"
+  assert_equal "$(dybatpho::cli_levenshtein color colour)" "1"
+  assert_equal "$(dybatpho::cli_levenshtein kitten sitting)" "3"
+  assert_equal "$(dybatpho::cli_levenshtein "" abc)" "3"
+  assert_equal "$(dybatpho::cli_levenshtein abc "")" "3"
+}
+
+@test "dybatpho::cli_suggest ignores leading dashes and ranks the closest match" {
+  run_traced dybatpho::cli_suggest --colr --color --verbose --quiet
+  assert_output "--color"
+}
+
+@test "dybatpho::cli_suggest prefers a candidate sharing a prefix" {
+  run_traced dybatpho::cli_suggest --env --environment --enable
+  assert_output "--environment"
+}
+
+@test "dybatpho::cli_suggest reports nothing when no candidate is close" {
+  run dybatpho::cli_suggest --wildlydifferent --color --quiet
+  assert_failure
+  assert_output ""
+}
+
+@test "dybatpho::cli_suggest ignores an input too short to be a typo" {
+  run dybatpho::cli_suggest -x --color
+  assert_failure
+}
+
+@test "unrecognized options suggest the closest switch" {
+  # shellcheck disable=2329
+  _spec_suggest_opt() {
+    dybatpho::opts::setup "Suggest options" SUGGEST_ARGS action:"echo ran"
+    dybatpho::opts::flag "Colorize" SUGGEST_COLOR --color
+    dybatpho::opts::param "Output file" SUGGEST_OUT --output
+  }
+
+  run dybatpho::generate_from_spec _spec_suggest_opt --colr
+  assert_failure
+  assert_output --partial "Unrecognized option: --colr"
+  assert_output --partial "Did you mean '--color'?"
+}
+
+@test "invalid commands suggest the closest command" {
+  # shellcheck disable=2329
+  _spec_suggest_cmd_child() { dybatpho::opts::setup "Deploy" -; }
+  # shellcheck disable=2329
+  _spec_suggest_cmd() {
+    dybatpho::opts::setup "Suggest commands" SUGGEST_CMD_ARGS action:"echo ran"
+    dybatpho::opts::cmd deploy _spec_suggest_cmd_child
+    dybatpho::opts::cmd destroy _spec_suggest_cmd_child
+  }
+
+  run dybatpho::generate_from_spec _spec_suggest_cmd depoy
+  assert_failure
+  assert_output --partial "Invalid command: depoy"
+  assert_output --partial "Did you mean 'deploy'?"
+}
+
+@test "a mistyped option is reported as an option even when the spec has subcommands" {
+  # shellcheck disable=2329
+  _spec_suggest_mixed_child() { dybatpho::opts::setup "Child" -; }
+  # shellcheck disable=2329
+  _spec_suggest_mixed() {
+    dybatpho::opts::setup "Mixed" SUGGEST_MIXED_ARGS action:"echo ran"
+    dybatpho::opts::flag "Verbose" SUGGEST_MIXED_VERBOSE --verbose
+    dybatpho::opts::cmd deploy _spec_suggest_mixed_child
+  }
+
+  run dybatpho::generate_from_spec _spec_suggest_mixed --verbos
+  assert_failure
+  assert_output --partial "Unrecognized option: --verbos"
+  assert_output --partial "Did you mean '--verbose'?"
+}
+
+@test "an unrecognized option with no close match reports no suggestion" {
+  # shellcheck disable=2329
+  _spec_suggest_none() {
+    dybatpho::opts::setup "No suggestion" SUGGEST_NONE_ARGS action:"echo ran"
+    dybatpho::opts::flag "Colorize" SUGGEST_NONE_COLOR --color
+  }
+
+  run dybatpho::generate_from_spec _spec_suggest_none --wildlydifferent
+  assert_failure
+  assert_output --partial "Unrecognized option: --wildlydifferent"
+  refute_output --partial "Did you mean"
+}
+
+# =============================================================================
+# negatable:true
+# =============================================================================
+
+@test "negatable:true generates a --no- switch that turns the flag off" {
+  # shellcheck disable=2329
+  _spec_negatable() {
+    dybatpho::opts::setup "Negatable" NEG_ARGS action:'printf "%s" "${NEG_COLOR}"'
+    dybatpho::opts::flag "Colorize" NEG_COLOR --color negatable:true init:="true"
+  }
+
+  assert_equal "$(dybatpho::generate_from_spec _spec_negatable)" "true"
+  assert_equal "$(dybatpho::generate_from_spec _spec_negatable --color)" "true"
+  assert_equal "$(dybatpho::generate_from_spec _spec_negatable --no-color)" "false"
+}
+
+@test "negatable:true honours an explicit off: value" {
+  # shellcheck disable=2329
+  _spec_negatable_off() {
+    dybatpho::opts::setup "Negatable off" NEG_OFF_ARGS action:'printf "%s" "${NEG_OFF_COLOR}"'
+    dybatpho::opts::flag "Colorize" NEG_OFF_COLOR --color negatable:true on:yes off:no init:="yes"
+  }
+
+  assert_equal "$(dybatpho::generate_from_spec _spec_negatable_off --color)" "yes"
+  assert_equal "$(dybatpho::generate_from_spec _spec_negatable_off --no-color)" "no"
+}
+
+@test "negatable:true applies to long aliases and leaves short switches alone" {
+  # shellcheck disable=2329
+  _spec_negatable_alias() {
+    dybatpho::opts::setup "Negatable alias" NEG_ALIAS_ARGS action:'printf "%s" "${NEG_ALIAS_COLOR}"'
+    dybatpho::opts::flag "Colorize" NEG_ALIAS_COLOR -c aliases:--color,--colour negatable:true init:="true"
+  }
+
+  assert_equal "$(dybatpho::generate_from_spec _spec_negatable_alias --no-colour)" "false"
+  assert_equal "$(dybatpho::generate_from_spec _spec_negatable_alias -c)" "true"
+}
+
+@test "negatable:true shows both switches in help and schema" {
+  # shellcheck disable=2329
+  _spec_negatable_help() {
+    dybatpho::opts::setup "Negatable help" -
+    dybatpho::opts::flag "Colorize" NEG_HELP_COLOR --color negatable:true
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_negatable_help
+  assert_output --partial "--color, --no-color"
+
+  run_traced dybatpho::generate_schema _spec_negatable_help tool
+  assert_output --partial '"--no-color"'
+  assert_output --partial '"negatable":true'
+}
+
+# =============================================================================
+# count:true
+# =============================================================================
+
+@test "count:true counts repeated occurrences of a flag" {
+  # shellcheck disable=2329
+  _spec_count() {
+    dybatpho::opts::setup "Counting" COUNT_ARGS action:'printf "%s" "${COUNT_VERBOSE}"'
+    dybatpho::opts::flag "Increase verbosity" COUNT_VERBOSE -v alias:--verbose count:true
+  }
+
+  assert_equal "$(dybatpho::generate_from_spec _spec_count)" "0"
+  assert_equal "$(dybatpho::generate_from_spec _spec_count -v)" "1"
+  assert_equal "$(dybatpho::generate_from_spec _spec_count -vv)" "2"
+  assert_equal "$(dybatpho::generate_from_spec _spec_count -v -v -v)" "3"
+  assert_equal "$(dybatpho::generate_from_spec _spec_count --verbose --verbose)" "2"
+}
+
+@test "dybatpho::cli_verbosity_level raises the level and stops at trace" {
+  assert_equal "$(dybatpho::cli_verbosity_level 0 info)" "info"
+  assert_equal "$(dybatpho::cli_verbosity_level 1 info)" "debug"
+  assert_equal "$(dybatpho::cli_verbosity_level 2 info)" "trace"
+  assert_equal "$(dybatpho::cli_verbosity_level 9 info)" "trace"
+  assert_equal "$(dybatpho::cli_verbosity_level 1 warn)" "info"
+}
+
+@test "dybatpho::cli_apply_verbosity updates LOG_LEVEL" {
+  local LOG_LEVEL=info
+  dybatpho::cli_apply_verbosity 2
+  assert_equal "${LOG_LEVEL}" "trace"
+}
+
+# =============================================================================
+# config:<key> binding
+# =============================================================================
+
+@test "config:<key> supplies a value when no flag or environment variable is set" {
+  DYBATPHO_CONFIG=([server.port]=9999)
+  # shellcheck disable=2329
+  _spec_config_bind() {
+    dybatpho::opts::setup "Config bound" CONFIG_ARGS action:'printf "%s" "${CONFIG_PORT}"'
+    dybatpho::opts::param "Port" CONFIG_PORT --port config:server.port init:="8080"
+  }
+
+  assert_equal "$(dybatpho::generate_from_spec _spec_config_bind)" "9999"
+  DYBATPHO_CONFIG=()
+}
+
+@test "config:<key> falls back to the declared default when the key is missing" {
+  DYBATPHO_CONFIG=()
+  # shellcheck disable=2329
+  _spec_config_missing() {
+    dybatpho::opts::setup "Config missing" CONFIG_MISS_ARGS action:'printf "%s" "${CONFIG_MISS_PORT}"'
+    dybatpho::opts::param "Port" CONFIG_MISS_PORT --port config:server.port init:="8080"
+  }
+
+  assert_equal "$(dybatpho::generate_from_spec _spec_config_missing)" "8080"
+}
+
+@test "the flag beats the environment variable, which beats the config file" {
+  DYBATPHO_CONFIG=([server.port]=3333)
+  # shellcheck disable=2329
+  _spec_config_precedence() {
+    dybatpho::opts::setup "Precedence" CONFIG_PREC_ARGS action:'printf "%s" "${CONFIG_PREC_PORT}"'
+    dybatpho::opts::param "Port" CONFIG_PREC_PORT --port \
+      env:CONFIG_PREC_ENV config:server.port init:="8080"
+  }
+
+  assert_equal "$(dybatpho::generate_from_spec _spec_config_precedence)" "3333"
+  CONFIG_PREC_ENV=2222 assert_equal \
+    "$(CONFIG_PREC_ENV=2222 dybatpho::generate_from_spec _spec_config_precedence)" "2222"
+  assert_equal \
+    "$(CONFIG_PREC_ENV=2222 dybatpho::generate_from_spec _spec_config_precedence --port 1111)" "1111"
+  DYBATPHO_CONFIG=()
+  unset CONFIG_PREC_ENV
+}
+
+@test "config:<key> is shown in help and schema" {
+  # shellcheck disable=2329
+  _spec_config_help() {
+    dybatpho::opts::setup "Config help" -
+    dybatpho::opts::param "Port" CONFIG_HELP_PORT --port config:server.port
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_config_help
+  assert_output --partial "[config: server.port]"
+
+  run_traced dybatpho::generate_schema _spec_config_help tool
+  assert_output --partial '"config":"server.port"'
+}
+
+# =============================================================================
+# dybatpho::opts::arg and the rewritten help layout
+# =============================================================================
+
+@test "dybatpho::opts::arg documents positional arguments in usage and help" {
+  # shellcheck disable=2329
+  _spec_args() {
+    dybatpho::opts::setup "Copy files" ARG_ARGS action:"echo ran"
+    dybatpho::opts::arg "File to read" SOURCE
+    dybatpho::opts::arg "Where to write it" TARGET required:false
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_args
+  assert_line --index 0 --partial "[OPTIONS] <SOURCE> [TARGET]"
+  assert_output --partial "Arguments:"
+  assert_output --partial "<SOURCE>"
+  assert_output --partial "File to read"
+  assert_output --partial "[TARGET]"
+  assert_output --partial "Where to write it"
+}
+
+@test "a variadic argument renders with an ellipsis" {
+  # shellcheck disable=2329
+  _spec_args_variadic() {
+    dybatpho::opts::setup "Variadic" ARG_VAR_ARGS action:"echo ran"
+    dybatpho::opts::arg "Files" FILES variadic:true
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_args_variadic
+  assert_line --index 0 --partial "<FILES>..."
+}
+
+@test "declared arguments derive the positional argument count rule" {
+  # shellcheck disable=2329
+  _spec_args_rule() {
+    dybatpho::opts::setup "Derived rule" ARG_RULE_ARGS action:"echo ran"
+    dybatpho::opts::arg "First" FIRST
+    dybatpho::opts::arg "Second" SECOND
+  }
+
+  assert_equal "$(dybatpho::generate_from_spec _spec_args_rule a b)" "ran"
+  run dybatpho::generate_from_spec _spec_args_rule a
+  assert_failure
+  assert_output --partial "Expected exactly 2 arguments, got 1"
+}
+
+@test "an explicit args: rule wins over the declared arguments" {
+  # shellcheck disable=2329
+  _spec_args_explicit() {
+    dybatpho::opts::setup "Explicit rule" ARG_EXP_ARGS args:min:1 action:"echo ran"
+    dybatpho::opts::arg "First" FIRST
+    dybatpho::opts::arg "Second" SECOND
+  }
+
+  assert_equal "$(dybatpho::generate_from_spec _spec_args_explicit a)" "ran"
+}
+
+@test "declared arguments appear in the schema and the man page" {
+  # shellcheck disable=2329
+  _spec_args_doc() {
+    dybatpho::opts::setup "Documented args" ARG_DOC_ARGS action:"echo ran"
+    dybatpho::opts::arg "File to read" SOURCE
+  }
+
+  run_traced dybatpho::generate_schema _spec_args_doc tool
+  assert_output --partial '"arguments":[{"name":"SOURCE","description":"File to read","required":true,"variadic":false}]'
+
+  run_traced dybatpho::generate_man _spec_args_doc tool
+  assert_output --partial ".SH ARGUMENTS"
+  assert_output --partial "<SOURCE>"
+}
+
+@test "generated help lists the automatic --help option" {
+  # shellcheck disable=2329
+  _spec_auto_help_row() {
+    dybatpho::opts::setup "Auto help row" -
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_auto_help_row
+  assert_output --partial "-h, --help"
+  assert_output --partial "Show this help"
+}
+
+@test "generated help omits COMMAND from usage when there are no subcommands" {
+  # shellcheck disable=2329
+  _spec_no_cmd_usage() {
+    dybatpho::opts::setup "No commands" -
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_no_cmd_usage
+  refute_line --index 0 --partial "COMMAND"
+  refute_output --partial "for more information on a command"
+}
+
+@test "generated help names COMMAND and points at per-command help" {
+  # shellcheck disable=2329
+  _spec_cmd_usage_child() { dybatpho::opts::setup "Child" -; }
+  # shellcheck disable=2329
+  _spec_cmd_usage() {
+    dybatpho::opts::setup "Has commands" -
+    dybatpho::opts::cmd deploy _spec_cmd_usage_child
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_cmd_usage
+  assert_line --index 0 --partial "[OPTIONS] COMMAND"
+  assert_output --partial "for more information on a command"
+}
+
+@test "args:none leaves the argument placeholder out of usage" {
+  # shellcheck disable=2329
+  _spec_usage_noargs() {
+    dybatpho::opts::setup "No arguments" - args:none
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_usage_noargs
+  refute_line --index 0 --partial "[ARGS]"
+}
+
+@test "generated help annotates env, choices, default, and repeatable options" {
+  # shellcheck disable=2329
+  _spec_annotations() {
+    dybatpho::opts::setup "Annotated" -
+    dybatpho::opts::param "Environment" ANN_ENV --environment \
+      env:ANN_ENV choices:staging,production init:="staging"
+    dybatpho::opts::param "Tags" ANN_TAGS --tag multiple:true
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_annotations
+  assert_output --partial "[env: ANN_ENV]"
+  assert_output --partial "[choices: staging, production]"
+  assert_output --partial "[default: staging]"
+  assert_output --partial "[repeatable]"
+}
+
+@test "generated help hides a default that is only known at run time" {
+  # shellcheck disable=2329
+  _spec_dynamic_default() {
+    dybatpho::opts::setup "Dynamic default" -
+    dybatpho::opts::param "Workers" DYN_WORKERS --workers init:='$(echo 4)'
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_dynamic_default
+  refute_output --partial "[default:"
+}
+
+# =============================================================================
+# Completion cache
+# =============================================================================
+
+@test "dybatpho::generate_completion caches its output and reuses it" {
+  local DYBATPHO_CLI_CACHE_DIR="${BATS_TEST_TMPDIR}/cli-cache"
+  local DYBATPHO_CLI_CACHE=true
+  # shellcheck disable=2329
+  _spec_cache() {
+    dybatpho::opts::setup "Cached" -
+    dybatpho::opts::flag "Colorize" CACHE_COLOR --color
+  }
+
+  run_traced dybatpho::generate_completion _spec_cache bash cachetool
+  assert_success
+  assert_output --partial "--color"
+  local first="${output}"
+  assert_equal "$(find "${DYBATPHO_CLI_CACHE_DIR}" -type f | wc -l)" "1"
+
+  run_traced dybatpho::generate_completion _spec_cache bash cachetool
+  assert_equal "${output}" "${first}"
+}
+
+@test "DYBATPHO_CLI_CACHE=false skips the completion cache" {
+  local DYBATPHO_CLI_CACHE_DIR="${BATS_TEST_TMPDIR}/cli-cache-off"
+  local DYBATPHO_CLI_CACHE=false
+  # shellcheck disable=2329
+  _spec_cache_off() {
+    dybatpho::opts::setup "Uncached" -
+    dybatpho::opts::flag "Colorize" CACHE_OFF_COLOR --color
+  }
+
+  run_traced dybatpho::generate_completion _spec_cache_off bash cachetool
+  assert_success
+  assert_output --partial "--color"
+  assert_equal "$([ -d "${DYBATPHO_CLI_CACHE_DIR}" ] && echo yes || echo no)" "no"
+}
+
+@test "generated completion leaves the alias sentinel out of the word list" {
+  # shellcheck disable=2329
+  _spec_completion_sentinel_child() { dybatpho::opts::setup "Child" -; }
+  # shellcheck disable=2329
+  _spec_completion_sentinel() {
+    dybatpho::opts::setup "Sentinel" -
+    dybatpho::opts::cmd deploy _spec_completion_sentinel_child
+  }
+
+  local DYBATPHO_CLI_CACHE=false
+  run_traced dybatpho::generate_completion _spec_completion_sentinel bash tool
+  assert_output --partial "deploy"
+  refute_output --partial "@none"
+}
+
+@test "generated help lists the short switch first whatever order the spec used" {
+  # shellcheck disable=2329
+  _spec_switch_order() {
+    dybatpho::opts::setup "Switch order" -
+    dybatpho::opts::flag "Verbose" ORDER_VERBOSE --verbose alias:-v
+    dybatpho::opts::flag "Quiet" ORDER_QUIET -q alias:--quiet
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_switch_order
+  assert_output --partial "-v, --verbose"
+  assert_output --partial "-q, --quiet"
+}
+
+@test "a persistent option is listed once in the help of the command declaring it" {
+  # shellcheck disable=2329
+  _spec_persist_once_child() { dybatpho::opts::setup "Child" -; }
+  # shellcheck disable=2329
+  _spec_persist_once() {
+    dybatpho::opts::setup "Parent" -
+    dybatpho::opts::flag "Verbose" PERSIST_ONCE_VERBOSE --verbose persistent:true
+    dybatpho::opts::cmd child _spec_persist_once_child
+  }
+
+  __current_cmd_path=""
+  run_traced dybatpho::generate_help _spec_persist_once
+  assert_equal "$(printf '%s\n' "${lines[@]}" | grep -c -- '--verbose')" "1"
 }

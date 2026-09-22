@@ -104,7 +104,7 @@ changed examples.
 | `ai.sh` | Language model calls across Claude, OpenAI-compatible, Ollama, and CLI backends, with conversations, JSON output, streaming, tool use, caching, and budgets | `test/ai.bats`, `doc/ai.md`, `doc/spec/ai.md` |
 | `array.sh` | Create, read, join, filter, and manipulate Bash arrays | `test/array.bats`, `doc/array.md`, `doc/spec/array.md` |
 | `archive.sh` | Create, extract, and inspect archives | `test/archive.bats`, `doc/archive.md`, `doc/spec/archive.md` |
-| `cli.sh` | Declarative parser, help, subcommands, completions, and CLI artifacts | `test/cli.bats`, `doc/cli.md`, `doc/spec/cli.md` |
+| `cli.sh` | Declarative parser, help, subcommands, typo suggestions, config-bound options, completions, and CLI artifacts | `test/cli.bats`, `doc/cli.md`, `doc/spec/cli.md` |
 | `config.sh` | Load dotenv, JSON/YAML configuration, precedence, typed schema validation, and configuration docs | `test/config.bats`, `doc/config.md`, `doc/spec/config.md` |
 | `date.sh` | Portable date/time parsing, formatting, and calculations | `test/date.bats`, `doc/date.md`, `doc/spec/date.md` |
 | `file.sh` | Path and XDG helpers, upward search, directory creation, temporary files, atomic content rewrites, checksums, and metadata | `test/file.bats`, `doc/file.md`, `doc/spec/file.md` |
@@ -412,7 +412,11 @@ Add behavior-focused tests to `test/cli.bats`. Cover:
 - valid and invalid choices;
 - `multiple:true` with names, commas, and ranges such as `1-3`;
 - environment fallback and CLI precedence;
-- Bash, Zsh, and Fish completions;
+- the full precedence chain for a bound option: flag > `env:` > `config:` > `init:`;
+- suggestions for a mistyped switch and a mistyped command, and silence when nothing is close;
+- `negatable:true` generating `--no-`, and `count:true` accumulating `-v`, `-vv`, and `-v -v`;
+- positional arguments declared with `dybatpho::opts::arg`, the usage line and `Arguments` section they produce, and the count rule they derive;
+- Bash, Zsh, and Fish completions, plus cache reuse and cache bypass;
 - valid JSON schema and nested metadata;
 - root/child man page output, aliases, and hidden options.
 
@@ -439,10 +443,12 @@ mise run coverage
 
 ```bash
 bash example/cli_ux.sh --help
-bash example/cli_ux.sh --completion bash
-bash example/cli_ux.sh --schema
-bash example/cli_ux.sh --man
-bash example/cli_ux.sh deploy
+bash example/cli_ux.sh completion --shell bash
+bash example/cli_ux.sh schema
+bash example/cli_ux.sh man
+bash example/cli_ux.sh deploy --help
+bash example/cli_ux.sh deploy --component api api
+bash example/cli_ux.sh depoy   # suggests 'deploy'
 ```
 
 When adding CLI behavior, update these together:

@@ -31,6 +31,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   state="$(dybatpho::ensure_dir "$(dybatpho::xdg_state_dir myapp)" 700)"
   printf '%s\n' "${run_id}" | dybatpho::file_write_atomic "${state}/last-run"
   ```
+- **`cli` typo suggestions** — an unrecognized option or invalid command now
+  names the closest thing the command accepts, compared by Levenshtein distance
+  with leading dashes ignored, so `--colr` answers with
+  `Did you mean '--color'?` and `depoy` with `Did you mean 'deploy'?`. Typing a
+  prefix of a longer switch counts as an abbreviation and outranks every
+  edit-distance match. `dybatpho::cli_levenshtein` and `dybatpho::cli_suggest`
+  are exposed for CLIs that want to do their own matching.
+
+  Making that work required the parser to notice a mistyped option at all:
+  a command that declares at least one switch now rejects an unmatched `-x` or
+  `--xy` instead of quietly collecting it as a positional argument. `--` is
+  still how dashed values are passed through, and a command that declares no
+  switches is a passthrough wrapper and keeps collecting them unchanged.
+
+- **`cli` generated negation switches** — `negatable:true` on
+  `dybatpho::opts::flag` generates a `--no-<name>` for every long switch and
+  alias, instead of spelling the pair out as `--{no-}name`. Without an explicit
+  `off:`, a negatable flag turns off to `false` rather than to the empty string,
+  so `--no-color` lands on a value worth testing.
+
+- **`cli` counting flags** — `count:true` records how often a flag appeared
+  rather than a value, starting at `0`, so `-v`, `-vv`, and `-v -v` yield `1`,
+  `2`, and `2`. `dybatpho::cli_verbosity_level` maps that count onto a log level
+  and `dybatpho::cli_apply_verbosity` applies it to `LOG_LEVEL`, which is the
+  `-vv`-raises-verbosity idiom in two lines of spec.
+
+- **`cli` options bound to configuration keys** — `config:<key>` binds an option
+  to a key loaded by `src/config.sh`, giving one precedence chain across the
+  whole CLI: **flag > `env:` > `config:` > `init:`**. `cli` and `config` no
+  longer have to be wired together by hand at every option; `cli` now depends on
+  `config` so the binding works wherever `cli` is loaded. Configuration has to
+  be loaded before `dybatpho::generate_from_spec`, because that is when an
+  option's initial value is resolved; a missing key, or a CLI that never loaded
+  configuration, falls through to `init:`.
+
+- **`cli` documented positional arguments** — `dybatpho::opts::arg` declares a
+  positional argument's name, description, and whether it is required or
+  variadic. The values still land in the rest variable, but the usage line now
+  shows real placeholders (`<SOURCE> [TARGET]...`), help gains an `Arguments`
+  section, and the schema and man page describe them too. Declaring arguments
+  also derives the `args:<rule>` count check, so the two cannot disagree; an
+  explicit `args:` still wins.
+
+- **`cli` completion cache** — `dybatpho::generate_completion` caches its output
+  under `DYBATPHO_CLI_CACHE_DIR` (default
+  `${XDG_CACHE_HOME:-$HOME/.cache}/dybatpho/cli`), so a shell startup that
+  sources a generated completion does not walk the spec tree again. The key
+  hashes the script declaring the spec, so editing it invalidates the entry on
+  its own and there is nothing to clear by hand. `DYBATPHO_CLI_CACHE=false`
+  regenerates every time.
 
 - **`parallel` module** — run independent work a few jobs at a time.
   `dybatpho::parallel_map` runs one command over a list, passing each item as a
@@ -186,7 +236,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   ```sh
   . dybatpho/init.sh --modules pkg
-  dybatpho::pkg_install --dry-run ripgrep      # preview the command
+  dybatpho::pkg_install --dry-run ripgrep # preview the command
   dybatpho::pkg_ensure --force --update curl jq
   dybatpho::pkg_require --force fd apt:fd-find emerge:sys-apps/fd
   dybatpho::pkg_install --force --arg --cask -- firefox
@@ -194,6 +244,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```
 
 ### Changed
+
+- **`cli` help output now reads like a conventional command-line tool.** The
+  usage line describes what the command actually accepts — `[OPTIONS]`, a
+  `COMMAND` only when there are subcommands, and the declared positional
+  arguments — instead of a fixed `[options...] [arguments...]`. Help gains an
+  `Arguments` section, a `Commands` section ahead of `Options`, and a closing
+  `Run '<prog> COMMAND --help' ...` line. Rows across all three sections align
+  to one column computed from the longest label rather than a fixed width, and
+  the `-h, --help` every command already accepted is finally listed.
+
+  Each option now carries its details underneath it — `[env: NAME]`,
+  `[config: key]`, `[choices: a, b]`, `[default: value]`, `[repeatable]`,
+  `[repeat to increase]` — so where a value comes from is visible without
+  reading the spec. A default built from a command substitution is left out,
+  since printing the expression would mislead more than it helps.
 
 - **BREAKING:** the minimum supported Bash is now 4.3, raised from 4.0.
   `init.sh` refuses to load on anything older instead of failing later with a
@@ -230,6 +295,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   down.
 
 ### Fixed
+
+- **`cli`**: a persistent option declared on a command was listed twice in that
+  command's own help, once replayed as an inherited definition and once from
+  its own spec.
+- **`cli`**: the `@none` sentinel recorded for an alias-less command leaked into
+  generated completion word lists and into the `aliases` array of the generated
+  JSON schema.
 
 - **File writers now work on macOS.** `chmod` and `sed` were given `--` to mark
   the end of the options, which the BSD versions on macOS read as a file name

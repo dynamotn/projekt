@@ -115,15 +115,15 @@ loaded_line() {
   assert_output "string logging helpers process file secret network json ai "
 
   run -0 init_sh "--modules agent" "$(loaded_line)"
-  assert_output "string logging helpers process file secret cli archive safety json agent "
+  assert_output "string logging helpers process file secret config cli archive safety json agent "
 }
 
 @test "a dependency cycle loads every module once and terminates" {
   run -0 init_sh "--modules safety" "$(loaded_line)"
-  assert_output "string logging helpers process file secret archive cli safety "
+  assert_output "string logging helpers process file secret archive config cli safety "
 
   run -0 init_sh "--modules archive" "$(loaded_line)"
-  assert_output "string logging helpers process file secret cli safety archive "
+  assert_output "string logging helpers process file secret config cli safety archive "
 }
 
 @test "a dependency pulled in on demand stays usable" {

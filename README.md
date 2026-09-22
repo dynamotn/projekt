@@ -134,7 +134,7 @@ with a missing function. See [init.sh reference](doc/init.md) and
 
 | Module               | What you get                                                                                                 |
 | -------------------- | ------------------------------------------------------------------------------------------------------------ |
-| [cli.sh](doc/cli.md) | Declarative option parser, prompts for missing values, env fallbacks, automatic `--help`, and generated JSON schema / shell completion / man pages |
+| [cli.sh](doc/cli.md) | Declarative option parser with "did you mean" suggestions, generated `--no-` switches, counting `-vv` flags, options bound to config keys, prompts for missing values, env fallbacks, automatic `--help`, and generated JSON schema / shell completion / man pages |
 
 ### 📁 Files & system
 

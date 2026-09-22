@@ -191,6 +191,33 @@ dybatpho::generate_man _spec mytool
 - **FR-019**: `opts::validate_choice` MUST accept only declared choice names
   and reject values outside the declared set; `select` MUST additionally
   support numeric selections and ascending ranges in multi-select mode.
+- **FR-020**: An unrecognized option or invalid command MUST be reported with
+  the closest accepted switch or command name when one is near enough by
+  Levenshtein distance, comparing with leading dashes ignored.
+- **FR-021**: A command that declares at least one switch MUST reject an
+  unmatched `-x` or `--xy` instead of collecting it as a positional argument;
+  `--` MUST remain the way to pass dashed values through, and a command that
+  declares no switches MUST keep collecting them.
+- **FR-022**: `negatable:true` MUST generate a `--no-<name>` switch for every
+  long switch and alias of a flag, and MUST default the off value to `false`
+  when no `off:` is declared.
+- **FR-023**: `count:true` MUST record how many times a flag appeared rather
+  than a value, starting from `0`, so that repeated and clustered forms such as
+  `-v -v` and `-vv` both yield `2`.
+- **FR-024**: `config:<key>` MUST bind an option to a configuration key loaded
+  by `src/config.sh`, and the resolved precedence MUST be
+  flag > `env:` > `config:` > `init:`.
+- **FR-025**: `dybatpho::opts::arg` MUST document positional arguments for the
+  usage line, help, schema, and man page, and MUST derive the `args:<rule>`
+  count check when the spec declares no explicit rule.
+- **FR-026**: Generated help MUST follow conventional command-line layout: a
+  usage line naming `COMMAND` only when subcommands exist, then `Arguments`,
+  `Commands`, and `Options` sections aligned to one shared column, with
+  per-option `env`, `config`, `choices`, `default`, and repeatability
+  annotations and the automatic `-h, --help` row.
+- **FR-027**: `dybatpho::generate_completion` MUST cache its output keyed by a
+  hash of the script declaring the spec, and MUST bypass the cache when
+  `DYBATPHO_CLI_CACHE` is false or the declaring script cannot be read.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -212,6 +239,9 @@ dybatpho::generate_man _spec mytool
 - **SC-004**: A single spec can produce usable Bash, Zsh, and Fish completion artifacts without manually duplicating option names.
 - **SC-005**: Deployments can configure options through declared environment variables while preserving explicit CLI overrides.
 - **SC-006**: The same spec can produce valid JSON schema and roff man-page artifacts that describe the exposed CLI.
+- **SC-007**: A mistyped switch or command is answered with the correction instead of a bare rejection, so the user does not have to re-read the help to find the name they meant.
+- **SC-008**: One precedence chain — flag, environment, configuration file, default — covers every bound option, so a CLI no longer wires configuration into options by hand.
+- **SC-009**: Generated help reads like a conventional command-line tool, with the accepted arguments and the source of every option value visible without consulting the source.
 
 ## Integration Tests *(mandatory)*
 
@@ -221,6 +251,11 @@ dybatpho::generate_man _spec mytool
 - **IT-004**: Generate Bash, Zsh, and Fish completion for a spec and verify visible options, aliases, and subcommands are present.
 - **IT-005**: Run a spec with `env:NAME`, a prompted parameter, choices, and `multiple:true`; verify environment fallback, prompt selection, and explicit option precedence.
 - **IT-006**: Generate schema and man-page artifacts from one spec and verify valid JSON plus documented options, environment names, and subcommands.
+- **IT-007**: Pass a mistyped switch and a mistyped command to a spec that declares both, and verify each error names the closest accepted alternative and stays silent when nothing is close.
+- **IT-008**: Declare a `negatable:true` flag and a `count:true` flag, and verify `--no-` turns the flag off while repeated and clustered short forms accumulate.
+- **IT-009**: Bind an option with both `env:` and `config:`, and verify the resolved value follows flag > environment > configuration > default.
+- **IT-010**: Declare positional arguments and verify the usage line, the `Arguments` section, the derived count rule, and the schema and man-page entries all describe them.
+- **IT-011**: Generate completion twice for one spec and verify the second run reuses the cached artifact, and that disabling the cache writes nothing.
 
 ## Acceptance Criteria *(mandatory)*
 

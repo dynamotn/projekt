@@ -81,6 +81,7 @@ declare -A __dybatpho_module_deps=(
   [table]="text"
   [notification]="network"
   [archive]="safety"
+  [cli]="config"
   [safety]="archive cli"
   [testing]="json network text"
   [ai]="network json"
