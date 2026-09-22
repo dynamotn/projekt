@@ -39,6 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Coverage runs use the whole runner.** `scripts/test.sh --coverage` spread
+  the test files over chunks by slicing the count-ordered list, which put the
+  heaviest files in one chunk: it held a third of the suite and decided the
+  memory ceiling on its own, while the last chunk held a couple of small files
+  and left most workers idle. Files are now dealt to the emptiest chunk in
+  turn, which drops the biggest chunk from 417 tests to 179 without changing
+  how many times kcov runs. kcov's peak turns out to track the tests in a chunk (~16 MiB each)
+  rather than the worker count -- 2 and 4 workers over the same files peaked at
+  2613 and 2615 MiB -- so CI now runs one worker per vCPU instead of two.
+
 - **`.shellcheckrc` disables SC2004.** It contradicts the
   `require-variable-braces` rule the file enables: one asks for `${index}`
   everywhere, the other rejects it inside `$(( ))`. Braces everywhere is the

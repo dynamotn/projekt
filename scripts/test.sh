@@ -114,6 +114,42 @@ function __dybatpho_test_progress {
   '
 }
 
+# @description Spread the test files over chunks of at most `--chunk` files,
+#   balanced by test count. Slicing the count-ordered list directly, which is
+#   what the chunking used to do, puts the heaviest files together: that one
+#   chunk decides how much trace state kcov accumulates, so it sets the memory
+#   ceiling for the whole run, while the tail chunks end up too small to keep
+#   the workers busy. Handing each file to the emptiest chunk keeps every chunk
+#   near the average, which lowers the ceiling without changing how many times
+#   kcov runs.
+# @arg $1 number Maximum files per chunk
+# @arg $@ path Test files, ordered by test count descending
+# @stdout One chunk per line, file paths separated by tabs
+function __dybatpho_test_pack {
+  local _chunk="$1"
+  shift
+  local _bins=$((($# + _chunk - 1) / _chunk)) _file _b _best
+  local -a _load=() _held=() _names=()
+  for ((_b = 0; _b < _bins; _b++)); do
+    _load[_b]=0
+    _held[_b]=0
+    _names[_b]=""
+  done
+  for _file in "$@"; do
+    _best=-1
+    for ((_b = 0; _b < _bins; _b++)); do
+      ((_held[_b] < _chunk)) || continue
+      ((_best < 0 || _load[_b] < _load[_best])) && _best="${_b}"
+    done
+    _load[_best]=$((_load[_best] + $(grep -c '^@test' "${_file}" || true)))
+    _held[_best]=$((_held[_best] + 1))
+    _names[_best]+="${_file}"$'\t'
+  done
+  for ((_b = 0; _b < _bins; _b++)); do
+    printf '%s\n' "${_names[_b]%$'\t'}"
+  done
+}
+
 # @description Run the suite and report it.
 # @noargs
 # @exitcode 0 If every test ran and passed
@@ -176,12 +212,15 @@ function __dybatpho_test_run {
     rm -rf "${_coverage_dir}"
     mkdir -p "${_coverage_dir}"
     : > "${_tap}"
-    local _index=0 _part _chunk_out
+    local _index=0 _part _chunk_out _line
+    local -a _chunk_files
     # One Bats run per chunk, so each writes its own junit report; they are
     # concatenated afterwards and summarised as one.
-    while ((_index < ${#_files[@]})); do
-      _part="${_coverage_dir}/part$((_index / CHUNK))"
-      _chunk_out="${_run_dir}/chunk$((_index / CHUNK))"
+    while IFS= read -r _line; do
+      IFS=$'\t' read -r -a _chunk_files <<< "${_line}"
+      ((${#_chunk_files[@]})) || continue
+      _part="${_coverage_dir}/part${_index}"
+      _chunk_out="${_run_dir}/chunk${_index}"
       mkdir -p "${_chunk_out}"
       kcov \
         --clean \
@@ -192,11 +231,11 @@ function __dybatpho_test_run {
         --exclude-region="# kcov(disabled):# kcov(enabled)" \
         "${_part}" \
         "${BATS_CMD}" "${_bats_args[@]/${_run_dir}/${_chunk_out}}" \
-        "${_files[@]:_index:CHUNK}" \
+        "${_chunk_files[@]}" \
         2>&1 | tee -a "${_tap}" | __dybatpho_test_progress "${_expected}" || true
       _parts+=("${_part}")
-      _index=$((_index + CHUNK))
-    done
+      _index=$((_index + 1))
+    done < <(__dybatpho_test_pack "${CHUNK}" "${_files[@]}")
     cat "${_run_dir}"/chunk*/report.xml > "${_run_dir}/report.xml" 2> /dev/null
   else
     # `|| true`: a failing suite has to reach the summary below, and dybatpho

@@ -72,9 +72,16 @@ jobs:
           # kcov never releases the trace state it accumulates, so a single
           # invocation over the whole suite grows until the OOM killer takes the
           # run down with exit 137. `--coverage` runs one invocation per chunk of
-          # test files, which keeps the peak at whatever the largest chunk needs,
-          # and two workers keep it there.
-          su - test -c "DYBATPHO_TEST_JOBS=2 DYBATPHO_TEST_CHUNK=5 bash $(pwd)/scripts/test.sh --coverage"
+          # test files, which keeps the peak at whatever the largest chunk needs.
+          #
+          # That peak tracks the tests in one chunk (~16 MiB each) and not the
+          # worker count: measured over the same files, 2 and 4 workers peaked at
+          # 2613 and 2615 MiB. So `--chunk` is the memory knob and `--jobs` is
+          # free, which makes one worker per vCPU the right setting -- a standard
+          # runner has 4. `scripts/test.sh` balances the chunks by test count, so
+          # 5 files per chunk is ~180 tests, or well under 3 GiB of the 16 GiB
+          # the runner has.
+          su - test -c "DYBATPHO_TEST_JOBS=4 DYBATPHO_TEST_CHUNK=5 bash $(pwd)/scripts/test.sh --coverage"
 
       - name: "Fix coverage paths"
         # kcov strips the longest common prefix from `filename` and records it in
