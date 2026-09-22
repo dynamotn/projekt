@@ -95,6 +95,21 @@ setup() {
   assert_output --partial "expected at least one package"
 }
 
+@test "dybatpho::pkg_install_command passes extra manager arguments before the packages" {
+  DYBATPHO_PKG_MANAGER=brew
+  assert_equal "$(dybatpho::pkg_install_command --arg --cask -- firefox)" \
+    "brew install --cask firefox"
+  DYBATPHO_PKG_MANAGER=apk
+  assert_equal "$(dybatpho::pkg_install_command -a --no-cache -a --no-interactive curl)" \
+    "apk add --no-cache --no-interactive curl"
+}
+
+@test "dybatpho::pkg_install_command rejects an --arg without a value" {
+  DYBATPHO_PKG_MANAGER=apk
+  run ! dybatpho::pkg_install_command curl --arg
+  assert_output --partial "expected a value after --arg"
+}
+
 @test "dybatpho::pkg_name resolves a per-manager override" {
   DYBATPHO_PKG_MANAGER=apt
   assert_equal "$(dybatpho::pkg_name fd apt:fd-find emerge:sys-apps/fd)" "fd-find"
@@ -126,6 +141,18 @@ setup() {
   stub apk ": true"
   run ! dybatpho::pkg_installed curl
   unstub apk
+}
+
+@test "dybatpho::pkg_installed finds a Homebrew cask that is not a formula" {
+  DYBATPHO_PKG_MANAGER=brew
+  stub_repeated brew ': if [ "${2:-}" = "--cask" ]; then echo "firefox 1.0"; else exit 1; fi'
+  dybatpho::pkg_installed firefox
+}
+
+@test "dybatpho::pkg_installed reports a Homebrew package that is neither formula nor cask" {
+  DYBATPHO_PKG_MANAGER=brew
+  stub_repeated brew ": exit 1"
+  run ! dybatpho::pkg_installed firefox
 }
 
 @test "dybatpho::pkg_installed queries rpm on dnf and pacman on pacman" {
@@ -195,6 +222,20 @@ setup() {
   assert_output --partial "DRY RUN: apk add ripgrep"
 }
 
+@test "dybatpho::pkg_install passes extra manager arguments to the install command" {
+  DYBATPHO_PKG_MANAGER=brew
+  run -0 dybatpho::pkg_install --dry-run --arg --cask --arg --HEAD -- firefox
+  assert_output --partial "DRY RUN: brew install --cask --HEAD firefox"
+}
+
+@test "dybatpho::pkg_install keeps extra manager arguments out of the --update refresh" {
+  DYBATPHO_PKG_MANAGER=apk
+  run -0 dybatpho::pkg_install --dry-run --update --arg --no-cache -- ripgrep
+  assert_output --partial "DRY RUN: apk update"
+  refute_output --partial "apk update --no-cache"
+  assert_output --partial "DRY RUN: apk add --no-cache ripgrep"
+}
+
 @test "dybatpho::pkg_install reports the failure of the package manager" {
   DYBATPHO_PKG_MANAGER=apk
   stub apk "add ripgrep : exit 3"
@@ -230,6 +271,25 @@ setup() {
   run -0 dybatpho::pkg_update --force
   assert_output --partial "index refreshed"
   unstub apk
+}
+
+@test "dybatpho::pkg_update passes extra manager arguments to the refresh" {
+  DYBATPHO_PKG_MANAGER=apk
+  run -0 dybatpho::pkg_update --dry-run --arg --no-cache
+  assert_output --partial "DRY RUN: apk update --no-cache"
+}
+
+@test "dybatpho::pkg_ensure forwards extra manager arguments to the install" {
+  DYBATPHO_PKG_MANAGER=apk
+  stub_repeated apk ": exit 1"
+  run -0 dybatpho::pkg_ensure --dry-run --arg --no-cache -- dybatpho-missing-package
+  assert_output --partial "DRY RUN: apk add --no-cache dybatpho-missing-package"
+}
+
+@test "dybatpho::pkg_require forwards extra manager arguments to the install" {
+  DYBATPHO_PKG_MANAGER=brew
+  run -0 dybatpho::pkg_require --dry-run --arg --cask dybatpho-missing-command
+  assert_output --partial "DRY RUN: brew install --cask dybatpho-missing-command"
 }
 
 @test "dybatpho::pkg_ensure skips packages that are already installed" {

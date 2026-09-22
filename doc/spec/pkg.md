@@ -48,7 +48,8 @@ As a script author, I want to ask whether a package is installed, and which of a
 1. **Given** `apt` reports a package status of `install ok installed`, **When** the check runs, **Then** the package counts as installed
 2. **Given** `apt` reports a removed package whose configuration files remain, **When** the check runs, **Then** the package counts as missing
 3. **Given** `apk info -e` succeeds but prints nothing, **When** the check runs, **Then** the package counts as missing
-4. **Given** a list of packages of which one is installed, **When** the missing check runs, **Then** only the absent packages are printed, in the order they were given
+4. **Given** a Homebrew cask is installed and the formula list does not report it, **When** the check runs, **Then** the package counts as installed
+5. **Given** a list of packages of which one is installed, **When** the missing check runs, **Then** only the absent packages are printed, in the order they were given
 
 ---
 
@@ -88,6 +89,26 @@ As an operator, I want to see the exact command first and be asked before it run
 
 ---
 
+---
+
+### User Story 5 - Pass a manager flag the module does not model (Priority: P2)
+
+As a script author, I want to hand an extra flag to the package manager so that a cask, a cacheless install, or a recommends-free install stays inside the same guarded call instead of a hand-written command.
+
+**Why this priority**: Without it, the one case the module cannot render forces a script back to a raw `sudo` command, losing the confirmation, the dry run, and the elevation it came here for.
+
+**Independent Test**: Render and dry-run an install with one and with several extra arguments on different managers, and verify where they land in the command.
+
+**Acceptance Scenarios**:
+
+1. **Given** `--arg --cask` and the manager `brew`, **When** the install command is rendered, **Then** it reads `brew install --cask <package>`
+2. **Given** `--arg` repeated for `--no-cache` and `--no-interactive` on `apk`, **When** the install command is rendered, **Then** both flags appear in the order they were given, before the package names
+3. **Given** `--arg` is combined with `--update`, **When** the install runs, **Then** the extra arguments reach the install command only, and the index refresh runs without them
+4. **Given** `--arg` is the last argument, **When** the call is parsed, **Then** the script stops with a message naming the option that is missing its value
+5. **Given** the ensure or require helper is called with `--arg`, **When** it installs, **Then** the extra arguments reach the install command it runs
+
+---
+
 ### Example Workflow
 
 ```bash
@@ -99,6 +120,9 @@ dybatpho::pkg_install_command ripgrep jq
 # Review it interactively, then run the same script unattended in CI.
 dybatpho::pkg_ensure --update curl jq
 dybatpho::pkg_require fd apt:fd-find emerge:sys-apps/fd
+
+# A flag the module does not model goes through as-is.
+dybatpho::pkg_install --force --arg --cask -- firefox
 ```
 
 ## Edge Cases
@@ -110,9 +134,12 @@ dybatpho::pkg_require fd apt:fd-find emerge:sys-apps/fd
 - The script already runs as root, or `sudo` is not installed: no elevation prefix is added.
 - `apt-get` can open a debconf dialog: the install command sets a non-interactive frontend.
 - A package name begins with `-`: everything after `--` is treated as a package.
+- Homebrew installs formulae and casks into separate scopes, and the default scope of `brew list` has not always covered both: each scope is asked in turn so an installed cask is never reported as missing and reinstalled on every run.
 - `emerge` has no built-in installed-package query: `qlist` is used, then `equery`, and the check reports a warning when neither is present.
 - Every package in the list is already installed: the ensure helper installs nothing and succeeds.
 - A dry-run require leaves the command missing on purpose, which is not reported as a failure.
+- An extra manager argument is passed verbatim: the module neither validates it against the manager nor reorders it, so an unknown flag fails in the manager rather than here.
+- `--arg` without a value stops the script instead of consuming the next package name as its value.
 
 ## Requirements *(mandatory)*
 
@@ -120,6 +147,7 @@ dybatpho::pkg_require fd apt:fd-find emerge:sys-apps/fd
 - **FR-002**: Detection MUST probe the platform's native managers first, MUST report the distribution manager ahead of `brew` on Linux, and MUST fail rather than guess when none is installed.
 - **FR-003**: `DYBATPHO_PKG_MANAGER` MUST override detection, and MUST be rejected when it names an unsupported manager.
 - **FR-004**: The installed check MUST use each manager's own query command, and MUST treat a query that succeeds with empty output as "not installed".
+- **FR-004a**: On Homebrew the installed check MUST ask the formula scope and the cask scope, and MUST report a package installed when either one knows it.
 - **FR-005**: The missing check MUST print only the absent packages, preserving the order of its arguments.
 - **FR-006**: Package name resolution MUST accept `<manager>:<package>` overrides, MUST fall back to the default name when no override matches, and MUST reject a malformed override.
 - **FR-007**: The rendered install command MUST include the manager's non-interactive flags unless `DYBATPHO_PKG_ASSUME_YES` is false.
@@ -131,12 +159,17 @@ dybatpho::pkg_require fd apt:fd-find emerge:sys-apps/fd
 - **FR-013**: The ensure helper MUST install only the packages that are missing, and MUST succeed without installing anything when they are all present.
 - **FR-014**: The require helper MUST do nothing when the command is available, MUST install the package resolved for this manager otherwise, and MUST fail when the command is still missing after a real install.
 - **FR-015**: Every mutating function MUST treat arguments after `--` as packages, and MUST reject an unknown option and an empty package list.
+- **FR-016**: The install and update functions, and the command renderer, MUST accept `--arg`/`-a` once per extra manager argument, MUST place those arguments after the manager's own flags and before the package names, and MUST preserve the order they were given in.
+- **FR-017**: `--arg` without a following value MUST stop the script with a message naming the option.
+- **FR-018**: The extra arguments of an install MUST NOT be passed to the index refresh that `--update` runs.
+- **FR-019**: The ensure and require helpers MUST forward `--arg`/`-a` and its value to the install they perform.
 
 ### Key Entities
 
 - **Package manager**: one of the six supported names, each bound to the binary that proves it is usable (`apt` is driven through `apt-get`).
 - **Package name override**: a `<manager>:<package>` pair that redirects one logical dependency to the name a given manager uses.
-- **Action command**: the fully rendered command for an `install` or `update` action, including elevation prefix and non-interactive flags.
+- **Action command**: the fully rendered command for an `install` or `update` action, including elevation prefix, non-interactive flags, and any extra manager arguments.
+- **Extra manager argument**: one flag supplied with `--arg`, passed to the manager verbatim between its own flags and the package names.
 
 ## Success Criteria *(mandatory)*
 
@@ -146,6 +179,7 @@ dybatpho::pkg_require fd apt:fd-find emerge:sys-apps/fd
 - **SC-002**: The exact command a run would execute is printable before anything changes.
 - **SC-003**: No unattended run changes the system unless it asked for `--force`.
 - **SC-004**: Re-running a bootstrap script installs nothing when every dependency is already present.
+- **SC-005**: A manager flag the module does not model, such as `--cask` or `--no-cache`, is used without leaving the guarded install path.
 
 ## Integration Tests *(mandatory)*
 
@@ -157,6 +191,7 @@ dybatpho::pkg_require fd apt:fd-find emerge:sys-apps/fd
 - **IT-006**: Verify `DYBATPHO_PKG_ASSUME_YES=false` drops the assume-yes flags and `DYBATPHO_PKG_SUDO=true` adds `sudo` for every manager except `brew`.
 - **IT-007**: Verify package name resolution for a matching override, a fallback, and a malformed override.
 - **IT-008**: Stub each manager's query command to verify installed and missing verdicts, including `apt` config-files status and empty `apk` output.
+- **IT-008a**: Stub `brew` so that only the cask scope knows the package, and verify it counts as installed; verify it counts as missing when neither scope knows it.
 - **IT-009**: Verify the missing check prints only the absent packages.
 - **IT-010**: Verify that `--dry-run` and `DRY_RUN` print the command and never execute the stubbed manager.
 - **IT-011**: Verify a non-interactive run without `--force` is skipped, and that `--force` or `DYBATPHO_FORCE` runs the manager.
@@ -165,6 +200,10 @@ dybatpho::pkg_require fd apt:fd-find emerge:sys-apps/fd
 - **IT-014**: Verify an unknown option and an empty package list stop the script, and that a package after `--` is passed through.
 - **IT-015**: Verify the ensure helper installs only the missing packages and does nothing when they are all present.
 - **IT-016**: Verify the require helper skips an available command, installs the resolved package name, and fails when the command is still missing.
+- **IT-017**: Verify the rendered install command carries one `--arg` on `brew` and several on `apk`, in order, before the package names.
+- **IT-018**: Verify `--arg` without a value stops the command renderer.
+- **IT-019**: Verify an install with `--arg` and `--update` refreshes the index without the extra arguments and installs with them.
+- **IT-020**: Verify the update function renders its extra arguments, and that the ensure and require helpers forward theirs to the install.
 
 ## Acceptance Criteria *(mandatory)*
 

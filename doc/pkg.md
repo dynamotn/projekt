@@ -33,6 +33,12 @@ Debian, `fd` everywhere else, and `dybatpho::pkg_require fd apt:fd-find`
 says exactly that.
 
 
+A manager flag that this module does not model - `--cask` for Homebrew,
+`--no-cache` for `apk`, `--no-install-recommends` for `apt-get` - is passed
+through with `--arg`, once per flag, and lands right before the package
+names.
+
+
 Nothing here changes the system without saying so first. Every mutating
 function asks for confirmation unless `--force`/`DYBATPHO_FORCE` is set,
 refuses rather than guessing in a non-interactive shell, and prints the
@@ -101,6 +107,15 @@ dybatpho::pkg_require fd apt:fd-find emerge:sys-apps/fd
 dybatpho::pkg_install --dry-run ripgrep
 ```
 
+
+### Pass a flag the manager understands but this module does not
+
+
+```bash
+dybatpho::pkg_install --force --arg --cask -- firefox
+dybatpho::pkg_install --force --arg --no-cache --arg --no-interactive -- curl
+```
+
 <a id="see-also"></a>
 ## 🔗 See also
 
@@ -110,6 +125,10 @@ dybatpho::pkg_install --dry-run ripgrep
 ## 💡 Tips
 
 - Run an installer with `--dry-run` first, then with `--force` from CI, and the same script covers both the review and the unattended run.
+
+### `dybatpho::pkg_install`
+
+- An `--arg` belongs to the install command alone: the `--update` refresh that may run before it is never given the extra arguments.
 
 <a id="reference"></a>
 ## 📚 Reference
@@ -199,7 +218,7 @@ Print the command for an action, one word per line.
 | --- | --- | --- |
 | `$1` | string | Manager name |
 | `$2` | string | Action, `install` or `update` |
-| `$@` | string | Packages, for the `install` action |
+| `$@` | string | Extra manager arguments, then `--` and the packages of the `install` action |
 
 **📤 Output on stdout**
 
@@ -384,10 +403,15 @@ mapfile -t missing < <(dybatpho::pkg_missing curl jq)
 
 Print the command that would install the given packages, without running it.
 
-**🧪 Example**
+**🧪 Examples**
 
 ```bash
 dybatpho::pkg_install_command ripgrep   # sudo apt-get install -y ripgrep
+
+```
+
+```bash
+dybatpho::pkg_install_command --arg --cask -- firefox   # brew install --cask firefox
 
 ```
 
@@ -395,7 +419,8 @@ dybatpho::pkg_install_command ripgrep   # sudo apt-get install -y ripgrep
 
 | Name | Type | Description |
 | --- | --- | --- |
-| `$@` | string | Package names |
+| `$1` | string | Option `--arg`/`-a` to pass one extra argument to the manager, repeatable |
+| `$@` | string | Package names, optionally after a `--` separator |
 
 **📤 Output on stdout**
 
@@ -416,7 +441,7 @@ Refresh the package index, after confirming the change.
 
 | Name | Type | Description |
 | --- | --- | --- |
-| `$1` | string | Option `--force`/`-f` to skip confirmation, `--dry-run`/`-n` to print the command instead |
+| `$1` | string | Option `--force`/`-f` to skip confirmation, `--dry-run`/`-n` to print the command instead, `--arg`/`-a` to pass one extra argument to the manager, repeatable |
 
 **🌍 Environment variables**
 
@@ -448,11 +473,16 @@ dybatpho::pkg_install --dry-run -- ripgrep
 
 ```
 
+```bash
+dybatpho::pkg_install --force --arg --cask -- firefox
+
+```
+
 **🧾 Arguments**
 
 | Name | Type | Description |
 | --- | --- | --- |
-| `$1` | string | Option `--force`/`-f` to skip confirmation, `--dry-run`/`-n` to print the command instead, `--update`/`-u` to refresh the index first |
+| `$1` | string | Option `--force`/`-f` to skip confirmation, `--dry-run`/`-n` to print the command instead, `--update`/`-u` to refresh the index first, `--arg`/`-a` to pass one extra argument to the manager, repeatable |
 | `$@` | string | Packages, optionally after a `--` separator |
 
 **🌍 Environment variables**
@@ -485,7 +515,7 @@ dybatpho::pkg_ensure --force curl jq
 
 | Name | Type | Description |
 | --- | --- | --- |
-| `$1` | string | The options of `dybatpho::pkg_install` |
+| `$1` | string | The options of `dybatpho::pkg_install`, including `--arg`/`-a` |
 | `$@` | string | Packages, optionally after a `--` separator |
 
 **🚦 Exit codes**
@@ -511,7 +541,7 @@ dybatpho::pkg_require --force fd apt:fd-find emerge:sys-apps/fd
 
 | Name | Type | Description |
 | --- | --- | --- |
-| `$1` | string | The options of `dybatpho::pkg_install` |
+| `$1` | string | The options of `dybatpho::pkg_install`, including `--arg`/`-a` |
 | `$2` | string | Command that must be available, also the default package name |
 | `$@` | string | Optional `<manager>:<package>` overrides |
 

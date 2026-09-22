@@ -33,6 +33,12 @@ dybatpho::header "DRY RUN"
 dybatpho::pkg_install --dry-run ripgrep
 dybatpho::pkg_install --dry-run --update -- jq
 
+dybatpho::header "MANAGER FLAGS THIS MODULE DOES NOT MODEL"
+# `--arg` hands a flag straight to the manager, once per flag, right before the
+# package names: `--cask` on Homebrew, `--no-cache` on Alpine, and so on.
+DYBATPHO_PKG_MANAGER=brew dybatpho::pkg_install --dry-run --arg --cask -- firefox
+dybatpho::pkg_install --dry-run --arg --no-install-recommends -- ripgrep
+
 dybatpho::header "CONFIRMATION"
 # Without `--force`, an unattended run refuses rather than guessing.
 if DYBATPHO_INTERACTIVE=false dybatpho::pkg_install ripgrep; then
@@ -56,3 +62,4 @@ dybatpho::pkg_require --dry-run dybatpho-demo-tool \
 #
 #   dybatpho::pkg_ensure --force --update curl jq
 #   dybatpho::pkg_require --force fd apt:fd-find emerge:sys-apps/fd
+#   dybatpho::pkg_ensure --force --arg --no-cache -- curl

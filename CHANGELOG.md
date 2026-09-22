@@ -139,7 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `apk`, `dnf`, `pacman`, or `emerge`, preferring the distribution manager over
   Homebrew on Linux, and `DYBATPHO_PKG_MANAGER` overrides the detection.
   `dybatpho::pkg_installed` and `dybatpho::pkg_missing` answer what is already
-  there, `dybatpho::pkg_name` resolves `<manager>:<package>` overrides so one
+  there — on Homebrew they ask the formula scope and the cask scope, so an
+  installed cask is not reinstalled on every run — `dybatpho::pkg_name` resolves `<manager>:<package>` overrides so one
   script names a dependency once, and `dybatpho::pkg_install_command` prints the
   exact command a run would execute.
 
@@ -152,11 +153,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   added for Homebrew, and `DYBATPHO_PKG_ASSUME_YES=false` drops the managers'
   non-interactive flags.
 
+  A flag the module does not model — `--cask` on Homebrew, `--no-cache` on
+  Alpine, `--no-install-recommends` on Debian — goes through with `--arg`, once
+  per flag, and lands after the manager's own flags and before the package
+  names. `dybatpho::pkg_install`, `dybatpho::pkg_update`,
+  `dybatpho::pkg_install_command`, `dybatpho::pkg_ensure`, and
+  `dybatpho::pkg_require` all take it; the index refresh that `--update` runs
+  never receives the install's extra arguments.
+
   ```sh
   . dybatpho/init.sh --modules pkg
   dybatpho::pkg_install --dry-run ripgrep      # preview the command
   dybatpho::pkg_ensure --force --update curl jq
   dybatpho::pkg_require --force fd apt:fd-find emerge:sys-apps/fd
+  dybatpho::pkg_install --force --arg --cask -- firefox
+  dybatpho::pkg_ensure --force --arg --no-cache -- curl
   ```
 
 ### Changed
