@@ -206,9 +206,19 @@ guarded by `declare -F`**. Such a call is an optional hook, not a dependency: it
 does nothing unless the other module happens to be loaded, so recording it as an
 edge would drag that module in and, for a core module, create a forbidden
 dependency on an optional one. Today this applies to the `metrics` hooks in
-`helpers`, `logging`, and `network`, which is why the snippet reports
-`helpers -> metrics` while `__dybatpho_module_deps` says nothing about it. Use
-the same `declare -F` guard for any future hook of this kind. Loading each module
+`helpers`, `logging`, and `network`, and to the `secret` masking hook in
+`logging`, which is why the snippet reports `helpers -> metrics` while
+`__dybatpho_module_deps` says nothing about it. Use the same `declare -F` guard
+for any future hook of this kind.
+
+**The guard must name an internal `__dybatpho_` helper of the other module, never
+a public `dybatpho::` function.** Public functions are exported and a child shell
+inherits them without the internal helpers they call, so a guard on a public name
+takes the active branch in a child that never loaded the module and then fails on
+the first internal call. That is why the metrics hooks test
+`declare -F __dybatpho_metrics_key` and the masking hook tests
+`declare -F __dybatpho_secret_mask_var`. `test/metrics.bats` pins it with child
+shells that log and retry without having loaded `metrics`. Loading each module
 on its own is the behavioral version of the same check:
 
 ```bash

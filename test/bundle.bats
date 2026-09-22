@@ -18,18 +18,12 @@ use_bundle() {
     bash "${script}"
 }
 
-# Run the generator from a shell that inherited no `dybatpho::` function. The
-# bats process exports them all, and a child that sees an exported public
-# function without the module's internal helpers behind it takes the wrong
-# branch of the `declare -F` metrics hooks.
+# The bats process exports every `dybatpho::` function and the generator is a
+# dybatpho script of its own, so this also covers running one from a shell that
+# already loaded the library.
 bundle() {
-  local runner="${BATS_TEST_TMPDIR}/run-bundle.sh"
-  {
-    printf '%s\n' 'while read -r __fn; do unset -f "${__fn}"; done < <(compgen -A function "dybatpho::" || true)'
-    printf 'exec %q --output %q "$@"\n' "${BUNDLE_SH}" "${OUTPUT}"
-  } > "${runner}"
-  env -u DYBATPHO_DIR -u DYBATPHO_MODULES -u DYBATPHO_LOADED_MODULES \
-    bash "${runner}" "$@"
+  env -u DYBATPHO_MODULES -u DYBATPHO_LOADED_MODULES \
+    "${BUNDLE_SH}" --output "${OUTPUT}" "$@"
 }
 
 @test "bundle.sh writes the core modules by default" {

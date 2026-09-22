@@ -67,6 +67,10 @@ are counted without the script asking for it.
 <a id="tips"></a>
 ## 💡 Tips
 
+### `__dybatpho_metrics_key`
+
+- The hooks in `helpers`, `logging`, and `network` test for this function to decide whether metrics are recordable. It is internal, so it never crosses a process boundary, which is exactly what makes it the right marker: a child shell inherits the exported `dybatpho::metrics_*` functions but not the helpers they call, and a guard on a public name would take the recording branch there and fail. Renaming this function means updating those guards.
+
 ### `dybatpho::metrics_timer_stop`
 
 - The elapsed time is published in `DYBATPHO_METRICS_LAST_MS` rather than printed, because capturing output with `$(...)` would run the call in a subshell and throw away the measurement it just recorded

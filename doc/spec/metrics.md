@@ -124,6 +124,7 @@ dybatpho::metrics_write /var/lib/node_exporter/textfile_collector/backup.prom
 - **FR-012**: Writing the metrics to a file MUST be atomic, because a collector may read the file at any moment.
 - **FR-013**: Loading the module MUST activate the retry, HTTP, and logging instrumentation without any further call.
 - **FR-014**: The instrumented modules MUST behave exactly as before when the module is not loaded, and MUST NOT depend on it.
+- **FR-014a**: The instrumentation hooks MUST decide whether to record by testing for an internal helper of this module, never for one of its exported public functions. A child shell inherits the public functions without the internal helpers they call, so a hook guarded on a public name would try to record where recording is impossible and abort the script.
 - **FR-015**: Rendering MUST succeed under `set -e` and an ERR trap.
 
 ### Key Entities *(include if feature involves data)*
@@ -159,6 +160,7 @@ dybatpho::metrics_write /var/lib/node_exporter/textfile_collector/backup.prom
 - **IT-011**: Write metrics to a file and verify the content and that no staging file is left behind.
 - **IT-012**: Exhaust a retry, log errors, and issue a mocked HTTP request, and verify each was counted automatically.
 - **IT-013**: Render under `dybatpho::register_common_handlers` and verify no ERR trap fires.
+- **IT-014**: From a shell that has loaded the module, run a child script that loads only `logging`, and another that loads the core modules and retries, and verify both complete instead of failing on a missing internal helper; run a third child that loads the module itself and verify it still records.
 
 ## Acceptance Criteria *(mandatory)*
 

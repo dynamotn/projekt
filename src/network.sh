@@ -159,7 +159,7 @@ function dybatpho::curl_do {
   header_file=$(mktemp) || dybatpho::die "Unable to create temporary HTTP header file"
   # Keep the body path owned by the caller; only response headers are temporary.
   local __dybatpho_http_started=""
-  if declare -F dybatpho::metrics_observe_ms > /dev/null; then
+  if declare -F __dybatpho_metrics_key > /dev/null; then
     __dybatpho_http_started="$(__dybatpho_log_now_ms)"
   fi
   while :; do
@@ -207,7 +207,7 @@ function dybatpho::curl_do {
       ((delay += RANDOM % (DYBATPHO_CURL_RETRY_BASE_DELAY + 1)))
       ((delay > DYBATPHO_CURL_RETRY_MAX_DELAY)) && delay="${DYBATPHO_CURL_RETRY_MAX_DELAY}"
     fi
-    if declare -F dybatpho::metrics_counter_inc > /dev/null; then
+    if declare -F __dybatpho_metrics_key > /dev/null; then
       dybatpho::metrics_counter_inc dybatpho_http_retries_total
     fi
     dybatpho::progress "Retrying in ${delay} seconds (${attempt}/${DYBATPHO_CURL_MAX_RETRIES})..."

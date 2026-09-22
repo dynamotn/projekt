@@ -212,3 +212,47 @@ SCRIPT
   assert_output "rendered"
   refute_output --partial "Aborting on error"
 }
+
+@test "a child shell that never loaded metrics logs without failing" {
+  # The parent exports every `dybatpho::` function, so the child inherits
+  # `dybatpho::metrics_counter_inc` without the internal helpers it calls. A
+  # hook guarded on that public name took the recording branch here and died
+  # with `__dybatpho_metrics_key: command not found` on the first log line.
+  # Spawn from a script file, not `bash -c`: a `-c` shell has an empty
+  # `BASH_SOURCE`, which the kcov hook expands on every command.
+  local script="${BATS_TEST_TMPDIR}/child_logging.sh"
+  cat > "${script}" << 'SCRIPT'
+. "${1}/init.sh" --modules logging
+dybatpho::info "hello" 2> /dev/null
+printf "logged\n"
+SCRIPT
+  run -0 env -u DYBATPHO_MODULES -u DYBATPHO_LOADED_MODULES \
+    bash "${script}" "${DYBATPHO_DIR}"
+  assert_output "logged"
+  refute_output --partial "command not found"
+}
+
+@test "a child shell that never loaded metrics retries without failing" {
+  local script="${BATS_TEST_TMPDIR}/child_retry.sh"
+  cat > "${script}" << 'SCRIPT'
+. "${1}/init.sh"
+dybatpho::retry 2 "false" > /dev/null 2>&1 || true
+printf "retried\n"
+SCRIPT
+  run -0 env -u DYBATPHO_MODULES -u DYBATPHO_LOADED_MODULES \
+    bash "${script}" "${DYBATPHO_DIR}"
+  assert_output "retried"
+  refute_output --partial "command not found"
+}
+
+@test "a child shell that loads metrics itself still records" {
+  local script="${BATS_TEST_TMPDIR}/child_metrics.sh"
+  cat > "${script}" << 'SCRIPT'
+. "${1}/init.sh" --modules metrics
+dybatpho::error "failed" 2> /dev/null
+dybatpho::metrics_get counter dybatpho_log_messages_total level=error
+SCRIPT
+  run -0 env -u DYBATPHO_MODULES -u DYBATPHO_LOADED_MODULES \
+    bash "${script}" "${DYBATPHO_DIR}"
+  assert_output "1"
+}

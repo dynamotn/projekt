@@ -63,8 +63,12 @@ function __dybatpho_log {
   dybatpho::compare_log_level "${show_log_level}" || return 0
 
   # Counting logged messages is how the metrics module reports the error rate of
-  # a run. The hook stays silent unless that optional module is loaded.
-  if declare -F dybatpho::metrics_counter_inc > /dev/null; then
+  # a run. The hook stays silent unless that optional module is loaded here.
+  # The test names an internal helper on purpose: `dybatpho::metrics_counter_inc`
+  # is exported and a child shell inherits it without the helpers it calls, so
+  # testing the public name would take this branch in a child that never loaded
+  # `metrics` and then fail on the first internal call.
+  if declare -F __dybatpho_metrics_key > /dev/null; then
     dybatpho::metrics_counter_inc dybatpho_log_messages_total 1 "level=${show_log_level}"
   fi
 

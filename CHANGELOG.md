@@ -347,6 +347,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A dybatpho script run from a dybatpho shell no longer dies on its first log
+  line.** The optional `metrics` hooks in `helpers`, `logging`, and `network`
+  asked `declare -F dybatpho::metrics_counter_inc` whether to record. That name
+  is exported, so a child shell inherited it without the internal helpers it
+  calls, took the recording branch, and aborted with
+  `__dybatpho_metrics_key: command not found` — which hit any script whose
+  parent shell had loaded `metrics`, on its first `dybatpho::info` or first
+  retry. The hooks now test an internal helper of the module, which cannot cross
+  a process boundary, so they stay inert exactly when recording is impossible
+  and still record in a child that loads `metrics` itself.
 - **`cli`**: a persistent option declared on a command was listed twice in that
   command's own help, once replayed as an inherited definition and once from
   its own spec.

@@ -116,6 +116,12 @@ function __dybatpho_metrics_labels {
 # @arg $2 string Metric name
 # @arg $@ string Label assignments
 # @set The named variable, to the series key
+# @tip The hooks in `helpers`, `logging`, and `network` test for this function to
+#   decide whether metrics are recordable. It is internal, so it never crosses a
+#   process boundary, which is exactly what makes it the right marker: a child
+#   shell inherits the exported `dybatpho::metrics_*` functions but not the
+#   helpers they call, and a guard on a public name would take the recording
+#   branch there and fail. Renaming this function means updating those guards.
 #######################################
 function __dybatpho_metrics_key {
   local -n __key_out="$1"
