@@ -15,6 +15,7 @@ projekt folder list [flags]
   -o, --output string   Output format, one of: table, json, tsv (default "table")
   -p, --plain           Show only plain folders and their prefix instead of auto parse format
   -s, --short-only      When show auto parse folders, show only short name of folders
+  -t, --tags strings    Only list folders carrying all of these tags
 ```
 
 ### Options inherited from parent commands

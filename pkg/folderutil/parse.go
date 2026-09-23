@@ -15,6 +15,10 @@ type ParsedFolder struct {
 	ShortName string
 	Path      string
 	Workspace string
+	// Tags are the tags of the folder this came from. A folder found inside a
+	// workspace inherits the workspace's tags, because it has no configuration
+	// entry of its own to carry them.
+	Tags []string
 }
 
 // ParseConfig parses the configuration and returns a list of parsed folders.
@@ -37,8 +41,10 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 		// and its last element is the fallback short name.
 		folderPath := filepath.Clean(folder.Path)
 
+		tags := folder.GetTags()
+
 		if !folder.IsWorkspace {
-			result = appendToParsedFolder(result, shortNames, prefix+folder.ShortName(), folderPath, folderPath)
+			result = appendToParsedFolder(result, shortNames, prefix+folder.ShortName(), folderPath, folderPath, tags)
 			continue
 		}
 		re, err := regexp.Compile(folder.GetRegexMatch())
@@ -62,7 +68,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 				continue
 			}
 			cli.Debug("Match: %s", entry.Name())
-			result = appendToParsedFolder(result, shortNames, prefix+entry.Name(), filepath.Join(folderPath, entry.Name()), folderPath)
+			result = appendToParsedFolder(result, shortNames, prefix+entry.Name(), filepath.Join(folderPath, entry.Name()), folderPath, tags)
 		}
 	}
 
@@ -103,7 +109,7 @@ func shortNameSet(list []ParsedFolder) map[string]struct{} {
 }
 
 // appendToParsedFolder adds a folder unless its short name is already taken.
-func appendToParsedFolder(list []ParsedFolder, shortNames map[string]struct{}, shortName string, path string, workspace string) []ParsedFolder {
+func appendToParsedFolder(list []ParsedFolder, shortNames map[string]struct{}, shortName string, path string, workspace string, tags []string) []ParsedFolder {
 	// Check for duplicate short names
 	if _, exists := shortNames[shortName]; exists {
 		cli.Debug("Not Valid: " + path + " with existed short name " + shortName)
@@ -115,5 +121,6 @@ func appendToParsedFolder(list []ParsedFolder, shortNames map[string]struct{}, s
 		ShortName: shortName,
 		Path:      path,
 		Workspace: workspace,
+		Tags:      tags,
 	})
 }

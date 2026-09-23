@@ -270,7 +270,7 @@ func setTwoFolderConfig(t *testing.T) {
 
 	lazypath.SetTestConfig(lazypath.Config{
 		Folders: []lazypath.Folder{
-			{Path: "/home/user/alpha", Prefix: "work", IsWorkspace: false},
+			{Path: "/home/user/alpha", Prefix: "work", IsWorkspace: false, Tags: []string{"go", "work"}},
 			{Path: "/home/user/beta", IsWorkspace: false, Priority: 7},
 		},
 	})
@@ -290,10 +290,11 @@ func TestListFolders_JSON(t *testing.T) {
 		t.Fatalf("output is not valid JSON: %v\n%s", err, buf.String())
 	}
 
-	// beta sorts first: it has the higher priority.
+	// beta sorts first: it has the higher priority. An untagged folder carries
+	// an empty array rather than null.
 	want := []map[string]any{
-		{"shortName": "beta", "path": "/home/user/beta", "workspace": "/home/user/beta"},
-		{"shortName": "work-alpha", "path": "/home/user/alpha", "workspace": "/home/user/alpha"},
+		{"shortName": "beta", "path": "/home/user/beta", "workspace": "/home/user/beta", "tags": []any{}},
+		{"shortName": "work-alpha", "path": "/home/user/alpha", "workspace": "/home/user/alpha", "tags": []any{"go", "work"}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ListFolders(json) =\n%#v\nwant\n%#v", got, want)
@@ -392,9 +393,16 @@ func TestListFolders_TSV(t *testing.T) {
 			name:   "full listing with headers",
 			option: &ListOption{Output: OutputTSV},
 			wantLines: []string{
-				"SHORT NAME\tPATH\tWORKSPACE PATH",
-				"beta\t/home/user/beta\t/home/user/beta",
-				"work-alpha\t/home/user/alpha\t/home/user/alpha",
+				"SHORT NAME\tPATH\tWORKSPACE PATH\tTAGS",
+				"beta\t/home/user/beta\t/home/user/beta\t",
+				"work-alpha\t/home/user/alpha\t/home/user/alpha\tgo,work",
+			},
+		},
+		{
+			name:   "filtered to one tag",
+			option: &ListOption{Output: OutputTSV, ShortOnly: true, NoHeaders: true, Tags: []string{"go"}},
+			wantLines: []string{
+				"work-alpha",
 			},
 		},
 	}
@@ -411,6 +419,106 @@ func TestListFolders_TSV(t *testing.T) {
 				t.Errorf("ListFolders(tsv) =\n%q\nwant\n%q", got, tt.wantLines)
 			}
 		})
+	}
+}
+
+func TestListFolders_TagFilter(t *testing.T) {
+	setTwoFolderConfig(t)
+
+	tests := []struct {
+		name   string
+		tags   []string
+		option func(*ListOption)
+		want   []string
+	}{
+		{
+			name: "no tags lists everything",
+			want: []string{"beta", "work-alpha"},
+		},
+		{
+			name: "one matching tag",
+			tags: []string{"work"},
+			want: []string{"work-alpha"},
+		},
+		{
+			name: "every tag must match",
+			tags: []string{"go", "work"},
+			want: []string{"work-alpha"},
+		},
+		{
+			name: "one missing tag excludes the folder",
+			tags: []string{"go", "rust"},
+			want: nil,
+		},
+		{
+			name: "an unknown tag matches nothing",
+			tags: []string{"nope"},
+			want: nil,
+		},
+		{
+			name: "blank tags are ignored, not treated as a filter",
+			tags: []string{"  ", ""},
+			want: []string{"beta", "work-alpha"},
+		},
+		{
+			name: "surrounding whitespace is forgiven",
+			tags: []string{" work "},
+			want: []string{"work-alpha"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			option := &ListOption{Output: OutputTSV, ShortOnly: true, NoHeaders: true, Tags: tt.tags}
+			if err := ListFolders(&buf, option); err != nil {
+				t.Fatalf("ListFolders() error = %v", err)
+			}
+
+			var got []string
+			if trimmed := strings.TrimSpace(buf.String()); trimmed != "" {
+				got = strings.Split(trimmed, "\n")
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ListFolders(tags=%q) = %q, want %q", tt.tags, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseConfig_WorkspaceChildrenInheritTags(t *testing.T) {
+	// A folder inside a workspace has no configuration entry of its own, so the
+	// only tags it can have are the workspace's.
+	tmpDir := t.TempDir()
+	for _, name := range []string{"one", "two"} {
+		if err := os.Mkdir(filepath.Join(tmpDir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	folders, err := ParseConfig(lazypath.Config{
+		Folders: []lazypath.Folder{
+			{Path: tmpDir, IsWorkspace: true, Tags: []string{"oss", "go"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ParseConfig() error = %v", err)
+	}
+	if len(folders) != 2 {
+		t.Fatalf("got %d folders, want 2", len(folders))
+	}
+
+	for _, folder := range folders {
+		if !reflect.DeepEqual(folder.Tags, []string{"oss", "go"}) {
+			t.Errorf("%s tags = %q, want the workspace's tags", folder.ShortName, folder.Tags)
+		}
+	}
+
+	if got := FilterByTags(folders, []string{"oss"}); len(got) != 2 {
+		t.Errorf("FilterByTags(oss) kept %d folders, want 2", len(got))
+	}
+	if got := FilterByTags(folders, []string{"rust"}); len(got) != 0 {
+		t.Errorf("FilterByTags(rust) kept %d folders, want 0", len(got))
 	}
 }
 

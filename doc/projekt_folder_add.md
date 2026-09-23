@@ -15,6 +15,7 @@ projekt folder add [folder path] [flags]
   -p, --prefix string     Prefix of folder when call 'pj' or 'project folder go'
   -P, --priority uint16   Priority number of folder
   -R, --regex string      Go Regex match string to filter folder in workspace. Only work with '-W true'
+  -t, --tags strings      Tags to group this folder under, for filtering later
 ```
 
 ### Options inherited from parent commands

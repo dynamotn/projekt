@@ -34,6 +34,7 @@ A single static Go binary, no daemon, no index to rebuild — your config file *
 - **Workspaces, not just folders** — point at a parent directory once and every child inside it becomes a jumpable project, filtered by your own regex.
 - **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time.
 - **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
+- **Tagged, not just named** — label folders `work`, `oss`, `go`, then point any command at a subset with `--tags`.
 - **Your config is safe** — an unreadable or malformed config file is never silently overwritten.
 - **Shell-native** — a one-line `eval` for bash or fish. No plugin manager required.
 - **Boring to install** — `make all`, or grab a release binary. Linux and macOS, amd64 and arm64.
@@ -110,6 +111,7 @@ folders:
     is_workspace: true
     regex: '^[^.].+'
     priority: 10
+    tags: [oss, go]
 ```
 
 | Key            | What it does                                                                        |
@@ -120,6 +122,25 @@ folders:
 | `is_workspace` | Treat every child folder as its own project                                           |
 | `regex`        | Workspace only — which children count. Defaults to `^[^.].+`, so dotfiles are skipped |
 | `priority`     | Tie-breaker: when two folders resolve to the same short name, the higher one wins     |
+| `tags`         | Labels to filter on later. A workspace passes its tags to every folder inside it      |
+
+## 🏷 Tags
+
+`prefix` decides what a folder is *called*; `tags` decide which folders a command
+*acts on*. Every command that selects folders takes the same `--tags`/`-t` flag:
+
+```bash
+projekt folder add ~/oss -W -p oss -t oss,go  # tag on the way in
+projekt folder list -t work                   # only work folders
+projekt folder sync -t work                   # only clone work repos
+projekt folder check -t work
+```
+
+Asking for several tags narrows the selection — `-t go,work` keeps the folders
+carrying **both**, not either. Tags are matched exactly and are case sensitive;
+surrounding whitespace is forgiven, and blank tags are ignored rather than
+treated as a filter that matches nothing. `--tags` completes from the tags
+already in your config, so a typo shows up as a missing suggestion.
 
 ## 🔗 Git integration
 
@@ -164,7 +185,7 @@ Full details in [doc/git-integration.md](doc/git-integration.md).
 
 | Command                                              | What it does                                              |
 | ---------------------------------------------------- | --------------------------------------------------------- |
-| [`folder add`](doc/projekt_folder_add.md)            | Register a folder or workspace, with prefix and priority   |
+| [`folder add`](doc/projekt_folder_add.md)            | Register a folder or workspace, with prefix, priority, tags |
 | [`folder list`](doc/projekt_folder_list.md)          | List every project folder, as a table, JSON or TSV         |
 | [`folder get`](doc/projekt_folder_get.md)            | Resolve a short name to a path — what `pj` calls           |
 | [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |

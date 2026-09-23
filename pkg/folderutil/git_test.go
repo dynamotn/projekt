@@ -454,7 +454,7 @@ func TestCheckGitReposStatus(t *testing.T) {
 		},
 	})
 
-	err := CheckGitReposStatus()
+	err := CheckGitReposStatus(CheckOptions{})
 	if err != nil {
 		t.Errorf("CheckGitReposStatus() error = %v", err)
 	}

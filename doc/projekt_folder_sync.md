@@ -21,9 +21,10 @@ projekt folder sync [flags]
 ### Options
 
 ```
-      --dry-run     Show what would be done without making changes
-      --forks int   Number of repositories to clone concurrently (default 4)
-  -h, --help        help for sync
+      --dry-run        Show what would be done without making changes
+      --forks int      Number of repositories to clone concurrently (default 4)
+  -h, --help           help for sync
+  -t, --tags strings   Only sync folders carrying all of these tags
 ```
 
 ### Options inherited from parent commands

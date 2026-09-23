@@ -2,6 +2,7 @@ package lazypath
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -405,5 +406,65 @@ func TestFolderShortName(t *testing.T) {
 				t.Errorf("ShortName() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeTags(t *testing.T) {
+	tests := []struct {
+		name string
+		tags []string
+		want []string
+	}{
+		{name: "nil stays nil", tags: nil, want: nil},
+		{name: "empty stays nil", tags: []string{}, want: nil},
+		{name: "kept in the given order", tags: []string{"work", "go"}, want: []string{"work", "go"}},
+		{name: "trimmed", tags: []string{"  work  "}, want: []string{"work"}},
+		{name: "blanks dropped", tags: []string{"work", "", "   "}, want: []string{"work"}},
+		{name: "only blanks become nil", tags: []string{"", "  "}, want: nil},
+		{name: "duplicates dropped", tags: []string{"go", "work", "go"}, want: []string{"go", "work"}},
+		{name: "duplicates after trimming", tags: []string{"go", " go "}, want: []string{"go"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NormalizeTags(tt.tags); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("NormalizeTags(%q) = %q, want %q", tt.tags, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHasTags(t *testing.T) {
+	tests := []struct {
+		name string
+		have []string
+		want []string
+		ok   bool
+	}{
+		{name: "no wanted tags matches anything", have: nil, want: nil, ok: true},
+		{name: "no wanted tags matches a tagged folder", have: []string{"go"}, want: nil, ok: true},
+		{name: "only blank wanted tags is no filter", have: nil, want: []string{" ", ""}, ok: true},
+		{name: "single match", have: []string{"go", "work"}, want: []string{"work"}, ok: true},
+		{name: "every wanted tag must be present", have: []string{"go", "work"}, want: []string{"go", "work"}, ok: true},
+		{name: "one missing tag fails the match", have: []string{"go"}, want: []string{"go", "work"}, ok: false},
+		{name: "an untagged folder matches nothing", have: nil, want: []string{"go"}, ok: false},
+		{name: "matching is exact, not a prefix", have: []string{"golang"}, want: []string{"go"}, ok: false},
+		{name: "whitespace is forgiven on both sides", have: []string{" go "}, want: []string{"go "}, ok: true},
+		{name: "matching is case sensitive", have: []string{"Go"}, want: []string{"go"}, ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := HasTags(tt.have, tt.want); got != tt.ok {
+				t.Errorf("HasTags(%q, %q) = %v, want %v", tt.have, tt.want, got, tt.ok)
+			}
+		})
+	}
+}
+
+func TestFolderGetTags(t *testing.T) {
+	f := Folder{Tags: []string{" work ", "", "go", "work"}}
+	if got := f.GetTags(); !reflect.DeepEqual(got, []string{"work", "go"}) {
+		t.Errorf("GetTags() = %q, want [work go]", got)
 	}
 }

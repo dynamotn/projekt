@@ -35,6 +35,9 @@ type SyncOptions struct {
 	// Forks is the maximum number of repositories cloned concurrently.
 	// Zero or less selects DefaultSyncForks, and 1 restores sequential cloning.
 	Forks int
+	// Tags syncs only the folders carrying every one of these tags. Empty syncs
+	// everything.
+	Tags []string
 }
 
 // syncJob is one repository to clone, resolved before the concurrent phase so
@@ -58,6 +61,9 @@ func SyncGitRepos(opts SyncOptions) error {
 	var jobs []syncJob
 	for _, folder := range c.Folders {
 		if folder.Git == nil {
+			continue
+		}
+		if !lazypath.HasTags(folder.Tags, opts.Tags) {
 			continue
 		}
 
@@ -219,13 +225,23 @@ func syncRepo(job syncJob, dryRun bool) error {
 	return nil
 }
 
+// CheckOptions controls which folders CheckGitReposStatus reports on.
+type CheckOptions struct {
+	// Tags checks only the folders carrying every one of these tags. Empty
+	// checks everything.
+	Tags []string
+}
+
 // CheckGitReposStatus checks status of all Git repositories
-func CheckGitReposStatus() error {
+func CheckGitReposStatus(opts CheckOptions) error {
 	c := lazypath.GetConfig()
 
 	var errs []error
 	for _, folder := range c.Folders {
 		if folder.Git == nil {
+			continue
+		}
+		if !lazypath.HasTags(folder.Tags, opts.Tags) {
 			continue
 		}
 

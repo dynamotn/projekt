@@ -106,7 +106,7 @@ func TestAppendToParsedFolder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := appendToParsedFolder(tt.list, shortNameSet(tt.list), tt.shortName, tt.path, tt.workspace)
+			got := appendToParsedFolder(tt.list, shortNameSet(tt.list), tt.shortName, tt.path, tt.workspace, nil)
 			if len(got) != tt.wantLen {
 				t.Errorf("appendToParsedFolder() got %d folders, want %d", len(got), tt.wantLen)
 			}

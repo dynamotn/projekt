@@ -30,7 +30,68 @@ type Folder struct {
 	IsWorkspace bool       `yaml:"is_workspace" mapstructure:"is_workspace"`
 	RegexMatch  string     `yaml:"regex" mapstructure:"regex"`
 	Priority    uint16     `yaml:"priority" mapstructure:"priority"`
+	Tags        []string   `yaml:"tags,omitempty" mapstructure:"tags"`
 	Git         *GitConfig `yaml:"git,omitempty" mapstructure:"git,omitempty"`
+}
+
+// GetTags returns the folder's tags, cleaned up. A workspace passes its tags on
+// to every folder inside it, since those folders are not configured themselves.
+func (f *Folder) GetTags() []string {
+	return NormalizeTags(f.Tags)
+}
+
+// NormalizeTags trims each tag, drops the empty and duplicate ones, and keeps
+// the order the remaining tags were given in.
+//
+// It is applied on both sides of a comparison, so that a tag written with stray
+// whitespace in the config still matches the same tag typed on the command line.
+func NormalizeTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(tags))
+	result := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		if _, dup := seen[tag]; dup {
+			continue
+		}
+		seen[tag] = struct{}{}
+		result = append(result, tag)
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+// HasTags reports whether tags contains every one of the wanted tags, which is
+// the "narrow the selection" behaviour a filter needs: asking for more tags can
+// only ever match fewer folders.
+//
+// No wanted tags means no filtering, so everything matches.
+func HasTags(tags []string, want []string) bool {
+	want = NormalizeTags(want)
+	if len(want) == 0 {
+		return true
+	}
+
+	have := make(map[string]struct{}, len(tags))
+	for _, tag := range NormalizeTags(tags) {
+		have[tag] = struct{}{}
+	}
+
+	for _, tag := range want {
+		if _, ok := have[tag]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // ShortName returns the name the folder itself is reachable by, without the

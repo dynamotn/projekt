@@ -38,6 +38,7 @@ func NewFolderListCmd(out io.Writer) *cobra.Command {
 	f.BoolVarP(&o.NoColor, "no-color", "", false, "Don't use color")
 	f.StringVarP(&output, "output", "o", output,
 		fmt.Sprintf("Output format, one of: %s", strings.Join(folderutil.OutputFormats, ", ")))
+	registerTagsFlag(cmd, &o.Tags, "list")
 
 	if err := cmd.RegisterFlagCompletionFunc("output",
 		func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {

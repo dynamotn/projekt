@@ -13,6 +13,7 @@ import (
 type folderSyncOptions struct {
 	dryRun bool
 	forks  int
+	tags   []string
 }
 
 func NewFolderSyncCmd(out io.Writer) *cobra.Command {
@@ -39,6 +40,7 @@ Use --dry-run to see what would be done without making changes.`,
 	f := cmd.Flags()
 	f.BoolVar(&opts.dryRun, "dry-run", false, "Show what would be done without making changes")
 	f.IntVar(&opts.forks, "forks", folderutil.DefaultSyncForks, "Number of repositories to clone concurrently")
+	registerTagsFlag(cmd, &opts.tags, "sync")
 
 	cli.SetColorAndStyles(cmd)
 	return cmd
@@ -58,5 +60,6 @@ func runFolderSync(opts *folderSyncOptions, out io.Writer) error {
 	return folderutil.SyncGitRepos(folderutil.SyncOptions{
 		DryRun: opts.dryRun,
 		Forks:  opts.forks,
+		Tags:   opts.tags,
 	})
 }

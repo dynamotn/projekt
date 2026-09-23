@@ -64,6 +64,9 @@ type ListOption struct {
 	// Output selects the rendering. The empty value means OutputTable, so that
 	// a zero ListOption keeps the original behaviour.
 	Output OutputFormat
+	// Tags keeps only the folders carrying every one of these tags. Empty lists
+	// everything.
+	Tags []string
 }
 
 // listColumn is one column of a listing, under the label a table shows and the
@@ -114,11 +117,16 @@ func buildListView(o *ListOption) (listView, error) {
 			{header: "REGEX", key: "regex"},
 			{header: "PRIORITY", key: "priority"},
 			{header: "IS WORKSPACE", key: "isWorkspace"},
+			{header: "TAGS", key: "tags"},
 		}}
 		for _, folder := range lazypath.GetConfig().Folders {
+			if !lazypath.HasTags(folder.Tags, o.Tags) {
+				continue
+			}
 			view.rows = append(view.rows, []any{
 				folder.Path, folder.Name, folder.Prefix,
 				folder.GetRegexMatch(), folder.Priority, folder.IsWorkspace,
+				folder.GetTags(),
 			})
 		}
 		return view, nil
@@ -128,6 +136,7 @@ func buildListView(o *ListOption) (listView, error) {
 	if err != nil {
 		return listView{}, err
 	}
+	folders = FilterByTags(folders, o.Tags)
 
 	if o.ShortOnly {
 		view := listView{columns: []listColumn{{header: "SHORT NAME", key: "shortName"}}}
@@ -141,11 +150,27 @@ func buildListView(o *ListOption) (listView, error) {
 		{header: "SHORT NAME", key: "shortName"},
 		{header: "PATH", key: "path"},
 		{header: "WORKSPACE PATH", key: "workspace"},
+		{header: "TAGS", key: "tags"},
 	}}
 	for _, folder := range folders {
-		view.rows = append(view.rows, []any{folder.ShortName, folder.Path, folder.Workspace})
+		view.rows = append(view.rows, []any{folder.ShortName, folder.Path, folder.Workspace, folder.Tags})
 	}
 	return view, nil
+}
+
+// FilterByTags keeps the folders carrying every one of the wanted tags.
+func FilterByTags(folders []ParsedFolder, tags []string) []ParsedFolder {
+	if len(lazypath.NormalizeTags(tags)) == 0 {
+		return folders
+	}
+
+	result := make([]ParsedFolder, 0, len(folders))
+	for _, folder := range folders {
+		if lazypath.HasTags(folder.Tags, tags) {
+			result = append(result, folder)
+		}
+	}
+	return result
 }
 
 func (v listView) encodeTable(out io.Writer, o *ListOption) error {
@@ -159,10 +184,23 @@ func (v listView) encodeTable(out io.Writer, o *ListOption) error {
 		tw.AppendHeader(header)
 	}
 	for _, row := range v.rows {
-		tw.AppendRow(table.Row(row))
+		cells := make(table.Row, 0, len(row))
+		for _, cell := range row {
+			cells = append(cells, displayValue(cell))
+		}
+		tw.AppendRow(cells)
 	}
 
 	return cli.EncodeTable(out, tw, o.NoColor)
+}
+
+// displayValue renders a cell for the two text formats. A list of tags reads as
+// "go,work" rather than Go's default "[go work]".
+func displayValue(cell any) string {
+	if list, ok := cell.([]string); ok {
+		return strings.Join(list, ",")
+	}
+	return fmt.Sprint(cell)
 }
 
 // encodeTSV writes one folder per line, so that a shell script can read the
@@ -181,7 +219,7 @@ func (v listView) encodeTSV(out io.Writer, noHeaders bool) error {
 	for _, row := range v.rows {
 		cells := make([]string, 0, len(row))
 		for _, cell := range row {
-			cells = append(cells, fmt.Sprint(cell))
+			cells = append(cells, displayValue(cell))
 		}
 		b.WriteString(strings.Join(cells, "\t"))
 		b.WriteByte('\n')
@@ -198,7 +236,7 @@ func (v listView) encodeJSON(out io.Writer) error {
 	for _, row := range v.rows {
 		object := make(map[string]any, len(v.columns))
 		for i, col := range v.columns {
-			object[col.key] = row[i]
+			object[col.key] = jsonValue(row[i])
 		}
 		objects = append(objects, object)
 	}
@@ -206,6 +244,15 @@ func (v listView) encodeJSON(out io.Writer) error {
 	enc := json.NewEncoder(out)
 	enc.SetIndent("", "  ")
 	return enc.Encode(objects)
+}
+
+// jsonValue keeps an untagged folder's tags as [] rather than null, for the
+// same reason an empty listing is []: a consumer should only meet one shape.
+func jsonValue(cell any) any {
+	if list, ok := cell.([]string); ok && list == nil {
+		return []string{}
+	}
+	return cell
 }
 
 // RemoveFolderFromConfig removes a folder from the configuration by path

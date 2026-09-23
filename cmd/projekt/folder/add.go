@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
@@ -43,6 +44,10 @@ func NewFolderAddCmd(out io.Writer) *cobra.Command {
 			}
 
 			o.Path = path
+			// Store the tags cleaned up, so that the config never carries a
+			// blank or duplicated tag that could never be matched.
+			o.Tags = lazypath.NormalizeTags(o.Tags)
+
 			return folderutil.ImportFolderToConfig(o)
 		},
 	}
@@ -53,6 +58,14 @@ func NewFolderAddCmd(out io.Writer) *cobra.Command {
 	f.BoolVarP(&o.IsWorkspace, "as-workspace", "W", false, "Set folder as a workspace, like a parent folder of your projects")
 	f.StringVarP(&o.RegexMatch, "regex", "R", "", "Go Regex match string to filter folder in workspace. Only work with '-W true'")
 	f.Uint16VarP(&o.Priority, "priority", "P", 0, "Priority number of folder")
+	f.StringSliceVarP(&o.Tags, "tags", "t", nil, "Tags to group this folder under, for filtering later")
+
+	if err := cmd.RegisterFlagCompletionFunc("tags",
+		func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			return compListTags(toComplete)
+		}); err != nil {
+		cli.Warn("Cannot register completion for --tags: %v", err)
+	}
 
 	return cmd
 }
