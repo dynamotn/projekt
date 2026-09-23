@@ -7,6 +7,14 @@
 #   uploads, resumable downloads with checksum verification, normalized
 #   response parsing (status/headers/body), per-request timeouts, and an
 #   in-memory circuit breaker.
+#
+#   Alongside the HTTP client it carries the primitives a script reaches for
+#   before making a request at all: splitting a URL into its parts, deciding
+#   whether a string is an address or a network, whether an address is inside
+#   one, and whether a port is accepting connections yet. These are the checks
+#   that otherwise get written inline as a regex that nearly works — the kind
+#   that accepts `192.0.2.256`, or reads `127.0.0.010` as a different host than
+#   the resolver does.
 : "${DYBATPHO_DIR:?DYBATPHO_DIR must be set. Please source dybatpho/init.sh before other scripts from dybatpho.}"
 
 # @env DYBATPHO_CURL_MAX_RETRIES number Max number of retry attempts when `dybatpho::curl_do` retries a request
@@ -17,6 +25,9 @@
 # @env DYBATPHO_CURL_TIMEOUT number Optional curl total timeout in seconds
 # @env DYBATPHO_CIRCUIT_THRESHOLD number Consecutive failures before `dybatpho::circuit_breaker` opens a circuit (default `5`)
 # @env DYBATPHO_CIRCUIT_COOLDOWN number Seconds an open circuit waits before allowing a trial request (default `30`)
+# @env DYBATPHO_PORT_TIMEOUT number Seconds `dybatpho::port_open` waits for a connection (default `5`)
+# @env DYBATPHO_WAIT_PORT_TIMEOUT number Seconds `dybatpho::wait_port` keeps trying before giving up (default `30`)
+# @env DYBATPHO_WAIT_PORT_INTERVAL number Seconds `dybatpho::wait_port` sleeps between attempts (default `1`)
 DYBATPHO_CURL_MAX_RETRIES=${DYBATPHO_CURL_MAX_RETRIES:-5}
 DYBATPHO_CURL_RETRY_BASE_DELAY=${DYBATPHO_CURL_RETRY_BASE_DELAY:-2}
 DYBATPHO_CURL_RETRY_MAX_DELAY=${DYBATPHO_CURL_RETRY_MAX_DELAY:-30}
@@ -25,6 +36,9 @@ DYBATPHO_CURL_CONNECT_TIMEOUT=${DYBATPHO_CURL_CONNECT_TIMEOUT:-}
 DYBATPHO_CURL_TIMEOUT=${DYBATPHO_CURL_TIMEOUT:-}
 DYBATPHO_CIRCUIT_THRESHOLD=${DYBATPHO_CIRCUIT_THRESHOLD:-5}
 DYBATPHO_CIRCUIT_COOLDOWN=${DYBATPHO_CIRCUIT_COOLDOWN:-30}
+DYBATPHO_PORT_TIMEOUT=${DYBATPHO_PORT_TIMEOUT:-5}
+DYBATPHO_WAIT_PORT_TIMEOUT=${DYBATPHO_WAIT_PORT_TIMEOUT:-30}
+DYBATPHO_WAIT_PORT_INTERVAL=${DYBATPHO_WAIT_PORT_INTERVAL:-1}
 
 # Normalized state populated by `dybatpho::curl_parse_response`/`dybatpho::curl_request`.
 declare -gA DYBATPHO_HTTP_HEADERS=()
@@ -34,6 +48,16 @@ DYBATPHO_HTTP_BODY_FILE=""
 # Per-key in-memory state used by `dybatpho::circuit_breaker`.
 declare -gA DYBATPHO_CIRCUIT_FAILURES=()
 declare -gA DYBATPHO_CIRCUIT_OPENED_AT=()
+
+# Parsed components of the last URL, populated by `dybatpho::url_parse`.
+declare -gA DYBATPHO_URL=()
+
+# Split a URL into scheme, authority, path, query, and fragment. The authority
+# is taken apart separately, because its own grammar is the awkward part.
+__DYBATPHO_URL_REGEX='^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)([^?#]*)(\?([^#]*))?(#(.*))?$'
+
+# One group of an IPv6 address: one to four hexadecimal digits.
+__DYBATPHO_IPV6_GROUP_REGEX='^[0-9A-Fa-f]{1,4}$'
 
 #######################################
 # @description Get description of HTTP status code
@@ -638,4 +662,561 @@ function dybatpho::circuit_breaker {
     fi
   fi
   return "${exit_code}"
+}
+
+#######################################
+# @description Split the authority of a URL into user, password, host, and port.
+#   The authority is the awkward part of the grammar: everything in it is
+#   optional, the delimiters repeat, and an IPv6 literal carries colons of its
+#   own inside brackets.
+# @arg $1 string Authority, such as `user:pass@host:443` or `[::1]:8080`
+# @set DYBATPHO_URL The `user`, `password`, `host`, and `port` entries
+# @exitcode 1 The authority names no host, or a port that is not a port
+#######################################
+function __dybatpho_network_parse_authority {
+  local authority="$1"
+  local userinfo="" hostport="${authority}"
+  # The last `@` separates the credentials, so that a password containing one
+  # does not move the boundary.
+  if [[ "${authority}" == *@* ]]; then
+    userinfo="${authority%@*}"
+    hostport="${authority##*@}"
+  fi
+
+  if [[ -n "${userinfo}" ]]; then
+    if [[ "${userinfo}" == *:* ]]; then
+      DYBATPHO_URL[user]="${userinfo%%:*}"
+      DYBATPHO_URL[password]="${userinfo#*:}"
+    else
+      DYBATPHO_URL[user]="${userinfo}"
+    fi
+  fi
+
+  local host="" port=""
+  if [[ "${hostport}" == \[*\]* ]]; then
+    # An IPv6 literal is bracketed precisely so its colons cannot be read as a
+    # port separator.
+    host="${hostport%%\]*}"
+    host="${host#\[}"
+    local after="${hostport#*\]}"
+    if [[ -n "${after}" ]]; then
+      [[ "${after}" == :* ]] || return 1
+      port="${after#:}"
+    fi
+  elif [[ "${hostport}" == *:* ]]; then
+    host="${hostport%%:*}"
+    port="${hostport#*:}"
+    # A bare host may not contain a colon, so anything left is not a port.
+    [[ "${port}" != *:* ]] || return 1
+  else
+    host="${hostport}"
+  fi
+
+  [[ -n "${host}" ]] || return 1
+  if [[ -n "${port}" ]]; then
+    __dybatpho_network_is_port "${port}" || return 1
+  fi
+
+  DYBATPHO_URL[host]="${host}"
+  DYBATPHO_URL[port]="${port}"
+}
+
+#######################################
+# @description Return success when a value is a usable TCP or UDP port number.
+# @arg $1 string Value to test
+# @exitcode 0 The value is a decimal number from 1 to 65535
+# @exitcode 1 It is not
+#######################################
+function __dybatpho_network_is_port {
+  [[ "$1" =~ ^[0-9]{1,5}$ ]] || return 1
+  ((10#$1 >= 1 && 10#$1 <= 65535))
+}
+
+#######################################
+# @description Split a URL into its components.
+#   The result lands in `DYBATPHO_URL`, one entry per component, the way
+#   `dybatpho::curl_parse_response` leaves a response in `DYBATPHO_HTTP_*`.
+#   Every entry is always present; a component the URL omits is empty, so a
+#   caller reads it without guarding against an unset key.
+#
+#   A scheme and `://` are required. `mailto:someone@example.com` has neither an
+#   authority nor a host, and guessing what its parts are called would be
+#   inventing an answer rather than parsing one.
+#
+#   The components are returned exactly as written. Percent-escapes are left
+#   alone, because decoding them here would destroy the difference between a
+#   separator and a character that merely looks like one; `dybatpho::url_decode`
+#   is there for the caller that wants it.
+# @example
+#   dybatpho::url_parse "https://user:secret@example.com:8443/a/b?q=1#top"
+#   printf '%s\n' "${DYBATPHO_URL[host]}"    # example.com
+#   printf '%s\n' "${DYBATPHO_URL[port]}"    # 8443
+#   printf '%s\n' "${DYBATPHO_URL[path]}"    # /a/b
+#
+# @example
+#   dybatpho::url_parse "http://[::1]:8080/health"
+#   printf '%s\n' "${DYBATPHO_URL[host]}"    # ::1
+#
+# @arg $1 string URL to split
+# @set DYBATPHO_URL map The `scheme`, `user`, `password`, `host`, `port`, `path`, `query`, and `fragment` of the URL
+# @exitcode 0 The URL was split
+# @exitcode 1 The URL has no scheme, no host, or a port that is not a port
+# @see
+#   - `dybatpho::url_part`
+#   - `dybatpho::url_decode`
+#######################################
+function dybatpho::url_parse {
+  local url
+  dybatpho::expect_args url -- "$@"
+  DYBATPHO_URL=(
+    [scheme]="" [user]="" [password]="" [host]=""
+    [port]="" [path]="" [query]="" [fragment]=""
+  )
+  [[ "${url}" =~ ${__DYBATPHO_URL_REGEX} ]] || return 1
+
+  DYBATPHO_URL[scheme]="${BASH_REMATCH[1],,}"
+  DYBATPHO_URL[path]="${BASH_REMATCH[3]}"
+  DYBATPHO_URL[query]="${BASH_REMATCH[5]}"
+  DYBATPHO_URL[fragment]="${BASH_REMATCH[7]}"
+  __dybatpho_network_parse_authority "${BASH_REMATCH[2]}" || return 1
+}
+
+#######################################
+# @description Print one component of the last parsed URL.
+# @example
+#   dybatpho::url_parse "https://example.com/health"
+#   dybatpho::url_part host            # example.com
+#   dybatpho::url_part port 443        # 443, the default, since none was given
+#
+# @arg $1 string Component name: `scheme`, `user`, `password`, `host`, `port`, `path`, `query`, or `fragment`
+# @arg $2 string Optional value to print when the component is empty
+# @stdout The component, or the default
+# @exitcode 1 The component is empty and no default was supplied
+# @exitcode 1 Stop the script when the name is not a component of a URL
+# @see
+#   - `dybatpho::url_parse`
+#######################################
+function dybatpho::url_part {
+  local name
+  dybatpho::expect_args name -- "$@"
+  [[ -v "DYBATPHO_URL[${name}]" ]] \
+    || dybatpho::die "${FUNCNAME[0]}: '${name}' is not a component of a URL"
+  if [[ -n "${DYBATPHO_URL[${name}]}" ]]; then
+    printf '%s\n' "${DYBATPHO_URL[${name}]}"
+  elif (($# > 1)); then
+    printf '%s\n' "$2"
+  else
+    return 1
+  fi
+}
+
+#######################################
+# @description Split an IPv4 address into its four octets as numbers.
+#   A leading zero is rejected rather than ignored. `inet_aton` and much of the
+#   software built on it read `010` as octal, so `127.0.0.010` is one host to
+#   one parser and another host to the next. An address that means two things
+#   is not an address this library will agree to.
+# @arg $1 string Address to split
+# @arg $2 string Name of the array variable receiving the four octets
+# @set The named array, to four numbers from 0 to 255
+# @exitcode 1 The value is not an IPv4 address
+#######################################
+function __dybatpho_network_ipv4_octets {
+  local __ipv4_address="$1"
+  local -n __ipv4_out="$2"
+  [[ "${__ipv4_address}" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] \
+    || return 1
+  local -a __ipv4_matched=("${BASH_REMATCH[@]:1:4}")
+  local __ipv4_octet
+  __ipv4_out=()
+  for __ipv4_octet in "${__ipv4_matched[@]}"; do
+    [[ "${__ipv4_octet}" == "0" || "${__ipv4_octet}" != 0* ]] || return 1
+    ((10#${__ipv4_octet} <= 255)) || return 1
+    __ipv4_out+=("$((10#${__ipv4_octet}))")
+  done
+}
+
+#######################################
+# @description Expand an IPv6 address into its eight groups as numbers.
+#   Everything an IPv6 address may leave out is put back here: the `::` that
+#   stands for a run of zero groups, and the dotted IPv4 tail that occupies the
+#   last two groups of a mapped address. Comparing addresses is only simple once
+#   both are written out in full.
+#
+#   A zone index such as `%eth0` is rejected. It names an interface rather than
+#   a part of the address, and it is not comparable between two hosts.
+# @arg $1 string Address to expand
+# @arg $2 string Name of the array variable receiving the eight groups
+# @set The named array, to eight numbers from 0 to 65535
+# @exitcode 1 The value is not an IPv6 address
+#######################################
+function __dybatpho_network_ipv6_groups {
+  local __ipv6_address="$1"
+  local -n __ipv6_out="$2"
+  [[ "${__ipv6_address}" != *%* ]] || return 1
+  [[ "${__ipv6_address}" == *:* ]] || return 1
+  # A single colon at either end belongs to a `::` or to nothing at all. Without
+  # this, `read -a` drops the empty trailing field and `1:2:3:4:5:6:7:8:` would
+  # count as eight groups.
+  [[ "${__ipv6_address}" != *: || "${__ipv6_address}" == *:: ]] || return 1
+  [[ "${__ipv6_address}" != :* || "${__ipv6_address}" == ::* ]] || return 1
+
+  local __ipv6_head __ipv6_tail __ipv6_has_double=0
+  if [[ "${__ipv6_address}" == *::* ]]; then
+    __ipv6_has_double=1
+    __ipv6_head="${__ipv6_address%%::*}"
+    __ipv6_tail="${__ipv6_address#*::}"
+    # `::` stands for "the rest is zero", so a second one has nothing left to say.
+    [[ "${__ipv6_tail}" != *::* ]] || return 1
+  else
+    __ipv6_head="${__ipv6_address}"
+    __ipv6_tail=""
+  fi
+
+  local -a __ipv6_head_parts=() __ipv6_tail_parts=()
+  [[ -z "${__ipv6_head}" ]] || IFS=':' read -r -a __ipv6_head_parts <<< "${__ipv6_head}"
+  [[ -z "${__ipv6_tail}" ]] || IFS=':' read -r -a __ipv6_tail_parts <<< "${__ipv6_tail}"
+
+  # A dotted tail, as in `::ffff:192.0.2.1`, is two groups written in decimal.
+  local -a __ipv6_mapped=()
+  local __ipv6_mapped_in_tail=0 __ipv6_last=""
+  if ((${#__ipv6_tail_parts[@]})); then
+    __ipv6_last="${__ipv6_tail_parts[-1]}"
+    __ipv6_mapped_in_tail=1
+  elif ((${#__ipv6_head_parts[@]})); then
+    __ipv6_last="${__ipv6_head_parts[-1]}"
+  fi
+  if [[ "${__ipv6_last}" == *.* ]]; then
+    local -a __ipv6_octets=()
+    __dybatpho_network_ipv4_octets "${__ipv6_last}" __ipv6_octets || return 1
+    __ipv6_mapped=(
+      "$(((__ipv6_octets[0] << 8) | __ipv6_octets[1]))"
+      "$(((__ipv6_octets[2] << 8) | __ipv6_octets[3]))"
+    )
+    if ((__ipv6_mapped_in_tail)); then
+      unset '__ipv6_tail_parts[-1]'
+    else
+      unset '__ipv6_head_parts[-1]'
+    fi
+  else
+    __ipv6_mapped_in_tail=0
+  fi
+
+  local -a __ipv6_lead=() __ipv6_trail=()
+  local __ipv6_part
+  for __ipv6_part in ${__ipv6_head_parts[@]+"${__ipv6_head_parts[@]}"}; do
+    [[ "${__ipv6_part}" =~ ${__DYBATPHO_IPV6_GROUP_REGEX} ]] || return 1
+    __ipv6_lead+=("$((16#${__ipv6_part}))")
+  done
+  for __ipv6_part in ${__ipv6_tail_parts[@]+"${__ipv6_tail_parts[@]}"}; do
+    [[ "${__ipv6_part}" =~ ${__DYBATPHO_IPV6_GROUP_REGEX} ]] || return 1
+    __ipv6_trail+=("$((16#${__ipv6_part}))")
+  done
+  if ((${#__ipv6_mapped[@]})); then
+    if ((__ipv6_mapped_in_tail)); then
+      __ipv6_trail+=("${__ipv6_mapped[@]}")
+    else
+      __ipv6_lead+=("${__ipv6_mapped[@]}")
+    fi
+  fi
+
+  local __ipv6_have=$((${#__ipv6_lead[@]} + ${#__ipv6_trail[@]}))
+  local __ipv6_index
+  if ((__ipv6_has_double)); then
+    # `::` has to stand for at least one group, or it would be spelled `:`.
+    ((__ipv6_have <= 7)) || return 1
+    for ((__ipv6_index = __ipv6_have; __ipv6_index < 8; __ipv6_index++)); do
+      __ipv6_lead+=(0)
+    done
+  else
+    ((__ipv6_have == 8)) || return 1
+  fi
+
+  __ipv6_out=("${__ipv6_lead[@]}" ${__ipv6_trail[@]+"${__ipv6_trail[@]}"})
+}
+
+#######################################
+# @description Return success when a value is an IPv4 address.
+# @example
+#   dybatpho::is_ipv4 192.0.2.10      # yes
+#   dybatpho::is_ipv4 192.0.2.256     # no
+#   dybatpho::is_ipv4 127.0.0.010     # no, a leading zero is ambiguous
+#
+# @arg $1 string Value to test
+# @exitcode 0 The value is an IPv4 address
+# @exitcode 1 It is not
+#######################################
+function dybatpho::is_ipv4 {
+  local address
+  dybatpho::expect_args address -- "$@"
+  # shellcheck disable=SC2034 # octets is filled through a nameref; only the exit code is wanted
+  local -a octets=()
+  __dybatpho_network_ipv4_octets "${address}" octets
+}
+
+#######################################
+# @description Return success when a value is an IPv6 address.
+# @example
+#   dybatpho::is_ipv6 ::1                    # yes
+#   dybatpho::is_ipv6 2001:db8::1            # yes
+#   dybatpho::is_ipv6 ::ffff:192.0.2.1       # yes
+#   dybatpho::is_ipv6 2001:db8::1::2         # no, one `::` is all there is
+#
+# @arg $1 string Value to test
+# @exitcode 0 The value is an IPv6 address
+# @exitcode 1 It is not
+# @note A zone index such as `fe80::1%eth0` is refused: it names an interface
+#   rather than a part of the address
+#######################################
+function dybatpho::is_ipv6 {
+  local address
+  dybatpho::expect_args address -- "$@"
+  # shellcheck disable=SC2034 # groups is filled through a nameref; only the exit code is wanted
+  local -a groups=()
+  __dybatpho_network_ipv6_groups "${address}" groups
+}
+
+#######################################
+# @description Print which version of IP an address is.
+# @example
+#   dybatpho::ip_version 192.0.2.10    # 4
+#   dybatpho::ip_version ::1           # 6
+#
+# @arg $1 string Address to inspect
+# @stdout `4` or `6`
+# @exitcode 1 The value is not an IP address of either version
+#######################################
+function dybatpho::ip_version {
+  local address
+  dybatpho::expect_args address -- "$@"
+  if dybatpho::is_ipv4 "${address}"; then
+    printf '4\n'
+  elif dybatpho::is_ipv6 "${address}"; then
+    printf '6\n'
+  else
+    return 1
+  fi
+}
+
+#######################################
+# @description Split a CIDR block into its address and prefix length.
+# @arg $1 string Block such as `10.0.0.0/8` or `2001:db8::/32`
+# @arg $2 string Name of the variable receiving the address
+# @arg $3 string Name of the variable receiving the prefix length
+# @arg $4 string Name of the variable receiving the IP version
+# @set The three named variables
+# @exitcode 1 The value is not a CIDR block
+#######################################
+function __dybatpho_network_parse_cidr {
+  local __cidr_block="$1"
+  local -n __cidr_address_out="$2"
+  local -n __cidr_prefix_out="$3"
+  local -n __cidr_version_out="$4"
+  [[ "${__cidr_block}" == */* ]] || return 1
+  local __cidr_address="${__cidr_block%/*}"
+  local __cidr_prefix="${__cidr_block##*/}"
+  [[ "${__cidr_prefix}" =~ ^[0-9]{1,3}$ ]] || return 1
+  # A leading zero here is the same ambiguity as in an octet, and `/08` is not a
+  # prefix length anyone writes on purpose.
+  [[ "${__cidr_prefix}" == "0" || "${__cidr_prefix}" != 0* ]] || return 1
+
+  local __cidr_version
+  __cidr_version="$(dybatpho::ip_version "${__cidr_address}")" || return 1
+  if ((__cidr_version == 4)); then
+    ((10#${__cidr_prefix} <= 32)) || return 1
+  else
+    ((10#${__cidr_prefix} <= 128)) || return 1
+  fi
+
+  __cidr_address_out="${__cidr_address}"
+  __cidr_prefix_out="$((10#${__cidr_prefix}))"
+  __cidr_version_out="${__cidr_version}"
+}
+
+#######################################
+# @description Return success when a value is a CIDR block.
+# @example
+#   dybatpho::is_cidr 10.0.0.0/8        # yes
+#   dybatpho::is_cidr 2001:db8::/32     # yes
+#   dybatpho::is_cidr 10.0.0.0/33       # no
+#
+# @arg $1 string Value to test
+# @exitcode 0 The value is a CIDR block of either IP version
+# @exitcode 1 It is not
+#######################################
+function dybatpho::is_cidr {
+  local block
+  dybatpho::expect_args block -- "$@"
+  local address="" prefix="" version=""
+  __dybatpho_network_parse_cidr "${block}" address prefix version
+}
+
+#######################################
+# @description Print the dotted-decimal subnet mask of an IPv4 prefix length.
+#   There is no dotted form of an IPv6 prefix, so this is IPv4 only: the
+#   notation itself does not exist for the other version rather than being
+#   left out here.
+# @example
+#   dybatpho::cidr_netmask 24    # 255.255.255.0
+#   dybatpho::cidr_netmask 0     # 0.0.0.0
+#
+# @arg $1 string Prefix length from 0 to 32, with or without a leading `/`
+# @stdout The subnet mask
+# @exitcode 1 Stop the script when the value is not an IPv4 prefix length
+#######################################
+function dybatpho::cidr_netmask {
+  local prefix
+  dybatpho::expect_args prefix -- "$@"
+  prefix="${prefix#/}"
+  if ! [[ "${prefix}" =~ ^[0-9]{1,2}$ ]] || ((10#${prefix} > 32)); then
+    dybatpho::die "${FUNCNAME[0]}: '${prefix}' is not an IPv4 prefix length"
+  fi
+  prefix="$((10#${prefix}))"
+  local mask=0
+  ((prefix == 0)) || mask=$(((0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF))
+  printf '%d.%d.%d.%d\n' \
+    "$(((mask >> 24) & 0xFF))" "$(((mask >> 16) & 0xFF))" \
+    "$(((mask >> 8) & 0xFF))" "$((mask & 0xFF))"
+}
+
+#######################################
+# @description Return success when an address falls inside a CIDR block.
+#   Both versions are supported, and an address is never inside a block of the
+#   other version: `::ffff:10.0.0.1` and `10.0.0.1` name the same host to some
+#   software, but they are not the same address and this does not pretend
+#   otherwise.
+# @example
+#   dybatpho::cidr_contains 10.0.0.0/8 10.1.2.3            # yes
+#   dybatpho::cidr_contains 10.0.0.0/8 11.1.2.3            # no
+#   dybatpho::cidr_contains 2001:db8::/32 2001:db8::1      # yes
+#   dybatpho::cidr_contains 0.0.0.0/0 203.0.113.1          # yes
+#
+# @arg $1 string CIDR block
+# @arg $2 string Address to test
+# @exitcode 0 The address is inside the block
+# @exitcode 1 It is not
+# @exitcode 1 Stop the script when the block or the address is malformed
+#######################################
+function dybatpho::cidr_contains {
+  local block address
+  dybatpho::expect_args block address -- "$@"
+  local network="" prefix="" version=""
+  __dybatpho_network_parse_cidr "${block}" network prefix version \
+    || dybatpho::die "${FUNCNAME[0]}: '${block}' is not a CIDR block"
+  local address_version
+  address_version="$(dybatpho::ip_version "${address}")" \
+    || dybatpho::die "${FUNCNAME[0]}: '${address}' is not an IP address"
+  ((address_version == version)) || return 1
+
+  if ((version == 4)); then
+    local -a network_octets=() address_octets=()
+    __dybatpho_network_ipv4_octets "${network}" network_octets
+    __dybatpho_network_ipv4_octets "${address}" address_octets
+    local network_int=$(((network_octets[0] << 24) | (network_octets[1] << 16) | (network_octets[2] << 8) | network_octets[3]))
+    local address_int=$(((address_octets[0] << 24) | (address_octets[1] << 16) | (address_octets[2] << 8) | address_octets[3]))
+    local mask=0
+    ((prefix == 0)) || mask=$(((0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF))
+    (((network_int & mask) == (address_int & mask)))
+    return
+  fi
+
+  local -a network_groups=() address_groups=()
+  __dybatpho_network_ipv6_groups "${network}" network_groups
+  __dybatpho_network_ipv6_groups "${address}" address_groups
+  local remaining="${prefix}" index bits mask
+  for ((index = 0; index < 8; index++)); do
+    ((remaining > 0)) || break
+    bits=$((remaining >= 16 ? 16 : remaining))
+    mask=$(((0xFFFF << (16 - bits)) & 0xFFFF))
+    (((network_groups[index] & mask) == (address_groups[index] & mask))) || return 1
+    remaining=$((remaining - bits))
+  done
+  return 0
+}
+
+#######################################
+# @description Return success when a TCP port accepts a connection.
+#   The connection is made with Bash's own `/dev/tcp`, so nothing has to be
+#   installed for this to work. A build of Bash compiled without network
+#   redirections cannot do it, and reports the port as closed.
+#
+#   The host and the port are passed to the timed-out shell as arguments rather
+#   than spliced into the script it runs, so a host name is never read as code.
+# @example
+#   dybatpho::port_open localhost 5432
+#   dybatpho::port_open db.internal 5432 2
+#
+# @arg $1 string Host name or address
+# @arg $2 number Port
+# @arg $3 number Seconds to wait, defaulting to `DYBATPHO_PORT_TIMEOUT`
+# @env DYBATPHO_PORT_TIMEOUT number Seconds to wait for the connection
+# @exitcode 0 The port accepted a connection
+# @exitcode 1 It did not, within the timeout
+# @exitcode 1 Stop the script when the port or the timeout is not a number
+# @note The timeout needs the `timeout` command; without it the connection waits
+#   as long as the system's own TCP timeout
+# @see
+#   - `dybatpho::wait_port`
+#######################################
+function dybatpho::port_open {
+  local host port
+  dybatpho::expect_args host port -- "$@"
+  __dybatpho_network_is_port "${port}" \
+    || dybatpho::die "${FUNCNAME[0]}: '${port}' is not a port number"
+  local seconds="${3:-${DYBATPHO_PORT_TIMEOUT}}"
+  [[ "${seconds}" =~ ^[0-9]+$ ]] \
+    || dybatpho::die "${FUNCNAME[0]}: '${seconds}' is not a number of seconds"
+
+  if dybatpho::is command timeout; then
+    # shellcheck disable=SC2016 # `$1` and `$2` are the inner shell's arguments, and
+    # keeping them unexpanded here is the point: the host never becomes code.
+    timeout "${seconds}" "${BASH}" -c 'exec 3<>/dev/tcp/"$1"/"$2"' \
+      dybatpho-port-open "${host}" "${port}" 2> /dev/null
+    return
+  fi
+  (exec 3<> "/dev/tcp/${host}/${port}") 2> /dev/null
+}
+
+#######################################
+# @description Wait until a TCP port accepts a connection.
+#   This is the wait a script does after starting a service and before using it,
+#   written once. Each attempt is given no more time than the wait has left, so
+#   the whole call keeps to its budget rather than overrunning it by the length
+#   of one connection attempt.
+# @example
+#   docker compose up -d
+#   dybatpho::wait_port localhost 5432 60 \
+#     || dybatpho::die "The database never came up"
+#
+# @arg $1 string Host name or address
+# @arg $2 number Port
+# @arg $3 number Seconds to keep trying, defaulting to `DYBATPHO_WAIT_PORT_TIMEOUT`
+# @arg $4 number Seconds between attempts, defaulting to `DYBATPHO_WAIT_PORT_INTERVAL`
+# @env DYBATPHO_WAIT_PORT_TIMEOUT number Seconds to keep trying
+# @env DYBATPHO_WAIT_PORT_INTERVAL number Seconds between attempts
+# @exitcode 0 The port accepted a connection before the time ran out
+# @exitcode 1 It never did
+# @exitcode 1 Stop the script when an argument is not a number
+# @see
+#   - `dybatpho::port_open`
+#######################################
+function dybatpho::wait_port {
+  local host port
+  dybatpho::expect_args host port -- "$@"
+  local total="${3:-${DYBATPHO_WAIT_PORT_TIMEOUT}}"
+  local interval="${4:-${DYBATPHO_WAIT_PORT_INTERVAL}}"
+  [[ "${total}" =~ ^[0-9]+$ ]] \
+    || dybatpho::die "${FUNCNAME[0]}: '${total}' is not a number of seconds"
+  [[ "${interval}" =~ ^[0-9]+$ ]] \
+    || dybatpho::die "${FUNCNAME[0]}: '${interval}' is not a number of seconds"
+
+  local deadline=$((SECONDS + total)) remaining attempt
+  while :; do
+    remaining=$((deadline - SECONDS))
+    ((remaining > 0)) || remaining=1
+    attempt=$((remaining < DYBATPHO_PORT_TIMEOUT ? remaining : DYBATPHO_PORT_TIMEOUT))
+    dybatpho::port_open "${host}" "${port}" "${attempt}" && return 0
+    ((SECONDS < deadline)) || return 1
+    sleep "${interval}"
+  done
 }

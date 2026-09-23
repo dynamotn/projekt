@@ -2,6 +2,39 @@ setup() {
   load test_helper
 }
 
+teardown() {
+  local pidfile="${BATS_TEST_TMPDIR}/listener.pid"
+  [[ -f "${pidfile}" ]] || return 0
+  kill "$(cat "${pidfile}")" 2> /dev/null || true
+}
+
+# Open a listening socket on a free port and print that port.
+#
+# The process id goes to a file rather than a variable because the caller reads
+# the port through a command substitution, and a variable set in that subshell
+# would never reach `teardown`. The port is chosen by the kernel, so two tests
+# running at once cannot collide on it.
+start_listener() {
+  dybatpho::is command python3 || return 1
+  local portfile="${BATS_TEST_TMPDIR}/listener.port"
+  local pidfile="${BATS_TEST_TMPDIR}/listener.pid"
+  python3 -c 'import socket, time
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", 0))
+s.listen(5)
+print(s.getsockname()[1], flush=True)
+time.sleep(30)' > "${portfile}" 2> /dev/null &
+  printf '%s\n' "$!" > "${pidfile}"
+  local waited=0
+  while [[ ! -s "${portfile}" ]] && ((waited < 100)); do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  [[ -s "${portfile}" ]] || return 1
+  cat "${portfile}"
+}
+
 @test "__dybatpho_network_get_http_code no arg" {
   run __dybatpho_network_get_http_code
   assert_failure
@@ -443,4 +476,247 @@ setup() {
   assert_success
   assert_equal "$(dybatpho::circuit_state recovering-service)" "closed"
   unset DYBATPHO_CIRCUIT_THRESHOLD
+}
+
+# --- URL parsing ---------------------------------------------------------
+
+@test "dybatpho::url_parse splits a URL that uses every component" {
+  dybatpho::url_parse "https://user:sec@example.com:8443/a/b?q=1&r=2#top"
+  assert_equal "${DYBATPHO_URL[scheme]}" "https"
+  assert_equal "${DYBATPHO_URL[user]}" "user"
+  assert_equal "${DYBATPHO_URL[password]}" "sec"
+  assert_equal "${DYBATPHO_URL[host]}" "example.com"
+  assert_equal "${DYBATPHO_URL[port]}" "8443"
+  assert_equal "${DYBATPHO_URL[path]}" "/a/b"
+  assert_equal "${DYBATPHO_URL[query]}" "q=1&r=2"
+  assert_equal "${DYBATPHO_URL[fragment]}" "top"
+}
+
+@test "dybatpho::url_parse leaves an absent component empty rather than unset" {
+  dybatpho::url_parse "http://example.com"
+  assert_equal "${DYBATPHO_URL[host]}" "example.com"
+  assert_equal "${DYBATPHO_URL[port]}" ""
+  assert_equal "${DYBATPHO_URL[path]}" ""
+  assert_equal "${DYBATPHO_URL[query]}" ""
+}
+
+@test "dybatpho::url_parse clears what the previous URL left behind" {
+  dybatpho::url_parse "https://user:sec@example.com:8443/a?q=1#top"
+  dybatpho::url_parse "http://example.org"
+  assert_equal "${DYBATPHO_URL[user]}" ""
+  assert_equal "${DYBATPHO_URL[password]}" ""
+  assert_equal "${DYBATPHO_URL[port]}" ""
+  assert_equal "${DYBATPHO_URL[fragment]}" ""
+}
+
+@test "dybatpho::url_parse reads a bracketed IPv6 host apart from its port" {
+  dybatpho::url_parse "http://[2001:db8::1]:8080/health"
+  assert_equal "${DYBATPHO_URL[host]}" "2001:db8::1"
+  assert_equal "${DYBATPHO_URL[port]}" "8080"
+
+  dybatpho::url_parse "http://[::1]/x"
+  assert_equal "${DYBATPHO_URL[host]}" "::1"
+  assert_equal "${DYBATPHO_URL[port]}" ""
+}
+
+@test "dybatpho::url_parse takes the credentials at the last at-sign" {
+  # A password may contain an `@`, and splitting at the first one would move the
+  # host boundary into the credentials.
+  dybatpho::url_parse "https://user:p@ss@example.com/x"
+  assert_equal "${DYBATPHO_URL[user]}" "user"
+  assert_equal "${DYBATPHO_URL[password]}" "p@ss"
+  assert_equal "${DYBATPHO_URL[host]}" "example.com"
+}
+
+@test "dybatpho::url_parse lower-cases the scheme and leaves the rest alone" {
+  dybatpho::url_parse "HTTPS://Example.COM/Path?A=B"
+  assert_equal "${DYBATPHO_URL[scheme]}" "https"
+  assert_equal "${DYBATPHO_URL[host]}" "Example.COM"
+  assert_equal "${DYBATPHO_URL[path]}" "/Path"
+  assert_equal "${DYBATPHO_URL[query]}" "A=B"
+}
+
+@test "dybatpho::url_parse keeps percent-escapes as written" {
+  dybatpho::url_parse "https://example.com/a%2Fb?q=a%20b"
+  assert_equal "${DYBATPHO_URL[path]}" "/a%2Fb"
+  assert_equal "${DYBATPHO_URL[query]}" "q=a%20b"
+}
+
+@test "dybatpho::url_parse handles a scheme that is not http" {
+  dybatpho::url_parse "postgres://u@db/app?sslmode=require"
+  assert_equal "${DYBATPHO_URL[scheme]}" "postgres"
+  assert_equal "${DYBATPHO_URL[user]}" "u"
+  assert_equal "${DYBATPHO_URL[password]}" ""
+  assert_equal "${DYBATPHO_URL[host]}" "db"
+  assert_equal "${DYBATPHO_URL[path]}" "/app"
+}
+
+@test "dybatpho::url_parse rejects a URL it cannot take apart" {
+  run ! dybatpho::url_parse "example.com/x"
+  run ! dybatpho::url_parse "https:///path"
+  run ! dybatpho::url_parse "https://host:notaport/x"
+  run ! dybatpho::url_parse "https://host:99999/x"
+  run ! dybatpho::url_parse "https://host:0/x"
+}
+
+@test "dybatpho::url_part prints a component and honors a default" {
+  dybatpho::url_parse "https://example.com/health"
+  assert_equal "$(dybatpho::url_part host)" "example.com"
+  assert_equal "$(dybatpho::url_part port 443)" "443"
+  run ! dybatpho::url_part port
+}
+
+@test "dybatpho::url_part rejects a name that is not a component" {
+  dybatpho::url_parse "https://example.com/"
+  run --separate-stderr ! dybatpho::url_part hostname
+  assert_stderr --partial "is not a component of a URL"
+}
+
+# --- Addresses -----------------------------------------------------------
+
+@test "dybatpho::is_ipv4 accepts addresses and refuses what only looks like one" {
+  for address in 0.0.0.0 192.0.2.10 255.255.255.255 10.1.2.3; do
+    dybatpho::is_ipv4 "${address}" || fail "rejected ${address}"
+  done
+  for address in 192.0.2.256 1.2.3 1.2.3.4.5 "" 1.2.3.a ::1 " 1.2.3.4"; do
+    ! dybatpho::is_ipv4 "${address}" || fail "accepted ${address}"
+  done
+}
+
+@test "dybatpho::is_ipv4 refuses an octet with a leading zero" {
+  # `inet_aton` reads `010` as octal, so this address means one host to the
+  # resolver and another to a reader. Refusing it is the only answer that does
+  # not silently pick one of the two.
+  run ! dybatpho::is_ipv4 127.0.0.010
+  run ! dybatpho::is_ipv4 010.1.1.1
+  dybatpho::is_ipv4 127.0.0.0
+}
+
+@test "dybatpho::is_ipv6 accepts every shape an address may be written in" {
+  for address in ::1 :: 2001:db8::1 1:2:3:4:5:6:7:8 2001:db8:: fe80::1 \
+    ::ffff:192.0.2.1 64:ff9b::1.2.3.4 0:0:0:0:0:ffff:192.0.2.1; do
+    dybatpho::is_ipv6 "${address}" || fail "rejected ${address}"
+  done
+}
+
+@test "dybatpho::is_ipv6 refuses malformed addresses" {
+  for address in 2001:db8::1::2 1:2:3:4:5:6:7:8:9 1:2:3:4:5:6:7 12345::1 \
+    "" 1.2.3.4 "1:2:3:4:5:6:7:8:" ":1:2:3:4:5:6:7" "gggg::1" "1:2:::3"; do
+    ! dybatpho::is_ipv6 "${address}" || fail "accepted ${address}"
+  done
+}
+
+@test "dybatpho::is_ipv6 refuses a zone index" {
+  # `%eth0` names an interface on one host, so the address is not comparable
+  # with the same text read anywhere else.
+  run ! dybatpho::is_ipv6 "fe80::1%eth0"
+  dybatpho::is_ipv6 "fe80::1"
+}
+
+@test "dybatpho::ip_version names the version or fails" {
+  assert_equal "$(dybatpho::ip_version 192.0.2.1)" "4"
+  assert_equal "$(dybatpho::ip_version 2001:db8::1)" "6"
+  assert_equal "$(dybatpho::ip_version ::ffff:192.0.2.1)" "6"
+  run ! dybatpho::ip_version "nope"
+}
+
+# --- Networks ------------------------------------------------------------
+
+@test "dybatpho::is_cidr accepts blocks of both versions" {
+  for block in 10.0.0.0/8 0.0.0.0/0 192.0.2.1/32 2001:db8::/32 ::/0 ::1/128; do
+    dybatpho::is_cidr "${block}" || fail "rejected ${block}"
+  done
+  for block in 10.0.0.0/33 10.0.0.0 2001:db8::/129 10.0.0.0/08 "10.0.0.0/" "/8"; do
+    ! dybatpho::is_cidr "${block}" || fail "accepted ${block}"
+  done
+}
+
+@test "dybatpho::cidr_netmask converts a prefix length to a dotted mask" {
+  assert_equal "$(dybatpho::cidr_netmask 0)" "0.0.0.0"
+  assert_equal "$(dybatpho::cidr_netmask 1)" "128.0.0.0"
+  assert_equal "$(dybatpho::cidr_netmask 16)" "255.255.0.0"
+  assert_equal "$(dybatpho::cidr_netmask 24)" "255.255.255.0"
+  assert_equal "$(dybatpho::cidr_netmask 32)" "255.255.255.255"
+  assert_equal "$(dybatpho::cidr_netmask /16)" "255.255.0.0"
+}
+
+@test "dybatpho::cidr_netmask rejects a prefix length IPv4 does not have" {
+  run --separate-stderr ! dybatpho::cidr_netmask 33
+  assert_stderr --partial "is not an IPv4 prefix length"
+  run --separate-stderr ! dybatpho::cidr_netmask abc
+}
+
+@test "dybatpho::cidr_contains decides IPv4 membership at the block edges" {
+  dybatpho::cidr_contains 10.0.0.0/8 10.1.2.3
+  ! dybatpho::cidr_contains 10.0.0.0/8 11.1.2.3 || fail "11.1.2.3 in 10/8"
+  dybatpho::cidr_contains 0.0.0.0/0 203.0.113.1
+  dybatpho::cidr_contains 192.0.2.1/32 192.0.2.1
+  ! dybatpho::cidr_contains 192.0.2.1/32 192.0.2.2 || fail "/32 too wide"
+  dybatpho::cidr_contains 192.168.1.0/24 192.168.1.255
+  ! dybatpho::cidr_contains 192.168.1.0/24 192.168.2.0 || fail "/24 too wide"
+  # A /12 boundary is the one hand-written checks usually get wrong.
+  dybatpho::cidr_contains 172.16.0.0/12 172.31.255.255
+  ! dybatpho::cidr_contains 172.16.0.0/12 172.32.0.0 || fail "/12 too wide"
+}
+
+@test "dybatpho::cidr_contains decides IPv6 membership, including inside a group" {
+  dybatpho::cidr_contains 2001:db8::/32 2001:db8::1
+  dybatpho::cidr_contains 2001:db8::/32 2001:db8:ffff::1
+  ! dybatpho::cidr_contains 2001:db8::/32 2001:db9::1 || fail "/32 too wide"
+  dybatpho::cidr_contains ::/0 2001:db8::1
+  dybatpho::cidr_contains ::1/128 ::1
+  ! dybatpho::cidr_contains ::1/128 ::2 || fail "/128 too wide"
+  # A prefix that ends mid-group is where a group-at-a-time comparison breaks.
+  dybatpho::cidr_contains 2001:db8::/33 2001:db8:7fff::1
+  ! dybatpho::cidr_contains 2001:db8::/33 2001:db8:8000::1 || fail "/33 too wide"
+}
+
+@test "dybatpho::cidr_contains keeps the two IP versions apart" {
+  # Some software treats `::ffff:10.0.0.1` and `10.0.0.1` as the same host. They
+  # are not the same address, and a membership test that blurred them would be
+  # a way to get past an allowlist.
+  ! dybatpho::cidr_contains 10.0.0.0/8 ::1 || fail "v6 inside a v4 block"
+  ! dybatpho::cidr_contains ::/0 10.0.0.1 || fail "v4 inside a v6 block"
+  ! dybatpho::cidr_contains 10.0.0.0/8 ::ffff:10.0.0.1 || fail "mapped address let in"
+}
+
+@test "dybatpho::cidr_contains stops the script on a malformed argument" {
+  run --separate-stderr ! dybatpho::cidr_contains "notablock" 10.0.0.1
+  assert_stderr --partial "is not a CIDR block"
+  run --separate-stderr ! dybatpho::cidr_contains 10.0.0.0/8 "notanaddress"
+  assert_stderr --partial "is not an IP address"
+}
+
+# --- Ports ---------------------------------------------------------------
+
+@test "dybatpho::port_open reports a port nothing is listening on as closed" {
+  run ! dybatpho::port_open 127.0.0.1 1 1
+}
+
+@test "dybatpho::port_open finds a port that is listening" {
+  local port
+  port="$(start_listener)" || skip "no way to open a listening socket here"
+  dybatpho::port_open 127.0.0.1 "${port}" 2
+}
+
+@test "dybatpho::wait_port returns as soon as the port answers" {
+  local port
+  port="$(start_listener)" || skip "no way to open a listening socket here"
+  dybatpho::wait_port 127.0.0.1 "${port}" 5
+}
+
+@test "dybatpho::wait_port gives up within its budget" {
+  local started=${SECONDS}
+  run ! dybatpho::wait_port 127.0.0.1 1 2 1
+  # The budget is what bounds the call, including the time each attempt takes.
+  ((SECONDS - started <= 8)) || fail "waited $((SECONDS - started))s for a 2s budget"
+}
+
+@test "dybatpho::port_open and wait_port reject arguments that are not numbers" {
+  run --separate-stderr ! dybatpho::port_open host notaport
+  assert_stderr --partial "is not a port number"
+  run --separate-stderr ! dybatpho::port_open host 80 later
+  assert_stderr --partial "is not a number of seconds"
+  run --separate-stderr ! dybatpho::wait_port host 80 soon
+  assert_stderr --partial "is not a number of seconds"
 }

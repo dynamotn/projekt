@@ -33,6 +33,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`network` — the primitives a script needs before it makes a request.** The
+  module could fetch a URL but not read one, and everything around that was
+  left to the caller: picking a host out of configuration, deciding whether a
+  string is an address, whether an address is inside an allowed network, and
+  whether a service is listening yet. Each of those gets written inline as a
+  regex that nearly works — the kind that accepts `192.0.2.256`, or reads
+  `127.0.0.010` as a different host than the resolver does.
+
+  `dybatpho::url_parse` splits a URL into `DYBATPHO_URL`, the way
+  `dybatpho::curl_parse_response` leaves a response in `DYBATPHO_HTTP_*`, and
+  `dybatpho::url_part` reads one component with an optional default:
+
+  ```sh
+  dybatpho::url_parse "postgres://app:secret@db.internal:5432/orders"
+  host="${DYBATPHO_URL[host]}"
+  port="$(dybatpho::url_part port 5432)"
+  ```
+
+  Every component is always present, so one the URL omits reads as empty rather
+  than unset. The credentials are taken at the *last* `@`, since a password may
+  contain one, and a bracketed IPv6 literal keeps its colons out of the port.
+  Components come back as written: decoding percent-escapes here would erase the
+  difference between a separator and a character that only looks like one.
+
+  New with it: `dybatpho::is_ipv4`, `dybatpho::is_ipv6`,
+  `dybatpho::ip_version`, `dybatpho::is_cidr`, `dybatpho::cidr_netmask`, and
+  `dybatpho::cidr_contains`, which handles both versions and compares the prefix
+  bit for bit, including one that ends inside an IPv6 group.
+
+  Two refusals are deliberate. An IPv4 octet with a leading zero is rejected,
+  because `inet_aton` reads `010` as octal, so the address names one host to the
+  resolver and another to a reader. And an address is never inside a block of
+  the other version, so `::ffff:10.0.0.1` cannot be used to walk past a check on
+  `10.0.0.0/8`.
+
+  `dybatpho::port_open` and `dybatpho::wait_port` answer whether a service is up
+  yet, through Bash's own `/dev/tcp`, so nothing has to be installed. The wait
+  gives no single attempt more time than its budget has left, so the call keeps
+  to that budget rather than overrunning it by one connection attempt. `timeout`
+  joins the module's optional dependencies: without it the probe still works and
+  waits as long as the system's own TCP timeout.
+
 - **Version constraints: a dependency check that asks how old the tool is.**
   Until now a dependency was either installed or not, which is the wrong
   question for a tool whose name is shared by an unrelated program. The YAML

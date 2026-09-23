@@ -74,7 +74,9 @@ declare -gA DYBATPHO_DOCTOR_OPTIONAL=(
   [file]="sha256sum|shasum|openssl"
   [json]="jq"
   [logging]="python3"
-  [network]="sha256sum md5sum"
+  # `timeout` bounds the connection `dybatpho::port_open` makes. Without it the
+  # probe still works and waits as long as the system's own TCP timeout.
+  [network]="sha256sum md5sum timeout"
   [os]="hostname nproc|sysctl|getconf tput"
   [release]="gpg"
 )

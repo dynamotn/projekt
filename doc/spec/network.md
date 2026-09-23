@@ -191,9 +191,44 @@ dybatpho::circuit_breaker api.example.test \
   after a configurable consecutive-failure threshold, rejects calls while open, and allows a
   trial request after a configurable cooldown, along with helpers to inspect and reset state.
 
+- **FR-020**: The module MUST split a URL into scheme, user, password, host, port, path,
+  query, and fragment, requiring a scheme and `://`, and MUST present every component,
+  leaving one the URL omits empty rather than unset.
+- **FR-020a**: URL splitting MUST take the credentials at the last `@` of the authority, and
+  MUST read a bracketed IPv6 literal as the host without treating its colons as a port
+  separator.
+- **FR-020b**: URL splitting MUST lower-case the scheme, leave every other component exactly as
+  written including percent-escapes, and MUST clear the components of a previous URL.
+- **FR-020c**: URL splitting MUST fail on a URL with no scheme, no host, or a port that is not a
+  number from 1 to 65535, and MUST expose a reader for one component that accepts a default.
+- **FR-021**: The module MUST decide whether a value is an IPv4 address, an IPv6 address, or
+  neither, and MUST report which version an address is.
+- **FR-021a**: IPv4 validation MUST refuse an octet written with a leading zero, because
+  `inet_aton` reads it as octal and the address would name a different host to the resolver
+  than to a reader.
+- **FR-021b**: IPv6 validation MUST accept `::` standing for a run of zero groups, at most once
+  per address, and a dotted IPv4 tail occupying the last two groups; it MUST refuse a zone
+  index, which names an interface rather than part of the address.
+- **FR-022**: The module MUST decide whether a value is a CIDR block of either version, with a
+  prefix length within the range its version allows.
+- **FR-022a**: The module MUST convert an IPv4 prefix length to a dotted-decimal subnet mask.
+  This is IPv4 only because IPv6 has no dotted form.
+- **FR-022b**: The module MUST decide whether an address falls inside a CIDR block of either
+  version, comparing the prefix bit for bit including a prefix that ends inside a group, and
+  MUST never report an address of one version as inside a block of the other.
+- **FR-023**: The module MUST report whether a TCP port accepts a connection, using Bash's own
+  network redirections so that nothing has to be installed, and MUST bound the attempt with a
+  configurable timeout when the `timeout` command is available.
+- **FR-023a**: Port probing MUST pass the host and port to any timed-out shell as arguments
+  rather than as text spliced into the script it runs.
+- **FR-024**: The module MUST expose a wait that retries a port probe until it succeeds or a
+  configurable budget runs out, giving no single attempt more time than the budget has left.
+
 ### Key Entities *(include if feature involves data)*
 
 - **HTTP Attempt**: One curl execution performed within a request workflow.
+- **URL Components**: The parts of the last parsed URL, one entry per component.
+- **CIDR Block**: An address together with a prefix length, naming a range of addresses.
 - **Download Target**: The destination file path prepared and populated by the download helper.
 - **Retry Policy**: Retry budget, exponential delay bounds, optional jitter,
   and server-provided retry delay.
@@ -219,6 +254,10 @@ dybatpho::circuit_breaker api.example.test \
   state rather than ad hoc parsing of raw curl output.
 - **SC-007**: A single request's timeout can be adjusted without affecting global retry/timeout
   configuration used by other requests.
+- **SC-009**: A script reads a host, port, or path out of a URL without writing a regex of its
+  own, and one that only nearly works cannot pass a malformed address as a valid one.
+- **SC-010**: A script waits for a service to start listening with one call rather than a
+  hand-written retry loop, and the wait keeps to the budget it was given.
 - **SC-008**: A repeatedly failing endpoint stops receiving new attempts once its circuit opens,
   and recovers automatically once the cooldown elapses and a trial request succeeds.
 
@@ -242,6 +281,30 @@ dybatpho::circuit_breaker api.example.test \
   skips parsing while dry-run is enabled.
 - **IT-010**: Verify scoped timeout overrides reach curl for a single call while leaving global
   timeout environment variables unchanged afterward, and that non-numeric overrides are rejected.
+- **IT-012**: Verify a URL using every component is split correctly, that an absent component is
+  empty, and that the components of a previous URL are cleared.
+- **IT-013**: Verify the credentials are taken at the last `@`, that a bracketed IPv6 host is
+  read apart from its port, that the scheme is lower-cased while the rest is left as written,
+  and that percent-escapes survive.
+- **IT-014**: Verify a URL with no scheme, no host, or a port outside 1-65535 is refused, and
+  that the component reader honors a default and rejects a name that is not a component.
+- **IT-015**: Verify IPv4 validation accepts addresses, rejects out-of-range octets and wrong
+  shapes, and refuses an octet with a leading zero.
+- **IT-016**: Verify IPv6 validation accepts `::`, a compressed address, a full eight-group
+  address, and a mapped IPv4 tail both with and without `::`; and rejects a second `::`, wrong
+  group counts, a trailing or leading single colon, an over-long group, and a zone index.
+- **IT-017**: Verify the version reporter names 4 and 6 and fails on anything else.
+- **IT-018**: Verify CIDR validation accepts blocks of both versions and rejects a prefix
+  length its version does not have, a block with no prefix, and a prefix with a leading zero.
+- **IT-019**: Verify prefix lengths 0, 1, 16, 24, and 32 convert to the right dotted mask, with
+  or without a leading slash, and that a length outside IPv4's range stops the script.
+- **IT-020**: Verify IPv4 membership at the edges of `/8`, `/12`, `/24`, `/32`, and `/0`.
+- **IT-021**: Verify IPv6 membership including a `/33` prefix that ends inside a group, and that
+  an address of one version is never inside a block of the other, including a mapped address.
+- **IT-022**: Verify a port nothing listens on reads as closed, and a real listening socket reads
+  as open.
+- **IT-023**: Verify the wait returns as soon as a listening port answers, gives up within its
+  budget, and that both helpers reject a port or a timeout that is not a number.
 - **IT-011**: Verify a circuit breaker stays closed under the failure threshold, opens and
   short-circuits calls once the threshold is reached, and closes again after a successful call.
 

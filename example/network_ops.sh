@@ -160,7 +160,78 @@ function _demo_circuit_breaker {
   unset DYBATPHO_CIRCUIT_THRESHOLD DYBATPHO_CIRCUIT_COOLDOWN
 }
 
+# @description Take a URL apart before doing anything with it, which is what
+#   picking a host out of configuration usually turns into.
+function _demo_url_parse {
+  dybatpho::header "URL COMPONENTS"
+  local url="postgres://app:secret@db.internal:5432/orders?sslmode=require"
+  dybatpho::url_parse "${url}" \
+    || dybatpho::die "Could not read ${url}"
+  local part
+  for part in scheme user host port path query; do
+    dybatpho::print "  $(printf '%-9s' "${part}") $(dybatpho::url_part "${part}" '(none)')"
+  done
+  # A component that was never there reads as the default rather than as an
+  # error the caller has to handle.
+  dybatpho::print "  fragment  $(dybatpho::url_part fragment '(none)')"
+
+  # An IPv6 literal keeps its colons inside the brackets, where they are not a
+  # port separator.
+  dybatpho::url_parse "http://[2001:db8::1]:8080/health"
+  dybatpho::print "  IPv6 host ${DYBATPHO_URL[host]} on port ${DYBATPHO_URL[port]}"
+}
+
+# @description Decide whether an address is one, and whether it belongs to a
+#   network, without shelling out to anything.
+function _demo_addresses {
+  dybatpho::header "ADDRESSES AND NETWORKS"
+  local candidate
+  for candidate in 192.0.2.10 2001:db8::1 192.0.2.256 127.0.0.010 not-an-address; do
+    if dybatpho::ip_version "${candidate}" > /dev/null; then
+      dybatpho::print "  $(printf '%-15s' "${candidate}") IPv$(dybatpho::ip_version "${candidate}")"
+    else
+      # `192.0.2.256` has an octet that does not exist, and `127.0.0.010` is
+      # read as octal by the resolver, so it is not the host it looks like.
+      dybatpho::print "  $(printf '%-15s' "${candidate}") not an address"
+    fi
+  done
+
+  dybatpho::print "  /24 is $(dybatpho::cidr_netmask 24)"
+  local block="10.0.0.0/8"
+  for candidate in 10.1.2.3 11.1.2.3; do
+    if dybatpho::cidr_contains "${block}" "${candidate}"; then
+      dybatpho::print "  ${candidate} is inside ${block}"
+    else
+      dybatpho::print "  ${candidate} is outside ${block}"
+    fi
+  done
+  if dybatpho::cidr_contains "2001:db8::/32" "2001:db8:ffff::1"; then
+    dybatpho::print "  2001:db8:ffff::1 is inside 2001:db8::/32"
+  fi
+}
+
+# @description Wait for a service to start listening, which is the wait every
+#   `docker compose up` script ends up writing by hand.
+function _demo_port_probe {
+  dybatpho::header "PORT PROBE"
+  # Port 1 is privileged and nothing listens on it here, so this is the shape of
+  # the check rather than a live service, and it stays offline-safe.
+  if dybatpho::port_open 127.0.0.1 1 1; then
+    dybatpho::print "  127.0.0.1:1 is accepting connections"
+  else
+    dybatpho::print "  127.0.0.1:1 is closed, as expected"
+  fi
+  if dybatpho::wait_port 127.0.0.1 1 2 1; then
+    dybatpho::print "  the port came up"
+  else
+    dybatpho::print "  gave up on 127.0.0.1:1 after the 2 second budget"
+  fi
+}
+
 function _main {
+  _demo_url_parse
+  _demo_addresses
+  _demo_port_probe
   _install_curl_stub
   _demo_head_request
   _demo_json_request
