@@ -20,6 +20,7 @@ func NewFolderCmd(out io.Writer) *cobra.Command {
 		NewFolderListCmd(out),
 		NewFolderGetCmd(out),
 		NewFolderRemoveCmd(out),
+		NewFolderPruneCmd(out),
 		NewFolderSyncCmd(out),
 		NewFolderCheckCmd(out),
 	)

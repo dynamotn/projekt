@@ -209,6 +209,20 @@ Checking /home/me/.config/projekt/config.yaml
 `config edit` re-reads the file once the editor exits, so a mistake is reported
 straight away instead of on your next `pj`.
 
+A configuration also grows stale on its own — a project archived, a clone
+deleted, a machine reinstalled — and each leftover costs a wrong suggestion in
+completion and a jump that lands nowhere:
+
+```bash
+projekt folder prune --dry-run   # what would go
+projekt folder prune             # and go it does
+```
+
+Only a path that is definitely not there is dropped. A folder on a drive that
+is not mounted right now reads as an error rather than as absent, and is left
+alone: not here and not there are different things. Working trees are pruned
+too, since one removed with plain git leaves the same kind of leftover.
+
 > Note: `projekt config check` validates the configuration. `projekt folder
 > check` inspects the Git repositories on disk. Different jobs, similar names.
 
@@ -428,6 +442,7 @@ ships in [examples/boilerplates](examples/boilerplates); see
 | [`folder list`](doc/projekt_folder_list.md)          | List every project folder, as a table, JSON or TSV         |
 | [`folder get`](doc/projekt_folder_get.md)            | Resolve a short name to a path — what `pj` calls           |
 | [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |
+| [`folder prune`](doc/projekt_folder_prune.md)        | Drop every entry whose folder is gone, with `--dry-run`     |
 | [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos, remotes and worktrees on disk |
 | [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories in parallel, with `--dry-run`   |
 | [`worktree add`](doc/projekt_worktree_add.md)        | Check out a branch beside your work, reachable as `pj p@name` |
