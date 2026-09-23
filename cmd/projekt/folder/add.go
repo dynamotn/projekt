@@ -1,8 +1,9 @@
 package folder
 
 import (
+	"fmt"
 	"io"
-	"strings"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -19,7 +20,24 @@ func NewFolderAddCmd(out io.Writer) *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 		Aliases: []string{"a"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			o.Path = strings.TrimRight(args[0], "/")
+			path, err := lazypath.NormalizePath(args[0])
+			if err != nil {
+				return err
+			}
+			// A relative path stored in the config would resolve differently on
+			// every later run, so only absolute existing folders are accepted.
+			info, err := os.Stat(path)
+			if err != nil {
+				return fmt.Errorf("cannot add %s: %w", path, err)
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("cannot add %s: not a directory", path)
+			}
+			if !o.IsWorkspace && o.RegexMatch != "" {
+				return fmt.Errorf("--regex only works together with --as-workspace")
+			}
+
+			o.Path = path
 			return folderutil.ImportFolderToConfig(o)
 		},
 	}

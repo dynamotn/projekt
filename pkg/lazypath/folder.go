@@ -1,6 +1,7 @@
 package lazypath
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/samber/lo"
@@ -41,13 +42,22 @@ func (f *Folder) GetRegexMatch() string {
 	return defaultRegexWorkspace
 }
 
+// cleanPath makes two spellings of the same path comparable.
+func cleanPath(path string) string {
+	trimmed := strings.TrimRight(path, "/")
+	if trimmed == "" {
+		return path
+	}
+	return filepath.Clean(trimmed)
+}
+
 // CheckFolderExist checks if a folder path exists in the configuration
 func CheckFolderExist(path string) (bool, int) {
 	unmarshalConfig()
 
-	normalizedPath := strings.TrimRight(path, "/")
+	normalizedPath := cleanPath(path)
 	_, index, ok := lo.FindIndexOf(c.Folders, func(folder Folder) bool {
-		return strings.TrimRight(folder.Path, "/") == normalizedPath
+		return cleanPath(folder.Path) == normalizedPath
 	})
 
 	return ok, index
