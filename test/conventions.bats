@@ -78,6 +78,34 @@ fail_with() {
     fail_with "Modules missing a required artifact (AGENT.md 'Module scope'):" "${violations}"
 }
 
+@test "a script is executable and a sourced module is not" {
+  # The split is deliberate and the tree already follows it: everything under
+  # `example/` and `scripts/` is run, everything under `src/` and `init.sh` is
+  # sourced. It drifts silently, though — `example/math_ops.sh` lost its bit
+  # after a commit had just set it across every example — because nothing runs
+  # an example by path, so nothing notices.
+  #
+  # The mode is read from the index rather than the filesystem: that is the one
+  # every other checkout gets, and a umask can make a working tree disagree
+  # with what was committed.
+  local violations="" mode path
+  while read -r mode _ _ path; do
+    case "${path}" in
+      example/*.sh | scripts/*.sh)
+        [[ "${mode}" == "100755" ]] ||
+          violations+="${path} is run directly but is not executable"$'\n'
+        ;;
+      src/*.sh | init.sh)
+        [[ "${mode}" == "100644" ]] ||
+          violations+="${path} is sourced, so it should not be executable"$'\n'
+        ;;
+    esac
+  done < <(git -C "${REPO_ROOT}" ls-files -s)
+
+  [ -z "${violations}" ] ||
+    fail_with "Files whose executable bit does not match how they are used:" "${violations}"
+}
+
 @test "every module is registered in init.sh" {
   local registry violations="" module
   registry="$(grep -E '^DYBATPHO_(CORE|OPTIONAL)_MODULES=' "${REPO_ROOT}/init.sh")"

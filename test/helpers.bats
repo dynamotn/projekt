@@ -517,6 +517,72 @@ _test_retry() {
   assert_equal "$(cat "${sleep_args_file}")" '4'
 }
 
+@test "__dybatpho_helpers_backoff grows exponentially and stops at the cap" {
+  DYBATPHO_RETRY_BASE_DELAY=2
+  DYBATPHO_RETRY_MAX_DELAY=30
+  DYBATPHO_RETRY_JITTER=false
+
+  # 2, 4, 8, 16, then the cap rather than 32.
+  assert_equal "$(__dybatpho_helpers_backoff 1)" "2"
+  assert_equal "$(__dybatpho_helpers_backoff 2)" "4"
+  assert_equal "$(__dybatpho_helpers_backoff 3)" "8"
+  assert_equal "$(__dybatpho_helpers_backoff 4)" "16"
+  assert_equal "$(__dybatpho_helpers_backoff 5)" "30"
+  assert_equal "$(__dybatpho_helpers_backoff 20)" "30"
+}
+
+@test "__dybatpho_helpers_backoff honours a different base and cap" {
+  DYBATPHO_RETRY_BASE_DELAY=1
+  DYBATPHO_RETRY_MAX_DELAY=5
+  DYBATPHO_RETRY_JITTER=false
+
+  assert_equal "$(__dybatpho_helpers_backoff 1)" "1"
+  assert_equal "$(__dybatpho_helpers_backoff 3)" "4"
+  assert_equal "$(__dybatpho_helpers_backoff 4)" "5"
+}
+
+@test "__dybatpho_helpers_backoff adds jitter without exceeding the cap" {
+  DYBATPHO_RETRY_BASE_DELAY=2
+  DYBATPHO_RETRY_MAX_DELAY=30
+  DYBATPHO_RETRY_JITTER=true
+
+  # Jitter is random, so the contract is a range: at least the undisturbed
+  # delay, at most one base delay more, and never past the cap.
+  local i delay varied=false first
+  first="$(__dybatpho_helpers_backoff 3)"
+  for i in $(seq 1 25); do
+    delay="$(__dybatpho_helpers_backoff 3)"
+    [ "${delay}" -ge 8 ] || fail "jitter reduced the delay below the base: ${delay}"
+    [ "${delay}" -le 10 ] || fail "jitter exceeded one base delay: ${delay}"
+    [ "${delay}" = "${first}" ] || varied=true
+  done
+  # 25 draws from three values collide only about one run in 2.8 million.
+  [ "${varied}" = true ] || fail "jitter never changed the delay in 25 draws"
+
+  DYBATPHO_RETRY_MAX_DELAY=8
+  for i in $(seq 1 10); do
+    assert_equal "$(__dybatpho_helpers_backoff 3)" "8"
+  done
+}
+
+@test "dybatpho::retry waits longer each time and never past the cap" {
+  local sleep_args_file="${BATS_TEST_TMPDIR}/sleep-args"
+  DYBATPHO_RETRY_BASE_DELAY=2
+  DYBATPHO_RETRY_MAX_DELAY=5
+  DYBATPHO_RETRY_JITTER=false
+
+  _never_succeeds() {
+    return 1
+  }
+  stub_repeated sleep ": echo \"\$*\" >> ${sleep_args_file}"
+  run dybatpho::retry 4 _never_succeeds capped-target
+  unstub sleep
+  assert_failure
+
+  # 2, 4, then the cap twice instead of 8 and 16.
+  assert_equal "$(tr '\n' ' ' < "${sleep_args_file}")" "2 4 5 5 "
+}
+
 @test "dybatpho::retry uses provided description in warning" {
   _always_fail() {
     return 7

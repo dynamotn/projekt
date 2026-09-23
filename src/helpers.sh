@@ -81,6 +81,13 @@
 # @tip Combine `dybatpho::expect_envs` and `dybatpho::require` near the top of entrypoint scripts to fail fast on missing configuration or dependencies.
 : "${DYBATPHO_DIR:?DYBATPHO_DIR must be set. Please source dybatpho/init.sh before other scripts from dybatpho.}"
 
+# @env DYBATPHO_RETRY_BASE_DELAY number First retry delay in seconds (default `2`)
+# @env DYBATPHO_RETRY_MAX_DELAY number Longest a single retry waits (default `30`)
+# @env DYBATPHO_RETRY_JITTER bool Add up to one base delay of random jitter (default `false`)
+DYBATPHO_RETRY_BASE_DELAY=${DYBATPHO_RETRY_BASE_DELAY:-2}
+DYBATPHO_RETRY_MAX_DELAY=${DYBATPHO_RETRY_MAX_DELAY:-30}
+DYBATPHO_RETRY_JITTER=${DYBATPHO_RETRY_JITTER:-false}
+
 # @env DYBATPHO_REPL_HISTORY_FILE string History file used by `dybatpho::breakpoint`
 DYBATPHO_REPL_HISTORY_FILE="${HOME}/.cache/dybatpho_repl.history"
 
@@ -416,6 +423,28 @@ function dybatpho::assert {
 }
 
 #######################################
+# @description Compute how long the nth retry waits.
+#   Exponential from a base delay, capped, with optional jitter — the policy the
+#   HTTP retries in `network.sh` already used, which the generic retry here did
+#   not. Jitter matters when several machines retry the same failing dependency:
+#   without it they all come back at the same instant, which is the load that
+#   kept it down.
+# @arg $1 number Attempt number, counting from 1
+# @stdout Delay in seconds
+#######################################
+function __dybatpho_helpers_backoff {
+  local attempt
+  dybatpho::expect_args attempt -- "$@"
+  local delay=$((DYBATPHO_RETRY_BASE_DELAY * (2 ** (attempt - 1))))
+  ((delay > DYBATPHO_RETRY_MAX_DELAY)) && delay="${DYBATPHO_RETRY_MAX_DELAY}"
+  if dybatpho::is true "${DYBATPHO_RETRY_JITTER}"; then
+    ((delay += RANDOM % (DYBATPHO_RETRY_BASE_DELAY + 1)))
+    ((delay > DYBATPHO_RETRY_MAX_DELAY)) && delay="${DYBATPHO_RETRY_MAX_DELAY}"
+  fi
+  printf '%s\n' "${delay}"
+}
+
+#######################################
 # @description Retry a shell command with escalating delays until it succeeds or retries are exhausted.
 # @example
 #   dybatpho::retry 3 "curl -fsSL '${url}'" "health check"
@@ -423,9 +452,14 @@ function dybatpho::assert {
 # @arg $1 number Number of retries
 # @arg $2 string Shell command string to run
 # @arg $3 string Optional short description for retry logs
+# @env DYBATPHO_RETRY_BASE_DELAY number First retry delay in seconds
+# @env DYBATPHO_RETRY_MAX_DELAY number Longest a single retry waits
+# @env DYBATPHO_RETRY_JITTER bool Add up to one base delay of random jitter
 # @exitcode 0 The command eventually succeeds
 # @exitcode 1 The command never succeeds and returns 1 on the final attempt
 # @tip The command is executed with `eval`, so pass it as one shell command string
+# @tip Turn on `DYBATPHO_RETRY_JITTER` when several machines retry the same
+#   dependency, so they do not all come back at the same instant
 # @tip Pass a short description when the raw command is noisy so retry logs stay readable
 #######################################
 function dybatpho::retry {
@@ -439,7 +473,7 @@ function dybatpho::retry {
     exit_code="$?"
     count="$((count + 1))"
     if [ "${count}" -le "${retries}" ]; then
-      delay="$((2 * count))"
+      delay="$(__dybatpho_helpers_backoff "${count}")"
       if declare -F __dybatpho_metrics_key > /dev/null; then
         dybatpho::metrics_counter_inc dybatpho_retry_attempts_total
       fi

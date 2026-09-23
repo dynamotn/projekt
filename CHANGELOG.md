@@ -38,12 +38,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`dybatpho::retry` now backs off the way the HTTP retries already did.**
+  The library answered the same question two ways: `network.sh` grew its delay
+  exponentially, capped it at `DYBATPHO_CURL_RETRY_MAX_DELAY` and could add
+  jitter, while the generic helper — the one a script calls directly — grew
+  `2, 4, 6, 8, …` linearly, with no upper bound and no jitter.
+
+  It now takes `DYBATPHO_RETRY_BASE_DELAY` (2), `DYBATPHO_RETRY_MAX_DELAY` (30)
+  and `DYBATPHO_RETRY_JITTER` (off), and the delays run `2, 4, 8, 16, 30, 30, …`.
+  Jitter is worth turning on when several machines retry the same failing
+  dependency: without it they all come back at the same instant, which is the
+  load that kept it down. The first two delays are unchanged, so a script that
+  retried twice waits exactly as long as before.
+
 - **A snapshot switch set to `0` now means off.** Both snapshot switches read
   `1`, `true`, `yes` and `on` as on and everything else as off. Previously the
   value went through `dybatpho::is true`, which reads `0` as true because it
   speaks in exit codes — so `DYBATPHO_TEST_UPDATE_SNAPSHOTS=0` rewrote every
   baseline it touched, and a suite whose snapshots are all rewritten asserts
   nothing.
+
+### Fixed
+
+- **`example/math_ops.sh` was not executable.** Every other example is, and a
+  commit had just set the bit across all of them, so this one drifted straight
+  back — nothing runs an example by path, so nothing noticed.
+  `test/conventions.bats` now checks the mode recorded in the index: everything
+  under `example/` and `scripts/` is run and must be executable, everything
+  under `src/` and `init.sh` is sourced and must not be.
 
 ## [4.0.0] - 2026-09-23
 

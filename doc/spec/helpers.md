@@ -45,6 +45,8 @@ As an operator, I want retry logic with progress messages so that flaky commands
 
 1. **Given** a command fails initially but later succeeds, **When** the retry helper wraps it, **Then** the command is retried until it succeeds or retries are exhausted
 2. **Given** a command never succeeds, **When** the retry budget is consumed, **Then** the helper returns the final failure and warns that retries are exhausted
+3. **Given** a retry budget larger than the cap allows, **When** the delays are computed, **Then** they grow exponentially and stop at the cap rather than growing without bound
+4. **Given** jitter is enabled, **When** the same attempt is computed repeatedly, **Then** the delay varies within one base delay and never exceeds the cap
 
 ---
 
@@ -155,6 +157,7 @@ _deploy prod "${DEPLOY_TOKEN:-}"
 - **FR-005**: The module MUST provide a coalesce helper that prints the first non-empty value from a prioritized list of candidates.
 - **FR-006**: The coalesce helper MUST fail when no candidate values are provided or all candidates are empty.
 - **FR-007**: The module MUST provide a retry helper that retries shell command strings with delays and user-visible progress messages.
+- **FR-007a**: Retry delays MUST grow exponentially from `DYBATPHO_RETRY_BASE_DELAY`, MUST never exceed `DYBATPHO_RETRY_MAX_DELAY`, and MUST add up to one base delay of random jitter when `DYBATPHO_RETRY_JITTER` is enabled. This is the policy `network.sh` already applies to HTTP retries; the generic helper grew its delay linearly and without a bound, so the same library answered the same question two different ways.
 - **FR-008**: The module MUST provide an interactive breakpoint helper suitable for optional debugging workflows.
 - **FR-009**: The module MUST provide a helper that verifies all listed commands exist.
 - **FR-010**: The module MUST provide a helper that prints the first available command from a prioritized list.

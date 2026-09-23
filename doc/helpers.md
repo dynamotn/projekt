@@ -26,6 +26,9 @@ modules rely on:
 
 | Variable | Type | Description |
 | --- | --- | --- |
+| **`DYBATPHO_RETRY_BASE_DELAY`** | number | First retry delay in seconds (default `2`) |
+| **`DYBATPHO_RETRY_MAX_DELAY`** | number | Longest a single retry waits (default `30`) |
+| **`DYBATPHO_RETRY_JITTER`** | bool | Add up to one base delay of random jitter (default `false`) |
 | **`DYBATPHO_REPL_HISTORY_FILE`** | string | History file used by `dybatpho::breakpoint` |
 
 ### 🚀 Highlights
@@ -41,6 +44,7 @@ modules rely on:
 - [`dybatpho::default_env`](#dybatphodefault_env) — Assign and export a default value for an environment variable when it is empty.
 - [`dybatpho::require_envs_any`](#dybatphorequire_envs_any) — Ensure that at least one of the listed environment variables is set.
 - [`dybatpho::assert`](#dybatphoassert) — Evaluate a shell condition string and stop with a message when it fails.
+- [`__dybatpho_helpers_backoff`](#__dybatpho_helpers_backoff) — Compute how long the nth retry waits. Exponential from a base delay, capped, with optional jitter — the policy the HTTP retries in `network.sh` already used, which the generic retry here did not. Jitter matters when several machines retry the same failing dependency: without it they all come back at the same instant, which is the load that kept it down.
 - [`dybatpho::retry`](#dybatphoretry) — Retry a shell command with escalating delays until it succeeds or retries are exhausted.
 - [`dybatpho::retry_until`](#dybatphoretry_until) — Retry a shell command until it succeeds or the retry budget is exhausted, using a fixed delay.
 - [`dybatpho::breakpoint`](#dybatphobreakpoint) — Open an interactive breakpoint for debugging a running script.
@@ -157,6 +161,7 @@ dybatpho::is true "${DEBUG_BREAK:-false}" && dybatpho::breakpoint
 ### `dybatpho::retry`
 
 - The command is executed with `eval`, so pass it as one shell command string
+- Turn on `DYBATPHO_RETRY_JITTER` when several machines retry the same dependency, so they do not all come back at the same instant
 - Pass a short description when the raw command is noisy so retry logs stay readable
 
 ### `dybatpho::retry_until`
@@ -426,6 +431,28 @@ Evaluate a shell condition string and stop with a message when it fails.
 
 ---
 
+### `__dybatpho_helpers_backoff`
+
+Compute how long the nth retry waits.
+  Exponential from a base delay, capped, with optional jitter — the policy the
+  HTTP retries in `network.sh` already used, which the generic retry here did
+  not. Jitter matters when several machines retry the same failing dependency:
+  without it they all come back at the same instant, which is the load that
+  kept it down.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | number | Attempt number, counting from 1 |
+
+**📤 Output on stdout**
+
+- Delay in seconds
+
+
+---
+
 ### `dybatpho::retry`
 
 Retry a shell command with escalating delays until it succeeds or retries are exhausted.
@@ -444,6 +471,14 @@ dybatpho::retry 3 "curl -fsSL '${url}'" "health check"
 | `$1` | number | Number of retries |
 | `$2` | string | Shell command string to run |
 | `$3` | string | Optional short description for retry logs |
+
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`DYBATPHO_RETRY_BASE_DELAY`** | number | First retry delay in seconds |
+| **`DYBATPHO_RETRY_MAX_DELAY`** | number | Longest a single retry waits |
+| **`DYBATPHO_RETRY_JITTER`** | bool | Add up to one base delay of random jitter |
 
 **🚦 Exit codes**
 
