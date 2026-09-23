@@ -140,7 +140,7 @@ module calls `command curl` on purpose, which bypasses functions.
 | `metrics.sh` | Timing, counters, and Prometheus text export, plus the retry/HTTP/error instrumentation | `test/metrics.bats`, `doc/metrics.md`, `doc/spec/metrics.md` |
 | `network.sh` | Curl wrappers, retries, JSON requests, and HTTP metadata | `test/network.bats`, `doc/network.md`, `doc/spec/network.md` |
 | `notification.sh` | Webhook notifications and JSON payloads | `test/notification.bats`, `doc/notification.md`, `doc/spec/notification.md` |
-| `os.sh` | OS, architecture, and environment detection | `test/os.bats`, `doc/os.md`, `doc/spec/os.md` |
+| `os.sh` | OS, architecture, distribution, and host facts: name, user, processors, terminal size, root/container/WSL/CI detection | `test/os.bats`, `doc/os.md`, `doc/spec/os.md` |
 | `process.sh` | Traps, cleanup, dry-run, and process lifecycle | `test/process.bats`, `doc/process.md`, `doc/spec/process.md` |
 | `parallel.sh` | Bounded worker pool with ordered output and per-job exit codes | `test/parallel.bats`, `doc/parallel.md`, `doc/spec/parallel.md` |
 | `pkg.sh` | Package manager detection and guarded dependency installation | `test/pkg.bats`, `doc/pkg.md`, `doc/spec/pkg.md` |
@@ -208,7 +208,7 @@ for s in src/*.sh; do
   while read -r fn; do OWNER["${fn}"]="${m}"; done < <(
     sed -n 's/^function \([A-Za-z_][A-Za-z_0-9:]*\).*/\1/p' "${s}")
 done
-CORE=" string logging helpers process file secret "
+CORE=" string os logging helpers process file secret "
 for s in src/*.sh; do
   m="$(basename "${s}" .sh)"; opt=""
   for fn in $(grep -oE '\b(dybatpho::[a-z_0-9]+|__[a-z_0-9]+)' "${s}" | sort -u); do

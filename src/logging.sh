@@ -172,16 +172,11 @@ function __dybatpho_log_request_id {
 #######################################
 # @description Return the current hostname attached to every structured log event, caching the result for the process lifetime.
 # @stdout Hostname
+# @env DYBATPHO_LOG_HOSTNAME string Hostname to log instead of the one `dybatpho::hostname` detects
 #######################################
 function __dybatpho_log_hostname {
   if [[ -z "${DYBATPHO_LOG_HOSTNAME:-}" ]]; then
-    if dybatpho::is command hostname; then
-      DYBATPHO_LOG_HOSTNAME=$(hostname 2> /dev/null) || true
-    fi
-    if [[ -z "${DYBATPHO_LOG_HOSTNAME:-}" && -r /proc/sys/kernel/hostname ]]; then
-      DYBATPHO_LOG_HOSTNAME=$(cat /proc/sys/kernel/hostname 2> /dev/null) || true # kcov(skip)
-    fi
-    [[ -z "${DYBATPHO_LOG_HOSTNAME:-}" ]] && DYBATPHO_LOG_HOSTNAME="${HOSTNAME:-unknown}" # kcov(skip)
+    DYBATPHO_LOG_HOSTNAME="$(dybatpho::hostname)"
   fi
   printf '%s' "${DYBATPHO_LOG_HOSTNAME}"
 }
@@ -430,16 +425,7 @@ function __dybatpho_log_inspect {
 # @stdout Terminal width, falling back to 80 columns
 #######################################
 function __dybatpho_log_get_terminal_width {
-  local width="${COLUMNS:-}"
-  if ! [[ "${width}" =~ ^[0-9]+$ ]] || ((width <= 0)); then
-    if dybatpho::is command tput && [[ -t 1 || -t 2 ]]; then
-      width="$(tput cols 2> /dev/null || true)" # kcov(skip) - needs a terminal
-    fi
-  fi
-  if ! [[ "${width}" =~ ^[0-9]+$ ]] || ((width <= 0)); then
-    width=80
-  fi
-  printf '%s\n' "${width}"
+  dybatpho::terminal_width 80
 }
 
 #######################################

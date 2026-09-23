@@ -56,6 +56,7 @@ declare -gA DYBATPHO_DOCTOR_OPTIONAL=(
   [json]="jq"
   [logging]="python3"
   [network]="sha256sum md5sum"
+  [os]="hostname nproc|sysctl|getconf tput"
   [release]="gpg"
 )
 

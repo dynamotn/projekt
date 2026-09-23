@@ -139,7 +139,7 @@ function __dybatpho_safety_strip_entry {
 function dybatpho::is_interactive {
   case "${DYBATPHO_INTERACTIVE}" in
     auto | '')
-      [[ -t 0 ]]
+      dybatpho::is_tty stdin
       ;;
     *)
       dybatpho::is true "${DYBATPHO_INTERACTIVE}"

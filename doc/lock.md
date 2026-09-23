@@ -32,7 +32,7 @@ A lock is a directory containing metadata about the process holding it
 
 ### 🚀 Highlights
 
-- [`dybatpho::lock_hostname`](#dybatpholock_hostname) — Print the current host name using whichever mechanism is available.
+- [`dybatpho::lock_hostname`](#dybatpholock_hostname) — Print the current host name using whichever mechanism is available. Kept as the name a lock file is stamped with; the detection itself lives in `dybatpho::hostname`.
 - [`dybatpho::lock_path`](#dybatpholock_path) — Resolve a lock name or path into an absolute lock directory path.
 - [`dybatpho::lock_field`](#dybatpholock_field) — Read a single metadata field recorded for a lock.
 - [`dybatpho::lock_is_alive`](#dybatpholock_is_alive) — Return success when the process that owns a lock is still alive on this host.
@@ -93,10 +93,12 @@ dybatpho::lock_info "deploy"
 ### `dybatpho::lock_hostname`
 
 Print the current host name using whichever mechanism is available.
+  Kept as the name a lock file is stamped with; the detection itself lives in
+  `dybatpho::hostname`.
 
 **📤 Output on stdout**
 
-- Host name reported by `hostname`, `uname -n`, or the `HOSTNAME` env var
+- Host name reported by `hostname`, `uname -n`, the kernel, or the `HOSTNAME` env var
 
 
 ---

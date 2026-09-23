@@ -36,7 +36,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/../init.sh" --modules cli
 
 dybatpho::register_common_handlers
-dybatpho::require "nproc"
 
 BATS_CMD="${DYBATPHO_DIR}/test/lib/core/bin/bats"
 
@@ -53,7 +52,7 @@ function __dybatpho_test_is_count {
 #   and a pipe or a CI log gets plain text.
 # @stdout `true` when stdout is a terminal, `false` otherwise
 function __dybatpho_test_tty {
-  if [[ -t 1 ]]; then printf 'true'; else printf 'false'; fi
+  if dybatpho::is_tty stdout; then printf 'true'; else printf 'false'; fi
 }
 
 # @description Collect the `.bats` files to run, ordered by test count
@@ -365,7 +364,7 @@ function _spec {
     on:true off:false init:="$(__dybatpho_test_tty)"
 
   dybatpho::opts::param "Bats workers to run at once" JOBS -j --jobs \
-    env:DYBATPHO_TEST_JOBS init:="$(nproc)" \
+    env:DYBATPHO_TEST_JOBS init:="$(dybatpho::cpu_count || printf '1')" \
     validate:"__dybatpho_test_is_count \$OPTARG"
   dybatpho::opts::param "Test files per kcov invocation" CHUNK --chunk \
     env:DYBATPHO_TEST_CHUNK init:="5" \

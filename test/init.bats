@@ -44,7 +44,7 @@ loaded_line() {
 
 @test "sourcing without arguments loads the core modules only" {
   run -0 init_sh "" "$(loaded_line)"
-  assert_output "string logging helpers process file secret "
+  assert_output "string os logging helpers process file secret "
 }
 
 @test "sourcing without arguments leaves the optional modules out" {
@@ -65,27 +65,27 @@ loaded_line() {
 
 @test "an explicit module set loads only that module and the core modules" {
   run -0 init_sh "--modules semver" "$(loaded_line)"
-  assert_output "string logging helpers process file secret semver "
+  assert_output "string os logging helpers process file secret semver "
 }
 
 @test "a module set can be requested through DYBATPHO_MODULES" {
   run -0 init_sh_env "semver" "" "$(loaded_line)"
-  assert_output "string logging helpers process file secret semver "
+  assert_output "string os logging helpers process file secret semver "
 }
 
 @test "the command line module set wins over DYBATPHO_MODULES" {
   run -0 init_sh_env "network" "--modules semver" "$(loaded_line)"
-  assert_output "string logging helpers process file secret semver "
+  assert_output "string os logging helpers process file secret semver "
 }
 
 @test "a module set accepts commas and repeated names" {
   run -0 init_sh "--modules json,semver,json" "$(loaded_line)"
-  assert_output "string logging helpers process file secret json semver "
+  assert_output "string os logging helpers process file secret json semver "
 }
 
 @test "the core selection loads the core modules only" {
   run -0 init_sh "--modules core" "$(loaded_line)"
-  assert_output "string logging helpers process file secret "
+  assert_output "string os logging helpers process file secret "
 }
 
 @test "the default and the core selection agree" {
@@ -103,27 +103,27 @@ loaded_line() {
 
 @test "requesting a module loads its dependencies first" {
   run -0 init_sh "--modules text" "$(loaded_line)"
-  assert_output "string logging helpers process file secret table text "
+  assert_output "string os logging helpers process file secret table text "
 
   run -0 init_sh "--modules notification" "$(loaded_line)"
-  assert_output "string logging helpers process file secret network notification "
+  assert_output "string os logging helpers process file secret network notification "
 
   run -0 init_sh "--modules testing" "$(loaded_line)"
-  assert_output "string logging helpers process file secret json network table text testing "
+  assert_output "string os logging helpers process file secret json network table text testing "
 
   run -0 init_sh "--modules ai" "$(loaded_line)"
-  assert_output "string logging helpers process file secret network json ai "
+  assert_output "string os logging helpers process file secret network json ai "
 
   run -0 init_sh "--modules agent" "$(loaded_line)"
-  assert_output "string logging helpers process file secret config cli archive safety json agent "
+  assert_output "string os logging helpers process file secret config cli archive safety json agent "
 }
 
 @test "a dependency cycle loads every module once and terminates" {
   run -0 init_sh "--modules safety" "$(loaded_line)"
-  assert_output "string logging helpers process file secret archive config cli safety "
+  assert_output "string os logging helpers process file secret archive config cli safety "
 
   run -0 init_sh "--modules archive" "$(loaded_line)"
-  assert_output "string logging helpers process file secret config cli safety archive "
+  assert_output "string os logging helpers process file secret config cli safety archive "
 }
 
 @test "a dependency pulled in on demand stays usable" {
@@ -148,13 +148,13 @@ printf '%s' '{\"a\":1}' | dybatpho::json_query - '.a'"
   run -0 init_sh "--modules core" "dybatpho::load text
 dybatpho::load text
 $(loaded_line)"
-  assert_output "string logging helpers process file secret table text "
+  assert_output "string os logging helpers process file secret table text "
 }
 
 @test "dybatpho::load accepts several modules at once" {
   run -0 init_sh "--modules core" "dybatpho::load json semver
 $(loaded_line)"
-  assert_output "string logging helpers process file secret json semver "
+  assert_output "string os logging helpers process file secret json semver "
 }
 
 @test "dybatpho::load without arguments stops the script" {

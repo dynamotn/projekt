@@ -33,6 +33,13 @@ only_fakes() {
   assert_output "jq"
 }
 
+@test "dybatpho::doctor_requirements lists the host probes of the os module" {
+  run -0 dybatpho::doctor_requirements os optional
+  assert_line --index 0 "hostname"
+  assert_line --index 1 "nproc|sysctl|getconf"
+  assert_line --index 2 "tput"
+}
+
 @test "dybatpho::doctor_requirements defaults to every kind" {
   run -0 dybatpho::doctor_requirements json
   assert_line --index 0 "yq"

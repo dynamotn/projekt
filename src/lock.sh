@@ -43,16 +43,12 @@ DYBATPHO_LOCK_POLL_INTERVAL="${DYBATPHO_LOCK_POLL_INTERVAL:-1}"
 
 #######################################
 # @description Print the current host name using whichever mechanism is available.
-# @stdout Host name reported by `hostname`, `uname -n`, or the `HOSTNAME` env var
+#   Kept as the name a lock file is stamped with; the detection itself lives in
+#   `dybatpho::hostname`.
+# @stdout Host name reported by `hostname`, `uname -n`, the kernel, or the `HOSTNAME` env var
 #######################################
 function dybatpho::lock_hostname {
-  if dybatpho::is command "hostname"; then
-    hostname
-  elif uname -n > /dev/null 2>&1; then
-    uname -n
-  else
-    printf '%s' "${HOSTNAME:-unknown}" # kcov(skip)
-  fi
+  dybatpho::hostname
 }
 
 #######################################

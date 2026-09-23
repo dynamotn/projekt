@@ -36,8 +36,8 @@ bundle() {
 @test "bundle.sh resolves the dependencies of a requested module" {
   run -0 bundle --modules release
   run -0 use_bundle 'dybatpho::module_list loaded | tr "\n" " "'
-  # `release` pulls in semver, git, archive and os, and archive pulls in safety.
-  for module in semver git archive os safety release; do
+  # `release` pulls in semver, git and archive, and archive pulls in safety.
+  for module in semver git archive safety release; do
     assert_output --partial " ${module}"
   done
 }

@@ -268,7 +268,7 @@ function dybatpho::secret_check_permission {
   owner=$(__dybatpho_secret_file_owner "${path}") \
     || dybatpho::die "Cannot read owner of secret file: ${path}"
 
-  if ((owner != EUID && EUID != 0)); then
+  if ((owner != EUID)) && ! dybatpho::is_root; then
     __dybatpho_secret_permission_error "Secret file isn't owned by the current user: ${path}"
   fi
 

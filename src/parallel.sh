@@ -43,7 +43,7 @@ function __dybatpho_parallel_jobs {
   if [[ -z "${requested}" || "${requested}" == "0" ]]; then
     # One job per processor is the useful default; without a way to ask, four is
     # a middle ground that neither idles a big machine nor swamps a small one.
-    requested="$(nproc 2> /dev/null || sysctl -n hw.ncpu 2> /dev/null || printf '4')"
+    requested="$(dybatpho::cpu_count || printf '4')"
   fi
   [[ "${requested}" =~ ^[1-9][0-9]*$ ]] \
     || dybatpho::die "${FUNCNAME[1]}: Job count must be a positive integer, got '${requested}'"

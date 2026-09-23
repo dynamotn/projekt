@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`os` — the host facts every module was detecting for itself.** The module
+  now answers what a script actually needs to know about the machine it runs
+  on, so that a worker pool, a log banner and a lock file stop each carrying
+  their own probe. New: `dybatpho::hostname` and `dybatpho::user`,
+  `dybatpho::is_root`, `dybatpho::cpu_count`, `dybatpho::terminal_width`,
+  `dybatpho::terminal_height`, `dybatpho::is_tty`, `dybatpho::os_release`,
+  `dybatpho::distro`, `dybatpho::distro_version`, `dybatpho::kernel_version`,
+  `dybatpho::is_windows`, `dybatpho::is_container`, `dybatpho::is_wsl`, and
+  `dybatpho::is_ci`.
+
+  Each one reports a failure rather than inventing an answer: `cpu_count` fails
+  when no probe is installed instead of guessing a number, and
+  `distro_version` fails on a rolling release that publishes none, so the
+  caller decides what to do about it. `DYBATPHO_HOSTNAME` overrides the
+  detected host name and `DYBATPHO_OS_RELEASE` points the reader at another
+  `os-release` file, which is what makes both testable.
+
+  ```sh
+  jobs="$(dybatpho::cpu_count || printf '4')"
+  dybatpho::is_tty stdout && width="$(dybatpho::terminal_width)"
+  case "$(dybatpho::distro)" in
+    ubuntu | debian) dybatpho::info "Using apt on $(dybatpho::hostname)" ;;
+  esac
+  dybatpho::is_ci && export DYBATPHO_FORCE=true
+  ```
+
 - **`scripts/lint.sh` — the repository now checks its own shape.** One command
   runs ShellCheck and `bash -n` over every tracked script, validates
   `CHANGELOG.md` against the Keep a Changelog format it claims to follow,
@@ -116,6 +142,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```
 
 ### Changed
+
+- **`os` is a core module.** It is loaded with `string`, `logging`, `helpers`,
+  `process`, `file` and `secret` rather than asked for by name, because the
+  library itself now calls it unconditionally: `parallel` sizes its pool with
+  `dybatpho::cpu_count`, `logging` measures its banners with
+  `dybatpho::terminal_width` and stamps its JSON events with
+  `dybatpho::hostname`, `lock` stamps the same name onto a lock directory,
+  `pkg` decides on `sudo` with `dybatpho::is_root`, and `safety` asks
+  `dybatpho::is_tty` whether it can prompt. Nothing breaks: `--modules os` is
+  still accepted, and a script that never asked for the module now has it
+  anyway. `dybatpho::module_list` and `dybatpho::doctor` report it among the
+  core modules, and the `os` dependency edge is gone from `pkg` and `release`
+  because core modules are implicit.
+
+- **`dybatpho::lock_hostname` delegates to `dybatpho::hostname`.** It still
+  prints the name a lock is stamped with, and now resolves it through the same
+  chain as every other caller, which also adds the kernel's
+  `/proc/sys/kernel/hostname` to the fallbacks it had.
 
 - **Coverage runs use the whole runner.** `scripts/test.sh --coverage` spread
   the test files over chunks by slicing the count-ordered list, which put the

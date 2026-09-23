@@ -129,7 +129,7 @@ function __dybatpho_pkg_privilege {
   [[ "${manager}" != "brew" ]] || return 0
   case "${DYBATPHO_PKG_SUDO}" in
     auto | '')
-      [[ "${EUID:-$(id -u)}" -ne 0 ]] || return 0
+      ! dybatpho::is_root || return 0
       dybatpho::is command sudo || return 0
       printf '%s\n' sudo
       ;;

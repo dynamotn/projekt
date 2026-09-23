@@ -183,6 +183,12 @@ Return the correlation ID attached to every structured log event, generating and
 
 Return the current hostname attached to every structured log event, caching the result for the process lifetime.
 
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`DYBATPHO_LOG_HOSTNAME`** | string | Hostname to log instead of the one `dybatpho::hostname` detects |
+
 **📤 Output on stdout**
 
 - Hostname

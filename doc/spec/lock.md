@@ -185,8 +185,9 @@ dybatpho::lock_info "deploy"
   cannot be acquired within the timeout.
 - **FR-016**: `DYBATPHO_LOCK_DIR` MUST default to `TMPDIR` or `/tmp`, and
   `DYBATPHO_LOCK_POLL_INTERVAL` MUST default to `1` second.
-- **FR-017**: `lock_hostname` MUST resolve the host name through `hostname`,
-  `uname -n`, or `HOSTNAME`, in that order.
+- **FR-017**: `lock_hostname` MUST stamp the lock with the host name the `os`
+  module resolves, which uses `hostname`, `uname -n`, the kernel, or
+  `HOSTNAME`, in that order.
 
 ### Key Entities *(include if feature involves data)*
 

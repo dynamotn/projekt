@@ -118,3 +118,212 @@ setup() {
   assert_equal "$(dybatpho::goarch)" "riscv64"
   unstub uname
 }
+
+@test "dybatpho::is_windows detects a Windows-compatible platform" {
+  stub_repeated uname ": echo 'MINGW64_NT-10.0-22631'"
+  dybatpho::is_windows
+  run ! dybatpho::is_linux
+}
+
+# ---------------------------------------------------------------------------
+# host identity
+# ---------------------------------------------------------------------------
+
+# Run statements in a fresh shell. The child is written to a file and run from
+# it rather than through `bash -c`, because a `-c` shell has an empty
+# BASH_SOURCE, which the coverage hook expands on every command and strict mode
+# then turns into a failure that only shows up under scripts/test.sh.
+_child() {
+  local script="${BATS_TEST_TMPDIR}/child.sh"
+  {
+    printf '. "%s/init.sh"\n' "${DYBATPHO_DIR}"
+    printf '%s\n' "$@"
+  } > "${script}"
+  bash "${script}"
+}
+
+@test "dybatpho::hostname prefers an explicit host name and caches it" {
+  __dybatpho_os_hostname=""
+  DYBATPHO_HOSTNAME="build-box" run -0 dybatpho::hostname
+  assert_output "build-box"
+  # Once resolved, the answer is the cached one: the override is no longer read.
+  DYBATPHO_HOSTNAME="build-box" dybatpho::hostname > /dev/null
+  assert_equal "$(dybatpho::hostname)" "build-box"
+  __dybatpho_os_hostname=""
+}
+
+@test "dybatpho::hostname falls back to uname when hostname is missing" {
+  local bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${bin}"
+  # `/bin/sh` rather than `env bash`, because the narrowed PATH below cannot
+  # find `bash` for `env` to run.
+  printf '#!/bin/sh\nprintf "from-uname\\n"\n' > "${bin}/uname"
+  chmod +x "${bin}/uname"
+  # A PATH with neither `hostname` nor anything else on it, set after the
+  # library is loaded so that only the detection sees it.
+  # `hash -r` drops the paths bash remembered while the library loaded, so the
+  # narrowed PATH is what the detection actually sees.
+  run -0 _child "unset DYBATPHO_HOSTNAME" "PATH='${bin}'" "hash -r" "dybatpho::hostname"
+  assert_output "from-uname"
+}
+
+@test "dybatpho::hostname returns a non-empty name on this host" {
+  __dybatpho_os_hostname=""
+  run -0 dybatpho::hostname
+  refute_output ""
+  __dybatpho_os_hostname=""
+}
+
+@test "dybatpho::user reports the effective user" {
+  run -0 dybatpho::user
+  assert_output "$(id -un)"
+}
+
+@test "dybatpho::is_root follows the effective user id" {
+  if [[ "${EUID}" -eq 0 ]]; then
+    dybatpho::is_root
+  else
+    run ! dybatpho::is_root
+  fi
+}
+
+@test "dybatpho::kernel_version reports the kernel release" {
+  stub uname ": echo '6.12.4-arch1-1'"
+  assert_equal "$(dybatpho::kernel_version)" "6.12.4-arch1-1"
+  unstub uname
+}
+
+# ---------------------------------------------------------------------------
+# processors and terminal
+# ---------------------------------------------------------------------------
+
+@test "dybatpho::cpu_count reports a positive number of processors" {
+  run -0 dybatpho::cpu_count
+  assert_equal "${output}" "$(printf '%s' "${output}")"
+  [[ "${output}" =~ ^[1-9][0-9]*$ ]]
+}
+
+@test "dybatpho::cpu_count prefers nproc and validates what it reports" {
+  stub_repeated nproc ": echo 7"
+  assert_equal "$(dybatpho::cpu_count)" 7
+}
+
+@test "dybatpho::cpu_count fails when no probe can answer" {
+  PATH="" run ! dybatpho::cpu_count
+  assert_output ""
+}
+
+@test "dybatpho::is_tty is false for the captured streams of a test" {
+  run ! dybatpho::is_tty stdin
+  run ! dybatpho::is_tty stdout
+  run ! dybatpho::is_tty stderr
+  run ! dybatpho::is_tty 1
+}
+
+@test "dybatpho::is_tty rejects a stream it does not know" {
+  run ! dybatpho::is_tty sideways
+  assert_output --partial "Stream must be stdin, stdout, or stderr"
+}
+
+@test "dybatpho::terminal_width trusts COLUMNS" {
+  COLUMNS=120 run -0 dybatpho::terminal_width
+  assert_output "120"
+}
+
+@test "dybatpho::terminal_width falls back when COLUMNS is unusable" {
+  COLUMNS=not-a-number run -0 dybatpho::terminal_width
+  assert_output "80"
+  COLUMNS=0 run -0 dybatpho::terminal_width 100
+  assert_output "100"
+}
+
+@test "dybatpho::terminal_width rejects a fallback that is not a count" {
+  COLUMNS="" run ! dybatpho::terminal_width wide
+  assert_output --partial "Fallback must be a positive integer"
+}
+
+@test "dybatpho::terminal_height trusts LINES and falls back to 24" {
+  LINES=48 run -0 dybatpho::terminal_height
+  assert_output "48"
+  LINES="" run -0 dybatpho::terminal_height
+  assert_output "24"
+}
+
+# ---------------------------------------------------------------------------
+# distribution
+# ---------------------------------------------------------------------------
+
+_os_release() {
+  local file="${BATS_TEST_TMPDIR}/os-release"
+  printf '%s\n' "$@" > "${file}"
+  export DYBATPHO_OS_RELEASE="${file}"
+}
+
+@test "dybatpho::os_release reads a field and strips its quoting" {
+  _os_release 'ID=ubuntu' 'VERSION_ID="24.04"' "PRETTY_NAME='Ubuntu 24.04 LTS'"
+  assert_equal "$(dybatpho::os_release ID)" "ubuntu"
+  assert_equal "$(dybatpho::os_release VERSION_ID)" "24.04"
+  assert_equal "$(dybatpho::os_release PRETTY_NAME)" "Ubuntu 24.04 LTS"
+}
+
+@test "dybatpho::os_release fails for a field the file does not carry" {
+  _os_release 'ID=ubuntu'
+  run ! dybatpho::os_release VARIANT_ID
+  assert_output ""
+}
+
+@test "dybatpho::os_release fails when there is no os-release file" {
+  DYBATPHO_OS_RELEASE="${BATS_TEST_TMPDIR}/absent" run ! dybatpho::os_release ID
+}
+
+@test "dybatpho::distro reports the distribution of a Linux host" {
+  _os_release 'ID=Debian' 'VERSION_ID="12"'
+  stub_repeated uname ": echo 'Linux'"
+  assert_equal "$(dybatpho::distro)" "debian"
+  assert_equal "$(dybatpho::distro_version)" "12"
+}
+
+@test "dybatpho::distro falls back to the platform without an os-release file" {
+  export DYBATPHO_OS_RELEASE="${BATS_TEST_TMPDIR}/absent"
+  stub_repeated uname ": echo 'Linux'"
+  assert_equal "$(dybatpho::distro)" "linux"
+  run ! dybatpho::distro_version
+}
+
+@test "dybatpho::distro_version accepts a rolling release with only a build id" {
+  _os_release 'ID=arch' 'BUILD_ID=rolling'
+  stub_repeated uname ": echo 'Linux'"
+  assert_equal "$(dybatpho::distro_version)" "rolling"
+}
+
+@test "dybatpho::distro answers macos on Darwin" {
+  stub_repeated uname ": echo 'Darwin'"
+  stub_repeated sw_vers ": echo '15.1'"
+  assert_equal "$(dybatpho::distro)" "macos"
+  assert_equal "$(dybatpho::distro_version)" "15.1"
+}
+
+# ---------------------------------------------------------------------------
+# environment predicates
+# ---------------------------------------------------------------------------
+
+@test "dybatpho::is_container detects a runtime that exports its name" {
+  container=podman run -0 dybatpho::is_container
+  KUBERNETES_SERVICE_HOST=10.0.0.1 run -0 dybatpho::is_container
+}
+
+@test "dybatpho::is_wsl reads the interop variables of the subsystem" {
+  WSL_DISTRO_NAME=Ubuntu run -0 dybatpho::is_wsl
+  WSL_INTEROP=/run/WSL/1 run -0 dybatpho::is_wsl
+}
+
+@test "dybatpho::is_ci recognizes a service and honors a disabled one" {
+  CI=true run -0 dybatpho::is_ci
+  GITHUB_ACTIONS=true run -0 dybatpho::is_ci
+  # A service that sets `CI=false` means it, and nothing else is consulted for
+  # it -- the suite itself runs on CI, so the negative case needs a clean shell.
+  CI=false run ! dybatpho::is_ci
+  run ! _child \
+    "unset CI GITHUB_ACTIONS GITLAB_CI JENKINS_URL BUILDKITE CIRCLECI TRAVIS TEAMCITY_VERSION TF_BUILD" \
+    "dybatpho::is_ci"
+}
