@@ -152,3 +152,33 @@ func TestParsedFolderPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestParseConfig_PriorityWinsDuplicateShortName(t *testing.T) {
+	tmpDir := t.TempDir()
+	low := filepath.Join(tmpDir, "low", "myapp")
+	high := filepath.Join(tmpDir, "high", "myapp")
+	for _, dir := range []string{low, high} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	config := lazypath.Config{
+		Folders: []lazypath.Folder{
+			{Path: filepath.Join(tmpDir, "low"), IsWorkspace: true, Priority: 1},
+			{Path: filepath.Join(tmpDir, "high"), IsWorkspace: true, Priority: 10},
+		},
+	}
+
+	result, err := ParseConfig(config)
+	if err != nil {
+		t.Fatalf("ParseConfig() error = %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("ParseConfig() returned %d folders, want 1", len(result))
+	}
+	if result[0].Path != high {
+		t.Errorf("ParseConfig() kept %s, want the higher priority %s", result[0].Path, high)
+	}
+}

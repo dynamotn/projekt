@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
@@ -17,11 +18,14 @@ type ParsedFolder struct {
 	Workspace string
 }
 
-// ParseConfig parses the configuration and returns a list of parsed folders
+// ParseConfig parses the configuration and returns a list of parsed folders.
+//
+// Folders are visited from the highest priority to the lowest, so that the
+// higher priority folder wins when two folders resolve to the same short name.
 func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 	var result []ParsedFolder
 
-	for _, folder := range c.Folders {
+	for _, folder := range sortFoldersByPriority(c.Folders) {
 		prefix := ""
 		if folder.Prefix != "" {
 			prefix = folder.Prefix + "-"
@@ -60,6 +64,17 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 	}
 
 	return result, nil
+}
+
+// sortFoldersByPriority returns the folders ordered by descending priority,
+// keeping the configuration order between folders of equal priority.
+func sortFoldersByPriority(folders []lazypath.Folder) []lazypath.Folder {
+	sorted := make([]lazypath.Folder, len(folders))
+	copy(sorted, folders)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].Priority > sorted[j].Priority
+	})
+	return sorted
 }
 
 func appendToParsedFolder(list []ParsedFolder, prefix string, folderPath string, childFolderName string) []ParsedFolder {
