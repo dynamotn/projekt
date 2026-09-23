@@ -72,7 +72,45 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 		}
 	}
 
-	return result, nil
+	return appendWorktrees(result, shortNames, c.Worktrees), nil
+}
+
+// appendWorktrees adds the configured working trees, each under
+// `<project>@<name>`.
+//
+// They go in last and through the same duplicate check as everything else, so
+// a folder can never lose its name to one. Adding them here is what makes
+// `pj myapp@feature`, its completion and the listings work without any of
+// them knowing that working trees exist.
+func appendWorktrees(list []ParsedFolder, shortNames map[string]struct{}, worktrees []lazypath.Worktree) []ParsedFolder {
+	if len(worktrees) == 0 {
+		return list
+	}
+
+	projects := make(map[string]ParsedFolder, len(list))
+	for _, pFolder := range list {
+		projects[pFolder.ShortName] = pFolder
+	}
+
+	for _, worktree := range worktrees {
+		if err := worktree.Validate(); err != nil {
+			cli.Warn("Skipping worktree %s: %v", worktree.ShortName(), err)
+			continue
+		}
+		project, ok := projects[worktree.Project]
+		if !ok {
+			// The project was renamed or removed. `projekt config check` says
+			// so; resolving a name that leads nowhere would be worse.
+			cli.Debug("Worktree %s has no project named %q", worktree.ShortName(), worktree.Project)
+			continue
+		}
+		// It carries the project's tags: it is the same project, on another
+		// branch, so `--tags work` has to reach it too.
+		list = appendToParsedFolder(list, shortNames, worktree.ShortName(),
+			filepath.Clean(worktree.Path), project.Path, project.Tags)
+	}
+
+	return list
 }
 
 // sortFoldersByPriority returns the folders ordered by descending priority,

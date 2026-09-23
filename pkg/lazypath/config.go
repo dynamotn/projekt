@@ -34,6 +34,9 @@ func LoadError() error {
 type Config struct {
 	Folders    []Folder    `yaml:"folders" mapstructure:"folders"`
 	GitServers []GitServer `yaml:"gitServers" mapstructure:"gitServers"`
+	// Worktrees are extra working trees of a project, reachable by name like
+	// any other project folder.
+	Worktrees []Worktree `yaml:"worktrees,omitempty" mapstructure:"worktrees"`
 }
 
 type GitServer struct {
@@ -148,6 +151,8 @@ func (c *Config) Diagnose() []Diagnostic {
 			diags = append(diags, diagnoseGit(folder, servers)...)
 		}
 	}
+
+	c.diagnoseWorktrees(errorf, warnf)
 
 	return diags
 }
@@ -337,4 +342,40 @@ func createEmptyConfig(path string) error {
 		return err
 	}
 	return f.Close()
+}
+
+// diagnoseWorktrees reports the problems of the configured working trees.
+//
+// A working tree hangs off a project's short name, which nothing stops from
+// being renamed, so a dangling one is worth saying out loud rather than
+// leaving to be discovered by a jump that goes nowhere.
+func (c *Config) diagnoseWorktrees(errorf, warnf func(string, ...any)) {
+	names := make(map[string]struct{}, len(c.Worktrees))
+	paths := make(map[string]struct{}, len(c.Worktrees))
+
+	for i, worktree := range c.Worktrees {
+		if err := worktree.Validate(); err != nil {
+			errorf("worktree at index %d %v", i, err)
+			continue
+		}
+
+		if _, dup := names[worktree.ShortName()]; dup {
+			errorf("worktree %s is defined more than once", worktree.ShortName())
+		}
+		names[worktree.ShortName()] = struct{}{}
+
+		key := cleanPath(worktree.Path)
+		if _, dup := paths[key]; dup {
+			errorf("worktree path %s is used more than once", worktree.Path)
+		}
+		paths[key] = struct{}{}
+
+		if _, err := os.Stat(worktree.Path); err != nil {
+			if os.IsNotExist(err) {
+				warnf("worktree %s does not exist on disk: %s", worktree.ShortName(), worktree.Path)
+			} else {
+				warnf("cannot access worktree %s: %v", worktree.ShortName(), err)
+			}
+		}
+	}
 }

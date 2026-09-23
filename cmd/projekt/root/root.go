@@ -8,6 +8,7 @@ import (
 
 	config "gitlab.com/dynamo.foss/projekt/cmd/projekt/config"
 	folder "gitlab.com/dynamo.foss/projekt/cmd/projekt/folder"
+	worktree "gitlab.com/dynamo.foss/projekt/cmd/projekt/worktree"
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
@@ -31,6 +32,7 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 	rootCmd.AddCommand(
 		NewInitCmd(out),
 		folder.NewFolderCmd(out),
+		worktree.NewWorktreeCmd(out),
 		config.NewConfigCmd(out),
 		NewTemplateCmd(out),
 		NewBoilerplateCmd(out),

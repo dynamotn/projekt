@@ -35,6 +35,7 @@ A single static Go binary, no daemon, no index to rebuild — your config file *
 - **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time. Already have them cloned? `--discover` writes that config for you.
 - **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
 - **Tagged, not just named** — label folders `work`, `oss`, `go`, then point any command at a subset with `--tags`.
+- **Two branches at once** — `worktree add` checks out a branch beside your work and gives it a name, so `pj myapp@PROJ-123` is the whole context switch.
 - **Your config is safe** — an unreadable or malformed config file is never silently overwritten, and `config check` tells you what is wrong with it.
 - **Templates that name their own files** — `t new` renders a Go template, or a whole folder of them, from a store you own; the path segments are templates too.
 - **New projects that are already on the map** — `b new` renders a boilerplate into the right workspace and registers it, so the next thing you type is `pj`.
@@ -133,6 +134,9 @@ folders:
 | `regex`        | Workspace only — which children count. Defaults to `^[^.].+`, so dotfiles are skipped |
 | `priority`     | Tie-breaker: when two folders resolve to the same short name, the higher one wins     |
 | `tags`         | Labels to filter on later. A workspace passes its tags to every folder inside it      |
+
+A `worktrees:` section holds the working trees `projekt worktree` creates; see
+[doc/worktrees.md](doc/worktrees.md).
 
 ## 🏷 Tags
 
@@ -275,6 +279,33 @@ cloned. An existing worktree is left alone — it may well have work in progress
 in it — and a branch that already exists is checked out rather than recreated.
 Listing `origin` under `remotes` overrides what the clone set up.
 
+## 🌳 Working trees
+
+Reviewing a pull request while your own branch is half-finished is the moment
+`git stash` was invented for, and the moment it is worst at. A working tree is
+another checkout of the same repository, on another branch — nothing to stash,
+nothing to rebuild:
+
+```bash
+projekt worktree add myapp feature/PROJ-123
+pj myapp@PROJ-123
+```
+
+The name after the `@` comes from the last element of the branch, because that
+is the part that tells two branches apart. They live in
+`<project>/.worktrees/` unless `--path` says otherwise, and the branch is
+created from HEAD when it does not exist yet.
+
+```bash
+projekt worktree list            # with what git makes of each one
+projekt worktree remove myapp@PROJ-123
+```
+
+Nothing in the shell integration knows about them: a working tree resolves
+through the same short names as everything else, so `pj`, its completion and
+`--tags` pick it up on their own. See
+[doc/worktrees.md](doc/worktrees.md).
+
 ## 🧩 Templates
 
 `t` (also `projekt template`) renders [Go templates](https://pkg.go.dev/text/template),
@@ -376,6 +407,9 @@ ships in [examples/boilerplates](examples/boilerplates); see
 | [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |
 | [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos, remotes and worktrees on disk |
 | [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories in parallel, with `--dry-run`   |
+| [`worktree add`](doc/projekt_worktree_add.md)        | Check out a branch beside your work, reachable as `pj p@name` |
+| [`worktree list`](doc/projekt_worktree_list.md)      | List the working trees, and what git makes of them          |
+| [`worktree remove`](doc/projekt_worktree_remove.md)  | Put one away; the branch is left alone                      |
 | [`config check`](doc/projekt_config_check.md)        | Validate the config file; exits non-zero, for CI           |
 | [`config edit`](doc/projekt_config_edit.md)          | Open the config in `$EDITOR`, re-validate on exit          |
 | [`init`](doc/projekt_init.md)                        | Emit the shell integration for bash, zsh or fish      |

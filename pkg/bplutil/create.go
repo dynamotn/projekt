@@ -5,10 +5,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
 )
@@ -151,37 +150,12 @@ func registration(o CreateOptions, path string) (register bool, coveredBy, cover
 	if exists, _ := lazypath.CheckFolderExist(path); exists {
 		return false, "", "", "it is already in the configuration"
 	}
-	if workspace, ok := coveringWorkspace(path); ok {
+	if workspace, ok := folderutil.CoveringWorkspace(path); ok {
 		// A workspace already turns every child into a project, so an entry
 		// of its own would only be a second name for the same folder.
 		return false, workspace.Path, workspace.Prefix, ""
 	}
 	return true, "", "", ""
-}
-
-// coveringWorkspace returns the configured workspace that already reaches a
-// path, and whether one does.
-func coveringWorkspace(path string) (lazypath.Folder, bool) {
-	parent := filepath.Dir(filepath.Clean(path))
-	base := filepath.Base(filepath.Clean(path))
-
-	for _, folder := range lazypath.GetConfig().Folders {
-		if !folder.IsWorkspace {
-			continue
-		}
-		if filepath.Clean(folder.Path) != parent {
-			continue
-		}
-		re, err := regexp.Compile(folder.GetRegexMatch())
-		if err != nil {
-			cli.Debug("Cannot compile regex of workspace %s: %v", folder.Path, err)
-			continue
-		}
-		if re.MatchString(base) {
-			return folder, true
-		}
-	}
-	return lazypath.Folder{}, false
 }
 
 // Vars returns what the recipe asks for: its own list, or what the template

@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
 
@@ -68,7 +69,7 @@ func runConfigCheck(out io.Writer, strict bool) error {
 	}
 
 	config := loadConfigQuietly()
-	diags := config.Diagnose()
+	diags := append(config.Diagnose(), folderutil.DiagnoseWorktrees(config)...)
 
 	var errorCount, warningCount int
 	for _, diag := range diags {
@@ -82,8 +83,8 @@ func runConfigCheck(out io.Writer, strict bool) error {
 		}
 	}
 
-	if _, err := fmt.Fprintf(out, "%d folder(s), %d git server(s): %d error(s), %d warning(s)\n",
-		len(config.Folders), len(config.GitServers), errorCount, warningCount); err != nil {
+	if _, err := fmt.Fprintf(out, "%d folder(s), %d worktree(s), %d git server(s): %d error(s), %d warning(s)\n",
+		len(config.Folders), len(config.Worktrees), len(config.GitServers), errorCount, warningCount); err != nil {
 		return err
 	}
 
