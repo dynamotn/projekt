@@ -3,7 +3,10 @@ package folderutil
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -770,4 +773,304 @@ func TestRunSyncJobs_NoJobs(t *testing.T) {
 	if errs := runSyncJobs(nil, SyncOptions{Forks: 4}); errs != nil {
 		t.Errorf("runSyncJobs(nil) = %v, want nil", errs)
 	}
+}
+
+// initRepo creates a real repository with one commit, which is the least a
+// worktree needs to be attachable.
+func initRepo(t *testing.T, path string) {
+	t.Helper()
+
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	mustGit(t, path, "init", "--initial-branch=main")
+	// A commit needs an identity, and the one on the machine running the tests
+	// is none of this test's business.
+	mustGit(t, path, "config", "user.email", "test@example.com")
+	mustGit(t, path, "config", "user.name", "Test")
+
+	if err := os.WriteFile(filepath.Join(path, "README"), []byte("hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, path, "add", "README")
+	mustGit(t, path, "commit", "-m", "initial")
+}
+
+func mustGit(t *testing.T, repoPath string, args ...string) {
+	t.Helper()
+
+	if err := runGit(repoPath, args...); err != nil {
+		t.Fatalf("git %v in %s: %v", args, repoPath, err)
+	}
+}
+
+func TestEnsureRemotes(t *testing.T) {
+	repoPath := filepath.Join(t.TempDir(), "repo")
+	initRepo(t, repoPath)
+
+	job := syncJob{
+		repoPath: repoPath,
+		repo: lazypath.GitRepo{
+			Name:    "repo",
+			Remotes: map[string]string{"upstream": "https://example.com/up.git"},
+		},
+	}
+
+	if err := ensureRemotes(job, false); err != nil {
+		t.Fatalf("ensureRemotes() error = %v", err)
+	}
+
+	remotes, err := gitRemotes(repoPath)
+	if err != nil {
+		t.Fatalf("gitRemotes() error = %v", err)
+	}
+	if got := remotes["upstream"]; got != "https://example.com/up.git" {
+		t.Fatalf("upstream = %q, want the configured URL", got)
+	}
+
+	// Running again with the same configuration must be a no-op rather than an
+	// error: sync is expected to be safe to repeat.
+	if err := ensureRemotes(job, false); err != nil {
+		t.Fatalf("second ensureRemotes() error = %v", err)
+	}
+
+	// A changed URL is repointed, not duplicated or left stale.
+	job.repo.Remotes["upstream"] = "https://example.com/moved.git"
+	if err := ensureRemotes(job, false); err != nil {
+		t.Fatalf("ensureRemotes() after URL change error = %v", err)
+	}
+
+	remotes, err = gitRemotes(repoPath)
+	if err != nil {
+		t.Fatalf("gitRemotes() error = %v", err)
+	}
+	if got := remotes["upstream"]; got != "https://example.com/moved.git" {
+		t.Errorf("upstream = %q, want the updated URL", got)
+	}
+}
+
+func TestEnsureRemotes_DryRunChangesNothing(t *testing.T) {
+	repoPath := filepath.Join(t.TempDir(), "repo")
+	initRepo(t, repoPath)
+
+	job := syncJob{
+		repoPath: repoPath,
+		repo: lazypath.GitRepo{
+			Name:    "repo",
+			Remotes: map[string]string{"upstream": "https://example.com/up.git"},
+		},
+	}
+
+	if err := ensureRemotes(job, true); err != nil {
+		t.Fatalf("ensureRemotes(dryRun) error = %v", err)
+	}
+
+	remotes, err := gitRemotes(repoPath)
+	if err != nil {
+		t.Fatalf("gitRemotes() error = %v", err)
+	}
+	if _, present := remotes["upstream"]; present {
+		t.Error("a dry run added the remote")
+	}
+}
+
+func TestEnsureRemotes_NoRemotesConfigured(t *testing.T) {
+	// Nothing configured means nothing to do, and in particular no git call
+	// against a path that need not even be a repository.
+	job := syncJob{repoPath: filepath.Join(t.TempDir(), "absent"), repo: lazypath.GitRepo{Name: "repo"}}
+
+	if err := ensureRemotes(job, false); err != nil {
+		t.Errorf("ensureRemotes() with no remotes = %v, want nil", err)
+	}
+}
+
+func TestEnsureWorktrees(t *testing.T) {
+	tmpDir := t.TempDir()
+	repoPath := filepath.Join(tmpDir, "repo")
+	initRepo(t, repoPath)
+
+	worktreePath := filepath.Join(tmpDir, "repo-next")
+	job := syncJob{
+		repoPath: repoPath,
+		repo: lazypath.GitRepo{
+			Name:      "repo",
+			Worktrees: []lazypath.GitWorktree{{Path: "repo-next", Branch: "next"}},
+		},
+		worktreePaths: []string{worktreePath},
+	}
+
+	if err := ensureWorktrees(job, false); err != nil {
+		t.Fatalf("ensureWorktrees() error = %v", err)
+	}
+
+	if _, err := os.Stat(worktreePath); err != nil {
+		t.Fatalf("worktree was not created: %v", err)
+	}
+
+	// The branch has to be the configured one, not one git invented from the
+	// directory name.
+	branch, err := gitOutputForTest(worktreePath, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		t.Fatalf("cannot read worktree branch: %v", err)
+	}
+	if branch != "next" {
+		t.Errorf("worktree is on %q, want next", branch)
+	}
+
+	// Repeating must not fail on the worktree that is already there.
+	if err := ensureWorktrees(job, false); err != nil {
+		t.Errorf("second ensureWorktrees() error = %v", err)
+	}
+}
+
+func TestEnsureWorktrees_ExistingBranchKeepsHistory(t *testing.T) {
+	tmpDir := t.TempDir()
+	repoPath := filepath.Join(tmpDir, "repo")
+	initRepo(t, repoPath)
+
+	// A branch that already exists must be checked out, not recreated: -b on an
+	// existing branch fails outright.
+	mustGit(t, repoPath, "branch", "existing")
+
+	worktreePath := filepath.Join(tmpDir, "repo-existing")
+	job := syncJob{
+		repoPath: repoPath,
+		repo: lazypath.GitRepo{
+			Name:      "repo",
+			Worktrees: []lazypath.GitWorktree{{Path: "repo-existing", Branch: "existing"}},
+		},
+		worktreePaths: []string{worktreePath},
+	}
+
+	if err := ensureWorktrees(job, false); err != nil {
+		t.Fatalf("ensureWorktrees() error = %v", err)
+	}
+
+	branch, err := gitOutputForTest(worktreePath, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		t.Fatalf("cannot read worktree branch: %v", err)
+	}
+	if branch != "existing" {
+		t.Errorf("worktree is on %q, want existing", branch)
+	}
+}
+
+func TestEnsureWorktrees_DryRunChangesNothing(t *testing.T) {
+	tmpDir := t.TempDir()
+	repoPath := filepath.Join(tmpDir, "repo")
+	initRepo(t, repoPath)
+
+	worktreePath := filepath.Join(tmpDir, "repo-next")
+	job := syncJob{
+		repoPath: repoPath,
+		repo: lazypath.GitRepo{
+			Name:      "repo",
+			Worktrees: []lazypath.GitWorktree{{Path: "repo-next", Branch: "next"}},
+		},
+		worktreePaths: []string{worktreePath},
+	}
+
+	if err := ensureWorktrees(job, true); err != nil {
+		t.Fatalf("ensureWorktrees(dryRun) error = %v", err)
+	}
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Error("a dry run created the worktree")
+	}
+}
+
+func TestEnsureWorktrees_BranchlessIsSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+	repoPath := filepath.Join(tmpDir, "repo")
+	initRepo(t, repoPath)
+
+	worktreePath := filepath.Join(tmpDir, "repo-next")
+	job := syncJob{
+		repoPath: repoPath,
+		repo: lazypath.GitRepo{
+			Name:      "repo",
+			Worktrees: []lazypath.GitWorktree{{Path: "repo-next"}},
+		},
+		worktreePaths: []string{worktreePath},
+	}
+
+	// Skipped with a warning rather than failing the whole sync: the config
+	// check is where that mistake gets reported as an error.
+	if err := ensureWorktrees(job, false); err != nil {
+		t.Errorf("ensureWorktrees() = %v, want the branchless worktree skipped", err)
+	}
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Error("a worktree with no branch was created anyway")
+	}
+}
+
+func TestWorktreeTargetPath(t *testing.T) {
+	folder := lazypath.Folder{Path: "/home/me/work"}
+
+	tests := []struct {
+		name     string
+		worktree lazypath.GitWorktree
+		want     string
+	}{
+		{
+			name:     "relative to the folder, beside the repositories",
+			worktree: lazypath.GitWorktree{Path: "api-next"},
+			want:     "/home/me/work/api-next",
+		},
+		{
+			name:     "an absolute path is left alone",
+			worktree: lazypath.GitWorktree{Path: "/elsewhere/api-next"},
+			want:     "/elsewhere/api-next",
+		},
+		{
+			name:     "a nested relative path still resolves under the folder",
+			worktree: lazypath.GitWorktree{Path: "trees/api-next"},
+			want:     "/home/me/work/trees/api-next",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := worktreeTargetPath(folder, tt.worktree); got != tt.want {
+				t.Errorf("worktreeTargetPath() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGitRemotes(t *testing.T) {
+	repoPath := filepath.Join(t.TempDir(), "repo")
+	initRepo(t, repoPath)
+
+	mustGit(t, repoPath, "remote", "add", "origin", "https://example.com/origin.git")
+	mustGit(t, repoPath, "remote", "add", "upstream", "https://example.com/upstream.git")
+
+	remotes, err := gitRemotes(repoPath)
+	if err != nil {
+		t.Fatalf("gitRemotes() error = %v", err)
+	}
+
+	want := map[string]string{
+		"origin":   "https://example.com/origin.git",
+		"upstream": "https://example.com/upstream.git",
+	}
+	if !reflect.DeepEqual(remotes, want) {
+		t.Errorf("gitRemotes() = %v, want %v", remotes, want)
+	}
+}
+
+func TestGitRemotes_NotARepo(t *testing.T) {
+	if _, err := gitRemotes(filepath.Join(t.TempDir(), "absent")); err == nil {
+		t.Error("gitRemotes() on a missing repository returned no error")
+	}
+}
+
+// gitOutputForTest reads a single-line git result from a repository.
+func gitOutputForTest(repoPath string, args ...string) (string, error) {
+	cmd := exec.Command("git", append([]string{"-C", repoPath}, args...)...)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }

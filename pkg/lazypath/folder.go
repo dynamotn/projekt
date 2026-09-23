@@ -2,6 +2,7 @@ package lazypath
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/samber/lo"
@@ -12,9 +13,41 @@ import (
 
 const defaultRegexWorkspace = `^[^.].+`
 
+// GitWorktree is an extra working tree checked out from a repository, so that
+// several branches of it can be open at once.
+type GitWorktree struct {
+	// Path is where the working tree lives, relative to the folder the
+	// repository belongs to, exactly like GitRepo.Path.
+	Path string `yaml:"path" mapstructure:"path"`
+	// Branch is the branch to check out. It is required: without it git would
+	// invent a branch name from the path, which is rarely what was meant.
+	Branch string `yaml:"branch" mapstructure:"branch"`
+}
+
 type GitRepo struct {
 	Name string `yaml:"name" mapstructure:"name"`
 	Path string `yaml:"path" mapstructure:"path"`
+	// Remotes are extra remotes to keep configured on the repository, by name.
+	// The clone already sets up origin; listing origin here overrides it.
+	Remotes map[string]string `yaml:"remotes,omitempty" mapstructure:"remotes"`
+	// Worktrees are extra working trees to create for this repository.
+	Worktrees []GitWorktree `yaml:"worktrees,omitempty" mapstructure:"worktrees"`
+}
+
+// RemoteNames returns the configured remote names in a fixed order, so that
+// syncing and checking report them the same way on every run.
+func (r *GitRepo) RemoteNames() []string {
+	if len(r.Remotes) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(r.Remotes))
+	for name := range r.Remotes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	return names
 }
 
 type GitConfig struct {

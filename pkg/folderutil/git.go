@@ -47,6 +47,9 @@ type syncJob struct {
 	server   *lazypath.GitServer
 	repo     lazypath.GitRepo
 	repoPath string
+	// worktreePaths is where each of repo.Worktrees belongs, resolved against
+	// the folder while the configuration is still being read.
+	worktreePaths []string
 }
 
 // SyncGitRepos synchronizes all Git repositories in the configuration.
@@ -102,11 +105,17 @@ func planFolderSync(folder lazypath.Folder) ([]syncJob, error) {
 			continue
 		}
 
+		worktreePaths := make([]string, len(repo.Worktrees))
+		for i, worktree := range repo.Worktrees {
+			worktreePaths[i] = worktreeTargetPath(folder, worktree)
+		}
+
 		jobs = append(jobs, syncJob{
-			group:    folder.Git.Group,
-			server:   gitServer,
-			repo:     repo,
-			repoPath: repoTargetPath(folder, repo),
+			group:         folder.Git.Group,
+			server:        gitServer,
+			repo:          repo,
+			repoPath:      repoTargetPath(folder, repo),
+			worktreePaths: worktreePaths,
 		})
 	}
 
@@ -188,9 +197,24 @@ func runSyncJobsWith(jobs []syncJob, opts SyncOptions, run func(syncJob, bool) e
 	return errs
 }
 
-// syncRepo clones one repository when it is missing. Several goroutines run it
-// at once, so it must touch nothing outside its own job.
+// syncRepo brings one repository in line with its configuration: cloned when
+// missing, then its extra remotes and worktrees in place. Several goroutines
+// run it at once, so it must touch nothing outside its own job.
 func syncRepo(job syncJob, dryRun bool) error {
+	if err := cloneIfMissing(job, dryRun); err != nil {
+		return err
+	}
+
+	// Remotes and worktrees are reconciled on every run, not only right after
+	// cloning: adding one to the configuration of a repository that is already
+	// on disk is the ordinary way to get it.
+	return errors.Join(
+		ensureRemotes(job, dryRun),
+		ensureWorktrees(job, dryRun),
+	)
+}
+
+func cloneIfMissing(job syncJob, dryRun bool) error {
 	if _, err := os.Stat(job.repoPath); !os.IsNotExist(err) {
 		// Repository exists, check if it's valid
 		if dryRun {
@@ -223,6 +247,97 @@ func syncRepo(job syncJob, dryRun bool) error {
 	cli.Info("Successfully cloned %s", job.repo.Name)
 
 	return nil
+}
+
+// ensureRemotes adds the configured remotes that are missing and repoints the
+// ones aiming somewhere else.
+func ensureRemotes(job syncJob, dryRun bool) error {
+	names := job.repo.RemoteNames()
+	if len(names) == 0 {
+		return nil
+	}
+
+	if dryRun {
+		for _, name := range names {
+			cli.Info("[DRY RUN] Would set remote %s -> %s in %s", name, job.repo.Remotes[name], job.repoPath)
+		}
+		return nil
+	}
+
+	existing, err := gitRemotes(job.repoPath)
+	if err != nil {
+		return fmt.Errorf("read remotes of %s: %w", job.repo.Name, err)
+	}
+
+	var errs []error
+	for _, name := range names {
+		want := job.repo.Remotes[name]
+		current, present := existing[name]
+
+		switch {
+		case !present:
+			if err := runGit(job.repoPath, "remote", "add", name, want); err != nil {
+				errs = append(errs, fmt.Errorf("add remote %s to %s: %w", name, job.repo.Name, err))
+				continue
+			}
+			cli.Info("Added remote %s -> %s in %s", name, want, job.repo.Name)
+		case current != want:
+			if err := runGit(job.repoPath, "remote", "set-url", name, want); err != nil {
+				errs = append(errs, fmt.Errorf("update remote %s of %s: %w", name, job.repo.Name, err))
+				continue
+			}
+			cli.Info("Updated remote %s -> %s in %s", name, want, job.repo.Name)
+		default:
+			cli.Debug("Remote %s of %s already points at %s", name, job.repo.Name, want)
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+// ensureWorktrees creates the configured working trees that are not there yet.
+// An existing one is left alone: it may well have work in progress in it.
+func ensureWorktrees(job syncJob, dryRun bool) error {
+	var errs []error
+
+	for i, worktree := range job.repo.Worktrees {
+		path := job.worktreePaths[i]
+
+		if strings.TrimSpace(worktree.Branch) == "" {
+			cli.Warn("Skipping worktree %s of %s: no branch configured", path, job.repo.Name)
+			continue
+		}
+		if dryRun {
+			cli.Info("[DRY RUN] Would add worktree %s (%s) for %s", path, worktree.Branch, job.repo.Name)
+			continue
+		}
+		if _, err := os.Stat(path); err == nil {
+			cli.Debug("Worktree %s of %s already exists", path, job.repo.Name)
+			continue
+		}
+
+		if err := addWorktree(job.repoPath, path, worktree.Branch); err != nil {
+			errs = append(errs, fmt.Errorf("add worktree %s of %s: %w", path, job.repo.Name, err))
+			continue
+		}
+		cli.Info("Added worktree %s (%s) for %s", path, worktree.Branch, job.repo.Name)
+	}
+
+	return errors.Join(errs...)
+}
+
+func addWorktree(repoPath, worktreePath, branch string) error {
+	// `git worktree add <path> <branch>` requires the branch to exist already,
+	// and -b creates it. Checking first means an existing branch keeps its
+	// history instead of the command failing.
+	if branchExists(repoPath, branch) {
+		return runGit(repoPath, "worktree", "add", worktreePath, branch)
+	}
+	return runGit(repoPath, "worktree", "add", "-b", branch, worktreePath)
+}
+
+func branchExists(repoPath, branch string) bool {
+	return runGit(repoPath, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch) == nil
 }
 
 // CheckOptions controls which folders CheckGitReposStatus reports on.
@@ -274,23 +389,68 @@ func checkFolderGitRepos(folder lazypath.Folder) error {
 
 		if _, err := os.Stat(repoPath); os.IsNotExist(err) {
 			cli.Warn("  [MISSING] %s (%s)", repo.Name, repoPath)
-		} else {
-			// Check if it's a valid Git repository
-			gitDir := filepath.Join(repoPath, ".git")
-			if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-				cli.Warn("  [NOT GIT] %s (%s)", repo.Name, repoPath)
-			} else {
-				// Check remote URL
-				if err := checkGitRemote(repoPath, gitServer, folder.Git, repo); err != nil {
-					cli.Warn("  [WARNING] %s: %v", repo.Name, err)
-				} else {
-					cli.Info("  [OK] %s (%s)", repo.Name, repoPath)
-				}
-			}
+			continue
 		}
+
+		// Check if it's a valid Git repository
+		gitDir := filepath.Join(repoPath, ".git")
+		if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+			cli.Warn("  [NOT GIT] %s (%s)", repo.Name, repoPath)
+			continue
+		}
+
+		// Check remote URL
+		if err := checkGitRemote(repoPath, gitServer, folder.Git, repo); err != nil {
+			cli.Warn("  [WARNING] %s: %v", repo.Name, err)
+		} else {
+			cli.Info("  [OK] %s (%s)", repo.Name, repoPath)
+		}
+
+		checkExtraRemotes(repoPath, repo)
+		checkWorktrees(folder, repo)
 	}
 
 	return nil
+}
+
+// checkExtraRemotes reports on the remotes the configuration asks for beyond
+// the one the clone set up.
+func checkExtraRemotes(repoPath string, repo lazypath.GitRepo) {
+	names := repo.RemoteNames()
+	if len(names) == 0 {
+		return
+	}
+
+	existing, err := gitRemotes(repoPath)
+	if err != nil {
+		cli.Warn("    [WARNING] %s: cannot read remotes: %v", repo.Name, err)
+		return
+	}
+
+	for _, name := range names {
+		want := repo.Remotes[name]
+		switch current, present := existing[name]; {
+		case !present:
+			cli.Warn("    [REMOTE MISSING] %s -> %s", name, want)
+		case current != want:
+			cli.Warn("    [REMOTE MISMATCH] %s: got %s, expected %s", name, current, want)
+		default:
+			cli.Info("    [REMOTE OK] %s -> %s", name, want)
+		}
+	}
+}
+
+// checkWorktrees reports which configured working trees are not on disk.
+func checkWorktrees(folder lazypath.Folder, repo lazypath.GitRepo) {
+	for _, worktree := range repo.Worktrees {
+		path := worktreeTargetPath(folder, worktree)
+
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			cli.Warn("    [WORKTREE MISSING] %s (%s)", path, worktree.Branch)
+			continue
+		}
+		cli.Info("    [WORKTREE OK] %s (%s)", path, worktree.Branch)
+	}
 }
 
 func buildGitURL(server *lazypath.GitServer, group string, repoName string) string {
@@ -349,6 +509,58 @@ func repoTargetPath(folder lazypath.Folder, repo lazypath.GitRepo) string {
 		relPath = repo.Name
 	}
 	return filepath.Join(folder.Path, relPath)
+}
+
+// worktreeTargetPath returns where an extra working tree belongs. A relative
+// path is resolved against the folder, like a repo's own path, so that a
+// worktree ends up beside the repositories rather than inside one of them.
+func worktreeTargetPath(folder lazypath.Folder, worktree lazypath.GitWorktree) string {
+	if filepath.IsAbs(worktree.Path) {
+		return filepath.Clean(worktree.Path)
+	}
+	return filepath.Join(folder.Path, worktree.Path)
+}
+
+// runGit runs a git command in a repository, discarding its output. Concurrent
+// jobs would interleave it on the shared streams, and the error carries what
+// went wrong anyway.
+func runGit(repoPath string, args ...string) error {
+	cmd := exec.Command("git", append([]string{"-C", repoPath}, args...)...)
+
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+
+	if err := cmd.Run(); err != nil {
+		if text := strings.TrimSpace(output.String()); text != "" {
+			return fmt.Errorf("%w: %s", err, text)
+		}
+		return err
+	}
+
+	return nil
+}
+
+// gitRemotes reads the remotes configured on a repository, by name.
+func gitRemotes(repoPath string) (map[string]string, error) {
+	cmd := exec.Command("git", "-C", repoPath, "remote", "-v")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list remotes: %w", err)
+	}
+
+	// Each remote appears twice, as "name\turl (fetch)" and "(push)". The fetch
+	// URL is the one a clone and a set-url agree on, so take that one.
+	remotes := make(map[string]string)
+	for _, line := range strings.Split(string(output), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 || fields[2] != "(fetch)" {
+			continue
+		}
+		remotes[fields[0]] = fields[1]
+	}
+
+	return remotes, nil
 }
 
 func getGitURLs(server *lazypath.GitServer, group string, repoName string) (primary string, fallback string) {

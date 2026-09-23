@@ -13,8 +13,8 @@
 ## ✨ From this
 
 ```bash
-cd ~/work/clients/acme/services/backend-api
-cd ../../../../oss/some-library
+cd ~/work/clients/acme/services/backend-api || exit
+cd ../../../../oss/some-library || exit
 git clone git@github.com:myorg/myteam/frontend.git ~/work/myorg/frontend
 ```
 
@@ -35,7 +35,7 @@ A single static Go binary, no daemon, no index to rebuild — your config file *
 - **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time. Already have them cloned? `--discover` writes that config for you.
 - **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
 - **Tagged, not just named** — label folders `work`, `oss`, `go`, then point any command at a subset with `--tags`.
-- **Your config is safe** — an unreadable or malformed config file is never silently overwritten.
+- **Your config is safe** — an unreadable or malformed config file is never silently overwritten, and `config check` tells you what is wrong with it.
 - **Shell-native** — a one-line `eval` for bash or fish. No plugin manager required.
 - **Boring to install** — `make all`, or grab a release binary. Linux and macOS, amd64 and arm64.
 
@@ -77,10 +77,10 @@ projekt init fish | source
 **3. Register your first folder**
 
 ```bash
-projekt folder add ~/work/projekt                     # one project
-projekt folder add ~/oss -W -p oss -P 10              # a whole workspace
-projekt folder list                                   # see what resolves to what
-pj projekt                                            # and jump
+projekt folder add ~/work/projekt        # one project
+projekt folder add ~/oss -W -p oss -P 10 # a whole workspace
+projekt folder list                      # see what resolves to what
+pj projekt                               # and jump
 ```
 
 That's it. Everything below is optional.
@@ -130,9 +130,9 @@ folders:
 *acts on*. Every command that selects folders takes the same `--tags`/`-t` flag:
 
 ```bash
-projekt folder add ~/oss -W -p oss -t oss,go  # tag on the way in
-projekt folder list -t work                   # only work folders
-projekt folder sync -t work                   # only clone work repos
+projekt folder add ~/oss -W -p oss -t oss,go # tag on the way in
+projekt folder list -t work                  # only work folders
+projekt folder sync -t work                  # only clone work repos
 projekt folder check -t work
 ```
 
@@ -141,6 +141,39 @@ carrying **both**, not either. Tags are matched exactly and are case sensitive;
 surrounding whitespace is forgiven, and blank tags are ignored rather than
 treated as a filter that matches nothing. `--tags` completes from the tags
 already in your config, so a typo shows up as a missing suggestion.
+
+## 🩺 Checking and editing the config
+
+The config file is hand-written often enough to be worth checking on purpose,
+rather than finding out from the next command that behaves oddly:
+
+```bash
+projekt config check          # every problem, exits non-zero on an error
+projekt config check --strict # warnings count as errors too
+projekt config edit           # open it in $VISUAL / $EDITOR / vi
+```
+
+`config check` reports the whole list rather than stopping at the first
+problem, and separates the two kinds: an **error** makes an entry unusable (an
+invalid regex, two repos checking out to the same path, a worktree with no
+branch), a **warning** is worth knowing but harmless (a folder that does not
+exist yet, an unknown git server). Only errors fail the command, which makes it
+a usable CI gate; `--strict` tightens that.
+
+It is also the one command that still runs when the file cannot be parsed at
+all — every other command refuses, and this one tells you why:
+
+```
+$ projekt config check
+Checking /home/me/.config/projekt/config.yaml
+[ERROR] failed to read config file ...: yaml: line 1: did not find expected ',' or ']'
+```
+
+`config edit` re-reads the file once the editor exits, so a mistake is reported
+straight away instead of on your next `pj`.
+
+> Note: `projekt config check` validates the configuration. `projekt folder
+> check` inspects the Git repositories on disk. Different jobs, similar names.
 
 ## 🔗 Git integration
 
@@ -198,6 +231,39 @@ reported and skipped rather than quietly misfiled.
 Configure your `gitServers` first — that is what a remote URL is matched
 against. `--discover` needs `--as-workspace`, since it scans a workspace's
 children.
+### 🔀 Extra remotes and worktrees
+
+A clone gives you `origin`. A fork-based workflow needs more than that, and a
+long-running branch is easier to keep in its own working tree than to stash
+around. Both are declared per repository and reconciled on every sync:
+
+```yaml
+      repos:
+        - name: backend
+          path: api
+          remotes:
+            upstream: git@github.com:upstream/backend.git
+          worktrees:
+            - path: api-next # beside the repos, like `path` above
+              branch: next
+```
+
+| Key         | What it does                                                            |
+| ----------- | ------------------------------------------------------------------------ |
+| `remotes`   | Extra remotes by name. Added when missing, repointed when the URL changed |
+| `worktrees` | Extra working trees. `path` is relative to the folder, `branch` required  |
+
+```bash
+projekt folder sync --dry-run # also reports the remotes and worktrees it would set up
+projekt folder sync           # add them, on existing clones too
+projekt folder check          # [REMOTE MISSING] / [REMOTE MISMATCH] / [WORKTREE MISSING]
+```
+
+Adding a remote to a repository you cloned last year is the ordinary case, so
+sync reconciles every repository it knows about, not only the ones it just
+cloned. An existing worktree is left alone — it may well have work in progress
+in it — and a branch that already exists is checked out rather than recreated.
+Listing `origin` under `remotes` overrides what the clone set up.
 
 ## 📚 Commands
 
@@ -209,8 +275,10 @@ children.
 | [`folder list`](doc/projekt_folder_list.md)          | List every project folder, as a table, JSON or TSV         |
 | [`folder get`](doc/projekt_folder_get.md)            | Resolve a short name to a path — what `pj` calls           |
 | [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |
-| [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos exist, are repos, match remote |
+| [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos, remotes and worktrees on disk |
 | [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories in parallel, with `--dry-run`   |
+| [`config check`](doc/projekt_config_check.md)        | Validate the config file; exits non-zero, for CI           |
+| [`config edit`](doc/projekt_config_edit.md)          | Open the config in `$EDITOR`, re-validate on exit          |
 | [`init`](doc/projekt_init.md)                        | Emit the shell integration for bash or fish           |
 | [`version`](doc/projekt_version.md)                  | Version, commit, tree state and build time                 |
 
@@ -230,9 +298,9 @@ folder management above is the part that's ready for daily use.
 formats for everything else:
 
 ```bash
-projekt folder list                                   # bordered table (default)
-projekt folder list -o json | jq -r '.[].shortName'   # array of objects
-projekt folder list -o tsv --short-only --no-headers  # one short name per line
+projekt folder list                                  # bordered table (default)
+projekt folder list -o json | jq -r '.[].shortName'  # array of objects
+projekt folder list -o tsv --short-only --no-headers # one short name per line
 ```
 
 JSON keeps real types — `priority` is a number, `isWorkspace` a boolean — and
@@ -265,11 +333,11 @@ from the environment. Levels: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
 ## 🛠 Development
 
 ```bash
-make lint   # gofmt + go vet
-make test   # go test -race ./...
-make build  # all three binaries into bin/
-make doc    # regenerate the doc folder from the cobra commands
-make info   # tag, commit and tree state of this checkout
+make lint  # gofmt + go vet
+make test  # go test -race ./...
+make build # all three binaries into bin/
+make doc   # regenerate the doc folder from the cobra commands
+make info  # tag, commit and tree state of this checkout
 ```
 
 CI runs formatting, vet, build and the race-enabled test suite on every push and

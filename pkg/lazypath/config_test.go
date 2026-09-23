@@ -3,6 +3,8 @@ package lazypath
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -256,5 +258,236 @@ func TestConfigValidate_InvalidRegex(t *testing.T) {
 
 	if err := config.Validate(); err == nil {
 		t.Error("Config.Validate() = nil, want an invalid regex error")
+	}
+}
+
+// diagnosticsOf returns the messages of one severity, so a test can assert on
+// what was reported without depending on the order of the other severity.
+func diagnosticsOf(diags []Diagnostic, severity Severity) []string {
+	var messages []string
+	for _, diag := range diags {
+		if diag.Severity == severity {
+			messages = append(messages, diag.Message)
+		}
+	}
+	return messages
+}
+
+func TestConfigDiagnose(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name         string
+		config       Config
+		wantErrors   int
+		wantWarnings int
+		// containsError is a substring the error messages must mention.
+		containsError string
+	}{
+		{
+			name: "a clean config reports nothing",
+			config: Config{
+				GitServers: []GitServer{{Name: "github", HTTPS: "https://github.com"}},
+				Folders:    []Folder{{Path: tmpDir}},
+			},
+		},
+		{
+			name: "a server with no URL at all is an error",
+			config: Config{
+				GitServers: []GitServer{{Name: "github"}},
+			},
+			wantErrors:    1,
+			containsError: "neither an https nor an ssh URL",
+		},
+		{
+			name: "a missing folder is only a warning",
+			config: Config{
+				Folders: []Folder{{Path: filepath.Join(tmpDir, "nope")}},
+			},
+			wantWarnings: 1,
+		},
+		{
+			name: "a relative path warns without failing",
+			config: Config{
+				Folders: []Folder{{Path: "relative/path"}},
+			},
+			// The path is both relative and missing.
+			wantWarnings: 2,
+		},
+		{
+			name: "an unknown git server is a warning",
+			config: Config{
+				Folders: []Folder{{
+					Path: tmpDir,
+					Git:  &GitConfig{Host: "nowhere", Repos: []GitRepo{{Name: "a"}}},
+				}},
+			},
+			wantWarnings: 1,
+		},
+		{
+			name: "a repo with no name is an error",
+			config: Config{
+				GitServers: []GitServer{{Name: "github", HTTPS: "https://github.com"}},
+				Folders: []Folder{{
+					Path: tmpDir,
+					Git:  &GitConfig{Host: "github", Repos: []GitRepo{{Name: ""}}},
+				}},
+			},
+			wantErrors:    1,
+			containsError: "empty name",
+		},
+		{
+			name: "two repos checking out to the same place collide",
+			config: Config{
+				GitServers: []GitServer{{Name: "github", HTTPS: "https://github.com"}},
+				Folders: []Folder{{
+					Path: tmpDir,
+					Git: &GitConfig{Host: "github", Repos: []GitRepo{
+						{Name: "one", Path: "shared"},
+						{Name: "two", Path: "shared"},
+					}},
+				}},
+			},
+			wantErrors:    1,
+			containsError: "shared",
+		},
+		{
+			name: "a remote with an empty URL is an error",
+			config: Config{
+				GitServers: []GitServer{{Name: "github", HTTPS: "https://github.com"}},
+				Folders: []Folder{{
+					Path: tmpDir,
+					Git: &GitConfig{Host: "github", Repos: []GitRepo{
+						{Name: "one", Remotes: map[string]string{"upstream": "  "}},
+					}},
+				}},
+			},
+			wantErrors:    1,
+			containsError: "empty URL",
+		},
+		{
+			name: "a worktree with no branch is an error",
+			config: Config{
+				GitServers: []GitServer{{Name: "github", HTTPS: "https://github.com"}},
+				Folders: []Folder{{
+					Path: tmpDir,
+					Git: &GitConfig{Host: "github", Repos: []GitRepo{
+						{Name: "one", Worktrees: []GitWorktree{{Path: "one-next"}}},
+					}},
+				}},
+			},
+			wantErrors:    1,
+			containsError: "no branch",
+		},
+		{
+			name: "a worktree with no path is an error",
+			config: Config{
+				GitServers: []GitServer{{Name: "github", HTTPS: "https://github.com"}},
+				Folders: []Folder{{
+					Path: tmpDir,
+					Git: &GitConfig{Host: "github", Repos: []GitRepo{
+						{Name: "one", Worktrees: []GitWorktree{{Branch: "next"}}},
+					}},
+				}},
+			},
+			wantErrors:    1,
+			containsError: "empty path",
+		},
+		{
+			name: "a worktree colliding with a repo checkout is an error",
+			config: Config{
+				GitServers: []GitServer{{Name: "github", HTTPS: "https://github.com"}},
+				Folders: []Folder{{
+					Path: tmpDir,
+					Git: &GitConfig{Host: "github", Repos: []GitRepo{
+						{Name: "one"},
+						{Name: "two", Worktrees: []GitWorktree{{Path: "one", Branch: "next"}}},
+					}},
+				}},
+			},
+			wantErrors:    1,
+			containsError: "worktree",
+		},
+		{
+			name: "a valid remote and worktree report nothing",
+			config: Config{
+				GitServers: []GitServer{{Name: "github", HTTPS: "https://github.com"}},
+				Folders: []Folder{{
+					Path: tmpDir,
+					Git: &GitConfig{Host: "github", Repos: []GitRepo{
+						{
+							Name:      "one",
+							Remotes:   map[string]string{"upstream": "git@github.com:up/one.git"},
+							Worktrees: []GitWorktree{{Path: "one-next", Branch: "next"}},
+						},
+					}},
+				}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diags := tt.config.Diagnose()
+
+			gotErrors := diagnosticsOf(diags, SeverityError)
+			gotWarnings := diagnosticsOf(diags, SeverityWarning)
+
+			if len(gotErrors) != tt.wantErrors {
+				t.Errorf("got %d error(s) %q, want %d", len(gotErrors), gotErrors, tt.wantErrors)
+			}
+			if len(gotWarnings) != tt.wantWarnings {
+				t.Errorf("got %d warning(s) %q, want %d", len(gotWarnings), gotWarnings, tt.wantWarnings)
+			}
+
+			if tt.containsError != "" {
+				found := false
+				for _, message := range gotErrors {
+					if strings.Contains(message, tt.containsError) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("no error mentions %q, got %q", tt.containsError, gotErrors)
+				}
+			}
+
+			// Validate is the error half of the same report, so the two must
+			// never disagree about whether the config is usable.
+			if err := tt.config.Validate(); (err != nil) != (tt.wantErrors > 0) {
+				t.Errorf("Validate() = %v, but Diagnose() found %d error(s)", err, tt.wantErrors)
+			}
+		})
+	}
+}
+
+func TestSeverityString(t *testing.T) {
+	if got := SeverityError.String(); got != "ERROR" {
+		t.Errorf("SeverityError = %q, want ERROR", got)
+	}
+	if got := SeverityWarning.String(); got != "WARNING" {
+		t.Errorf("SeverityWarning = %q, want WARNING", got)
+	}
+}
+
+func TestGitRepoRemoteNames(t *testing.T) {
+	// The order has to be fixed, or sync and check would report the same
+	// repository differently from one run to the next.
+	repo := GitRepo{Remotes: map[string]string{
+		"upstream": "u",
+		"fork":     "f",
+		"origin":   "o",
+	}}
+
+	want := []string{"fork", "origin", "upstream"}
+	for range 10 {
+		if got := repo.RemoteNames(); !reflect.DeepEqual(got, want) {
+			t.Fatalf("RemoteNames() = %q, want %q", got, want)
+		}
+	}
+
+	if got := (&GitRepo{}).RemoteNames(); got != nil {
+		t.Errorf("RemoteNames() with no remotes = %q, want nil", got)
 	}
 }

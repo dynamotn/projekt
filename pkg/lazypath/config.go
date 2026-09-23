@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strings"
 
 	"github.com/OpenPeeDeeP/xdg"
 	"github.com/spf13/viper"
@@ -57,6 +58,162 @@ func unmarshalConfig() {
 	}
 }
 
+// Severity says how much a configuration problem matters.
+type Severity int
+
+const (
+	// SeverityWarning marks something suspicious that still leaves the rest of
+	// the configuration working.
+	SeverityWarning Severity = iota
+	// SeverityError marks something that makes an entry unusable.
+	SeverityError
+)
+
+func (s Severity) String() string {
+	if s == SeverityError {
+		return "ERROR"
+	}
+	return "WARNING"
+}
+
+// Diagnostic is one problem found in the configuration.
+type Diagnostic struct {
+	Severity Severity
+	Message  string
+}
+
+// Diagnose reports every problem in the configuration, errors and warnings
+// alike, in the order they were found.
+//
+// Validate reduces this to the errors, which is what loading the config cares
+// about; `projekt config check` shows the whole list, because a warning is
+// exactly the kind of thing worth catching before it surprises someone.
+func (c *Config) Diagnose() []Diagnostic {
+	var diags []Diagnostic
+	errorf := func(format string, v ...any) {
+		diags = append(diags, Diagnostic{SeverityError, fmt.Sprintf(format, v...)})
+	}
+	warnf := func(format string, v ...any) {
+		diags = append(diags, Diagnostic{SeverityWarning, fmt.Sprintf(format, v...)})
+	}
+
+	servers := make(map[string]struct{}, len(c.GitServers))
+	for i, server := range c.GitServers {
+		if server.Name == "" {
+			errorf("git server at index %d has empty name", i)
+			continue
+		}
+		if _, dup := servers[server.Name]; dup {
+			errorf("git server %q is defined more than once", server.Name)
+		}
+		servers[server.Name] = struct{}{}
+
+		if server.HTTPS == "" && server.SSH == "" {
+			errorf("git server %q has neither an https nor an ssh URL", server.Name)
+		}
+	}
+
+	paths := make(map[string]struct{}, len(c.Folders))
+	for i, folder := range c.Folders {
+		if folder.Path == "" {
+			errorf("folder at index %d has empty path", i)
+			continue
+		}
+
+		key := cleanPath(folder.Path)
+		if _, dup := paths[key]; dup {
+			errorf("folder %s is configured more than once", folder.Path)
+		}
+		paths[key] = struct{}{}
+
+		if !filepath.IsAbs(folder.Path) {
+			warnf("folder path is not absolute, it will resolve against the current directory: %s", folder.Path)
+		}
+		if _, err := os.Stat(folder.Path); err != nil {
+			if os.IsNotExist(err) {
+				warnf("folder path does not exist: %s", folder.Path)
+			} else {
+				warnf("cannot access folder %s: %v", folder.Path, err)
+			}
+		}
+		if folder.IsWorkspace {
+			if folder.Name != "" {
+				warnf("folder %s is a workspace, its name %q is ignored", folder.Path, folder.Name)
+			}
+			if _, err := regexp.Compile(folder.GetRegexMatch()); err != nil {
+				errorf("folder %s has an invalid regex %q: %v", folder.Path, folder.GetRegexMatch(), err)
+			}
+		}
+		if folder.Git != nil {
+			diags = append(diags, diagnoseGit(folder, servers)...)
+		}
+	}
+
+	return diags
+}
+
+// diagnoseGit checks the git section of one folder.
+func diagnoseGit(folder Folder, servers map[string]struct{}) []Diagnostic {
+	var diags []Diagnostic
+	errorf := func(format string, v ...any) {
+		diags = append(diags, Diagnostic{SeverityError, fmt.Sprintf(format, v...)})
+	}
+	warnf := func(format string, v ...any) {
+		diags = append(diags, Diagnostic{SeverityWarning, fmt.Sprintf(format, v...)})
+	}
+
+	if _, ok := servers[folder.Git.Host]; !ok {
+		warnf("folder %s references unknown git server %q", folder.Path, folder.Git.Host)
+	}
+
+	// Two repositories checked out to the same place would fight over it on
+	// every sync, so the collision is worth naming before it happens.
+	targets := make(map[string]string, len(folder.Git.Repos))
+	for i, repo := range folder.Git.Repos {
+		if repo.Name == "" {
+			errorf("folder %s has a repo at index %d with empty name", folder.Path, i)
+			continue
+		}
+
+		target := repo.Path
+		if target == "" {
+			target = repo.Name
+		}
+		if previous, dup := targets[target]; dup {
+			errorf("folder %s checks out both %q and %q into %q", folder.Path, previous, repo.Name, target)
+		}
+		targets[target] = repo.Name
+
+		for name, url := range repo.Remotes {
+			if strings.TrimSpace(name) == "" {
+				errorf("folder %s, repo %s has a remote with an empty name", folder.Path, repo.Name)
+				continue
+			}
+			if strings.TrimSpace(url) == "" {
+				errorf("folder %s, repo %s has remote %q with an empty URL", folder.Path, repo.Name, name)
+			}
+		}
+
+		for j, worktree := range repo.Worktrees {
+			if strings.TrimSpace(worktree.Path) == "" {
+				errorf("folder %s, repo %s has a worktree at index %d with empty path", folder.Path, repo.Name, j)
+				continue
+			}
+			// Without a branch git would name one after the path, which is
+			// almost never the branch that was meant.
+			if strings.TrimSpace(worktree.Branch) == "" {
+				errorf("folder %s, repo %s has worktree %q with no branch", folder.Path, repo.Name, worktree.Path)
+			}
+			if previous, dup := targets[worktree.Path]; dup {
+				errorf("folder %s checks out both %q and worktree %q into %q", folder.Path, previous, repo.Name, worktree.Path)
+			}
+			targets[worktree.Path] = repo.Name + " worktree"
+		}
+	}
+
+	return diags
+}
+
 // Validate checks if the configuration is valid.
 //
 // Problems that make a folder unusable are returned as an error; problems that
@@ -65,54 +222,12 @@ func unmarshalConfig() {
 func (c *Config) Validate() error {
 	var errs []error
 
-	servers := make(map[string]struct{}, len(c.GitServers))
-	for i, server := range c.GitServers {
-		if server.Name == "" {
-			errs = append(errs, fmt.Errorf("git server at index %d has empty name", i))
+	for _, diag := range c.Diagnose() {
+		if diag.Severity == SeverityError {
+			errs = append(errs, errors.New(diag.Message))
 			continue
 		}
-		if _, dup := servers[server.Name]; dup {
-			errs = append(errs, fmt.Errorf("git server %q is defined more than once", server.Name))
-		}
-		servers[server.Name] = struct{}{}
-	}
-
-	paths := make(map[string]struct{}, len(c.Folders))
-	for i, folder := range c.Folders {
-		if folder.Path == "" {
-			errs = append(errs, fmt.Errorf("folder at index %d has empty path", i))
-			continue
-		}
-
-		key := cleanPath(folder.Path)
-		if _, dup := paths[key]; dup {
-			errs = append(errs, fmt.Errorf("folder %s is configured more than once", folder.Path))
-		}
-		paths[key] = struct{}{}
-
-		if !filepath.IsAbs(folder.Path) {
-			cli.Warn("Folder path is not absolute, it will resolve against the current directory: %s", folder.Path)
-		}
-		if _, err := os.Stat(folder.Path); err != nil {
-			if os.IsNotExist(err) {
-				cli.Debug("Folder path does not exist: %s", folder.Path)
-			} else {
-				cli.Warn("Cannot access folder %s: %v", folder.Path, err)
-			}
-		}
-		if folder.IsWorkspace {
-			if folder.Name != "" {
-				cli.Warn("Folder %s is a workspace, its name %q is ignored", folder.Path, folder.Name)
-			}
-			if _, err := regexp.Compile(folder.GetRegexMatch()); err != nil {
-				errs = append(errs, fmt.Errorf("folder %s has an invalid regex %q: %w", folder.Path, folder.GetRegexMatch(), err))
-			}
-		}
-		if folder.Git != nil {
-			if _, ok := servers[folder.Git.Host]; !ok {
-				cli.Warn("Folder %s references unknown git server %q", folder.Path, folder.Git.Host)
-			}
-		}
+		cli.Warn("%s", diag.Message)
 	}
 
 	return errors.Join(errs...)
@@ -122,6 +237,34 @@ func (c *Config) Validate() error {
 func GetConfig() Config {
 	unmarshalConfig()
 	return c
+}
+
+// ConfigFile returns the path of the config file in use. It is the file viper
+// actually read when there was one, and otherwise the path a first write would
+// create.
+func ConfigFile() string {
+	if used := viper.ConfigFileUsed(); used != "" {
+		return used
+	}
+	return CfgFile
+}
+
+// ReloadConfig re-reads the config file from disk and returns why it could not
+// be read, if it could not. It is what an editor session needs afterwards: the
+// unmarshalled config is cached, so without this the process would keep serving
+// what the file said before the edit.
+func ReloadConfig() error {
+	c = Config{}
+	loadErr = nil
+
+	if err := viper.ReadInConfig(); err != nil {
+		if !isConfigMissing(err) {
+			loadErr = fmt.Errorf("failed to read config file %s: %w", ConfigFile(), err)
+		}
+		return loadErr
+	}
+
+	return nil
 }
 
 // SetTestConfig sets the configuration for testing purposes
