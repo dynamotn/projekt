@@ -36,6 +36,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `os.md`
 - `config.md`
 - `lock.md`
+- `cache.md`
 - `archive.md`
 - `forge.md`
 - `git.md`
@@ -72,6 +73,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `src/os.sh` -> `os.md`
 - `src/config.sh` -> `config.md`
 - `src/lock.sh` -> `lock.md`
+- `src/cache.sh` -> `cache.md`
 - `src/archive.sh` -> `archive.md`
 - `src/forge.sh` -> `forge.md`
 - `src/git.sh` -> `git.md`

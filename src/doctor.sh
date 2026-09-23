@@ -70,6 +70,8 @@ declare -gA DYBATPHO_DOCTOR_REQUIRED=(
 declare -gA DYBATPHO_DOCTOR_OPTIONAL=(
   [agent]="git"
   [ai]="claude|llm|ollama"
+  # Only `dybatpho::cache_key` needs one, and any of the three will do.
+  [cache]="sha256sum|shasum|cksum"
   [archive]="unzip zip gzip bzip2 xz zstd"
   [config]="jq yq"
   [file]="sha256sum|shasum|openssl"

@@ -9,6 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`cache` — remembering a slow answer on disk until it goes stale.** A script
+  that asks a slow question twice writes the same four lines every time: work
+  out a file name, read how old the file is, compare that to a number of
+  seconds, and remember to create the directory. `dybatpho::file_age_seconds`
+  documents that shape as its own example, and `ai` had written it out in full,
+  which is how the library came to carry a cache nothing else could use.
+
+  The centre of the module is one call:
+
+  ```sh
+  releases="$(dybatpho::cache_run gh-releases 3600 -- gh api /repos/o/r/releases)"
+  ```
+
+  A failing command is never stored: remembering a failure turns one bad minute
+  into an hour of them, and the caller cannot tell a remembered error from a
+  fresh one. Its exit status comes back unchanged, and its standard error is
+  not captured either way, so a warning it prints is seen every time.
+
+  Also new: `dybatpho::cache_get`, `cache_set`, `cache_has`, `cache_forget`,
+  `cache_clear`, `cache_key`, `cache_path`, and `cache_dir`. An entry is fresh
+  while its age is *less than* the time to live, so `0` makes nothing fresh —
+  which is how a script offers `--refresh` without deleting anything. There is
+  no value meaning "never expires": an entry that never goes stale is a file.
+
+  A key becomes a file name, so a key that could leave the directory is refused
+  rather than quietly rewritten; `dybatpho::cache_key` hashes a URL or a
+  request body into one that cannot. `cache_clear` removes only entries this
+  module wrote, because the directory is named by an environment variable and
+  emptying whatever a path happens to contain is not something a helper should
+  offer to do.
+
+### Changed
+
+- **`ai` now uses the `cache` module instead of its own copy.**
+  `DYBATPHO_AI_CACHE`, `DYBATPHO_AI_CACHE_DIR` and `DYBATPHO_AI_CACHE_TTL` keep
+  working exactly as documented, and the cache keys are unchanged.
+
+  Two defects go with the copy. It read an entry's age with `date -r FILE`,
+  where BSD `date` expects a number of seconds rather than a path, so ages were
+  wrong or unreadable outside GNU coreutils; it now goes through
+  `dybatpho::file_age_seconds`, which handles both. And it wrote entries with a
+  plain redirection, which truncates the file before filling it, so a reader
+  running at that moment could see an empty or half-written response; writes are
+  now atomic.
+
+  Entries written by older versions carry a `.json` suffix and are not read any
+  more. `dybatpho::ai_cache_clear` removes them as well as the new ones, so
+  upgrading does not leave them behind.
+
 - **`array` — order, slices, and set operations.** The module could filter and
   map an array but not put one in order, and nothing anywhere in the library
   could sort a plain list: `dybatpho::semver_sort` was the only sort there was.

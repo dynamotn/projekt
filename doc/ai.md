@@ -78,6 +78,7 @@ anything is sent, and a call budget that stops a runaway loop.
 - [`__dybatpho_ai_tools_as_functions`](#__dybatpho_ai_tools_as_functions) — Convert the neutral tool list into the OpenAI function shape, which both OpenAI-compatible endpoints and Ollama accept.
 - [`__dybatpho_ai_payload_ollama`](#__dybatpho_ai_payload_ollama) — Render a conversation document into an Ollama chat body.
 - [`__dybatpho_ai_cache_key`](#__dybatpho_ai_cache_key) — Compute the cache key of a request.
+- [`__dybatpho_ai_cache`](#__dybatpho_ai_cache) — Run a cache helper against this module's own cache directory. `DYBATPHO_AI_CACHE_DIR` names the directory outright rather than a namespace below one, and it has been documented that way, so the namespace is emptied for the call instead of the path being rebuilt.
 - [`__dybatpho_ai_cache_read`](#__dybatpho_ai_cache_read) — Print a cached response when one is present and still fresh.
 - [`__dybatpho_ai_cache_write`](#__dybatpho_ai_cache_write) — Store a response body in the cache.
 - [`dybatpho::ai_cache_clear`](#dybatphoai_cache_clear) — Forget every cached response.
@@ -653,6 +654,22 @@ Compute the cache key of a request.
 **📤 Output on stdout**
 
 - Hexadecimal key
+
+
+---
+
+### `__dybatpho_ai_cache`
+
+Run a cache helper against this module's own cache directory.
+  `DYBATPHO_AI_CACHE_DIR` names the directory outright rather than a namespace
+  below one, and it has been documented that way, so the namespace is emptied
+  for the call instead of the path being rebuilt.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$@` | string | A `dybatpho::cache_*` function and its arguments |
 
 
 ---

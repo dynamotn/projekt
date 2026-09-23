@@ -588,9 +588,18 @@ function __dybatpho_ai_payload_ollama {
 function __dybatpho_ai_cache_key {
   local provider payload
   dybatpho::expect_args provider payload -- "$@"
-  local hasher
-  hasher=$(dybatpho::coalesce_cmd sha256sum shasum cksum)
-  printf '%s\n%s\n' "${provider}" "${payload}" | "${hasher}" | cut -d' ' -f1
+  dybatpho::cache_key "${provider}" "${payload}"
+}
+
+#######################################
+# @description Run a cache helper against this module's own cache directory.
+#   `DYBATPHO_AI_CACHE_DIR` names the directory outright rather than a namespace
+#   below one, and it has been documented that way, so the namespace is emptied
+#   for the call instead of the path being rebuilt.
+# @arg $@ string A `dybatpho::cache_*` function and its arguments
+#######################################
+function __dybatpho_ai_cache {
+  DYBATPHO_CACHE_DIR="${DYBATPHO_AI_CACHE_DIR}" DYBATPHO_CACHE_NAMESPACE="" "$@"
 }
 
 #######################################
@@ -605,15 +614,8 @@ function __dybatpho_ai_cache_read {
   local key
   dybatpho::expect_args key -- "$@"
   dybatpho::is true "${DYBATPHO_AI_CACHE}" || return 1
-  local entry="${DYBATPHO_AI_CACHE_DIR}/${key}.json"
-  dybatpho::is file "${entry}" || return 1
-  local now modified age
-  now=$(date +%s)
-  modified=$(date -r "${entry}" +%s 2> /dev/null) || return 1
-  age=$((now - modified))
-  ((age <= DYBATPHO_AI_CACHE_TTL)) || return 1
+  __dybatpho_ai_cache dybatpho::cache_get "${key}" "${DYBATPHO_AI_CACHE_TTL}" || return 1
   dybatpho::debug "ai: cache hit ${key}"
-  cat "${entry}"
 }
 
 #######################################
@@ -626,8 +628,7 @@ function __dybatpho_ai_cache_write {
   local key body
   dybatpho::expect_args key body -- "$@"
   dybatpho::is true "${DYBATPHO_AI_CACHE}" || return 0
-  mkdir -p "${DYBATPHO_AI_CACHE_DIR}"
-  printf '%s\n' "${body}" > "${DYBATPHO_AI_CACHE_DIR}/${key}.json"
+  printf '%s\n' "${body}" | __dybatpho_ai_cache dybatpho::cache_set "${key}"
 }
 
 #######################################
@@ -640,10 +641,13 @@ function __dybatpho_ai_cache_write {
 # @exitcode 0 The cache directory is empty or absent
 #######################################
 function dybatpho::ai_cache_clear {
-  if dybatpho::is dir "${DYBATPHO_AI_CACHE_DIR}"; then
-    dybatpho::debug "ai: clearing cache in ${DYBATPHO_AI_CACHE_DIR}"
-    find "${DYBATPHO_AI_CACHE_DIR}" -maxdepth 1 -name '*.json' -type f -delete
-  fi
+  dybatpho::is dir "${DYBATPHO_AI_CACHE_DIR}" || return 0
+  dybatpho::debug "ai: clearing cache in ${DYBATPHO_AI_CACHE_DIR}"
+  __dybatpho_ai_cache dybatpho::cache_clear
+  # Entries this module wrote before it used the `cache` module carry a `.json`
+  # suffix, and nothing else would ever come back for them.
+  dybatpho::is true "${DRY_RUN}" \
+    || find "${DYBATPHO_AI_CACHE_DIR}" -maxdepth 1 -name '*.json' -type f -delete
 }
 
 #######################################

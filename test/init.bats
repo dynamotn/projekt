@@ -112,7 +112,7 @@ loaded_line() {
   assert_output "string os logging helpers process file secret json network table text testing "
 
   run -0 init_sh "--modules ai" "$(loaded_line)"
-  assert_output "string os logging helpers process file secret network json ai "
+  assert_output "string os logging helpers process file secret network json cache ai "
 
   run -0 init_sh "--modules agent" "$(loaded_line)"
   assert_output "string os logging helpers process file secret config cli archive safety json agent "
