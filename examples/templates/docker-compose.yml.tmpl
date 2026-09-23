@@ -1,0 +1,54 @@
+# {{ .Values.stack | default .Project }} — generated on {{ .Date }} by {{ .User }}.
+name: {{ .Values.stack | default .Project | lower | replace " " "-" }}
+
+services:
+{{- range .Values.services }}
+  {{ .name }}:
+    image: {{ .image }}
+    restart: {{ .restart | default "unless-stopped" }}
+{{- with .command }}
+    command: {{ toJson . }}
+{{- end }}
+{{- with .ports }}
+    ports:
+{{- range . }}
+      - "{{ . }}"
+{{- end }}
+{{- end }}
+{{- with .env }}
+    environment:
+{{- range $key, $value := . }}
+      {{ $key }}: "{{ $value }}"
+{{- end }}
+{{- end }}
+{{- with .volumes }}
+    volumes:
+{{- range . }}
+      - {{ . }}
+{{- end }}
+{{- end }}
+{{- with .dependsOn }}
+    depends_on:
+{{- range . }}
+      - {{ . }}
+{{- end }}
+{{- end }}
+    healthcheck:
+      test: {{ .healthcheck | default "[\"CMD-SHELL\", \"exit 0\"]" }}
+      interval: 30s
+      timeout: 5s
+      retries: 3
+{{- else }}
+  # No service declared. Pass some with:
+  #   t new docker-compose.yml -f services.yaml
+  placeholder:
+    image: busybox
+    command: ["sleep", "infinity"]
+{{- end }}
+{{- with .Values.volumes }}
+
+volumes:
+{{- range . }}
+  {{ . }}:
+{{- end }}
+{{- end }}

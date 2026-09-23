@@ -1,0 +1,43 @@
+# t new threat-model ./docs/threat-model.md -f examples/values/threat-model.yaml
+system: Payments API
+owner: Jane Doe
+classification: restricted
+assets:
+  - name: Cardholder data
+    value: Directly sellable, and regulated
+    impact: PCI DSS breach, card scheme fines, mandatory notification
+  - name: Payout credentials
+    value: Move money straight out
+    impact: Direct financial loss, hard to reverse
+  - name: Merchant PII
+    value: Fraud and targeted phishing
+    impact: GDPR notification within 72 hours
+boundaries:
+  - Internet to API gateway — everything crossing it is hostile until proven otherwise.
+  - API to payment processor — mTLS, pinned certificates, signed payloads.
+  - Operator to production — break-glass only, recorded, reviewed weekly.
+threats:
+  - category: Spoofing
+    threat: Replayed webhook from the processor
+    mitigation: Signature verification plus a nonce with a 5 minute window
+    status: done
+  - category: Tampering
+    threat: Payout amount changed in flight
+    mitigation: Request signing, amount echoed back and confirmed
+    status: in progress
+  - category: Information disclosure
+    threat: Card data in application logs
+    mitigation: Redaction at the logger, CI check on log statements
+    status: done
+  - category: Elevation of privilege
+    threat: Support role can trigger a payout
+    mitigation: Separate roles, four-eyes approval above a threshold
+    status: open
+acceptedRisks:
+  - risk: Legacy merchant endpoint still accepts TLS 1.2
+    by: Head of Security
+    until: "2026-12-31"
+    why: Two merchants cannot upgrade before their own release freeze lifts.
+questions:
+  - Who reviews break-glass access, and how would we know if nobody did?
+  - What happens to in-flight payouts if the processor fails over mid-batch?

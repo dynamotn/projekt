@@ -1,0 +1,52 @@
+# Generated from the {{ .Template }} template on {{ .Date }}.
+# The GitHub expressions below are written as Go template strings, so the
+# renderer hands them over untouched instead of trying to evaluate them.
+name: {{ .Values.workflow | default .Name }}
+
+on:
+  push:
+    branches: [{{ .Values.branch | default "main" }}]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: {{ "${{ github.workflow }}-${{ github.ref }}" }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: {{ .Values.runner | default "ubuntu-latest" }}
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [{{ range $i, $v := .Values.versions }}{{ if $i }}, {{ end }}"{{ $v }}"{{ else }}"{{ $.Values.goVersion | default "1.24" }}"{{ end }}]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: {{ "${{ matrix.version }}" }}
+          cache: true
+
+      - name: Lint
+        run: |
+          gofmt -l .
+          go vet ./...
+
+      - name: Test
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Build
+        run: go build ./...
+{{- if .Values.publishCoverage }}
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-{{ "${{ matrix.version }}" }}
+          path: coverage.out
+{{- end }}

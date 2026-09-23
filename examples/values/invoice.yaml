@@ -1,0 +1,24 @@
+# t new invoice ./INV-2026-014.md -f examples/values/invoice.yaml
+# Every amount is in minor units (cents), so the totals are exact.
+number: INV-2026-014
+from: Jane Doe, Contracting
+to: Acme GmbH
+reference: PO-8841
+currency: EUR
+netDays: 30
+taxPercent: 19
+taxName: USt
+items:
+  - description: Platform review, 3 days
+    qty: 3
+    unitCents: 95000
+  - description: Migration plan and handover
+    qty: 1
+    unitCents: 180000
+  - description: On-call support, per week
+    qty: 2
+    unitCents: 45000
+payment:
+  Bank: DE00 0000 0000 0000 0000 00
+  Terms: net 30 days, no discount
+note: Thank you — please quote the invoice number on the transfer.

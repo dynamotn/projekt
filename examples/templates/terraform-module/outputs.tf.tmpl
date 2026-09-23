@@ -1,0 +1,19 @@
+output "name" {
+  description = "The prefixed name every resource of this module is built from."
+  value       = local.name
+}
+
+output "tags" {
+  description = "The tags this module applies, module tags merged with yours."
+  value       = local.tags
+}
+{{- range .Values.outputs }}
+
+output "{{ .name }}" {
+  description = "{{ .description }}"
+  value       = {{ .value }}
+{{- if .sensitive }}
+  sensitive   = true
+{{- end }}
+}
+{{- end }}

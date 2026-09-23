@@ -1,0 +1,25 @@
+# t new docker-compose.yml -f examples/values/docker-compose.yaml
+stack: Acme Platform
+services:
+  - name: api
+    image: acme/api:1.4.0
+    ports: ["8080:8080"]
+    env:
+      DATABASE_URL: postgres://acme:secret@db:5432/acme
+      LOG_LEVEL: info
+    dependsOn: [db, cache]
+    healthcheck: '["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]'
+  - name: db
+    image: postgres:17-alpine
+    env:
+      POSTGRES_USER: acme
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: acme
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck: '["CMD-SHELL", "pg_isready -U acme"]'
+  - name: cache
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1"]
+
+volumes:
+  - pgdata

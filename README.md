@@ -36,6 +36,7 @@ A single static Go binary, no daemon, no index to rebuild — your config file *
 - **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
 - **Tagged, not just named** — label folders `work`, `oss`, `go`, then point any command at a subset with `--tags`.
 - **Your config is safe** — an unreadable or malformed config file is never silently overwritten, and `config check` tells you what is wrong with it.
+- **Templates that name their own files** — `t new` renders a Go template, or a whole folder of them, from a store you own; the path segments are templates too.
 - **Shell-native** — a one-line `eval` for bash or fish. No plugin manager required.
 - **Boring to install** — `make all`, or grab a release binary. Linux and macOS, amd64 and arm64.
 
@@ -265,6 +266,56 @@ cloned. An existing worktree is left alone — it may well have work in progress
 in it — and a branch that already exists is checked out rather than recreated.
 Listing `origin` under `remotes` overrides what the clone set up.
 
+## 🧩 Templates
+
+`t` (also `projekt template`) renders [Go templates](https://pkg.go.dev/text/template),
+with the [sprig](https://masterminds.github.io/sprig/) functions on top, from a
+folder of templates you own — `$XDG_DATA_HOME/projekt/templates` by default,
+or wherever `--template-dir` / `PROJEKT_TEMPLATE_DIR` points.
+
+```bash
+t add ./LICENSE                  # turn a file you already have into a template
+t list                           # what the store holds
+t new license LICENSE --set author='Jane Doe'
+t new go-cli ./myapp --name myapp --set module=example.com/myapp
+t new dockerfile --dry-run       # render to stdout, write nothing
+```
+
+A template is either one file or a whole folder. In a folder template the
+**path segments are rendered too**, so the template names the files it creates:
+
+```
+~/.local/share/projekt/templates
+├── license.tmpl                 # t new license
+└── go-cli                       # t new go-cli ./myapp --name myapp
+    ├── go.mod.tmpl
+    └── cmd
+        └── {{ .Name }}          # becomes cmd/myapp/
+            └── main.go.tmpl     # becomes main.go
+```
+
+Values come from repeatable `--set key=value` (dots nest, and the value keeps
+its YAML type, so `port=8080` is a number) and `--values file.yaml`, merged
+deeply with `--set` winning. A template reaches them through `.Values`, and is
+handed `.Name`, `.Project`, `.Dir`, `.Path`, `.Template`, `.User`, `.Now`,
+`.Date` and `.Year` besides. A value nobody set renders empty rather than
+failing, so `{{ .Values.license | default "MIT" }}` makes one optional.
+
+Nothing is overwritten without `--force`, and a path segment that renders to a
+`..` or to anything containing a separator is refused — a value can never write
+outside the destination.
+
+A starter set ships with the repository — Go CLI, ADR, pre-commit, GitHub
+Actions, Compose, Terraform module, SECURITY.md, security pipeline, threat
+model, incident report, daily note, zettel, budget, invoice:
+
+```bash
+t --template-dir examples/templates list
+```
+
+See [examples/README.md](examples/README.md) for what each one does, and
+[doc/templates.md](doc/templates.md) for the rest.
+
 ## 📚 Commands
 
 ### 📁 `projekt` — project folders
@@ -282,14 +333,24 @@ Listing `origin` under `remotes` overrides what the clone set up.
 | [`init`](doc/projekt_init.md)                        | Emit the shell integration for bash or fish           |
 | [`version`](doc/projekt_version.md)                  | Version, commit, tree state and build time                 |
 
+### 🧩 `t` — templates
+
+Every one of these is also reachable as `projekt template <command>`.
+
+| Command                          | What it does                                                |
+| -------------------------------- | ------------------------------------------------------------ |
+| [`t new`](doc/t_new.md)          | Render a template, with `--set`, `--values`, `--dry-run`     |
+| [`t list`](doc/t_list.md)        | List the templates of the store, as a table, JSON or TSV     |
+| [`t add`](doc/t_add.md)          | Save an existing file or folder as a template                |
+| [`t show`](doc/t_show.md)        | Print the source of a template                               |
+| [`t path`](doc/t_path.md)        | Print the store path, or one template's — handy for `$EDITOR` |
+
 ### 🧰 Companion binaries
 
-`make all` also installs two smaller commands. Both are scaffolded today — the
-folder management above is the part that's ready for daily use.
+`make all` also installs one more command, scaffolded today.
 
 | Binary              | Intent                                                   |
 | ------------------- | --------------------------------------------------------- |
-| [`t`](doc/t.md)     | Create a template file from various sources               |
 | [`b`](doc/b.md)     | Create a boilerplate project folder for a language/framework |
 
 ### 📤 Output formats
@@ -326,7 +387,8 @@ from the environment. Levels: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
 │   ├── cli/         # Root command, logging, output, version
 │   ├── folderutil/  # Folder parsing, discovery, Git helpers
 │   ├── lazypath/    # Config loading and XDG paths
-│   └── templates/   # Shell integration templates
+│   ├── templates/   # Shell integration templates
+│   └── tplutil/     # Template store and Go template rendering
 └── Makefile       # build, install, lint, test, doc
 ```
 

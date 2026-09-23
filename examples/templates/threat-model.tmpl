@@ -1,0 +1,59 @@
+# Threat model — {{ .Values.system | default .Name }}
+
+- **Owner**: {{ .Values.owner | default .User }}
+- **Date**: {{ .Date }}
+- **Review due**: {{ .Values.reviewDue | default (dateModify "2160h" .Now | date "2006-01-02") }}
+- **Data classification**: {{ .Values.classification | default "internal" }}
+
+## What we are protecting
+
+{{ with .Values.assets -}}
+| Asset | Why an attacker wants it | Worst case |
+| ----- | ------------------------ | ---------- |
+{{- range . }}
+| {{ .name }} | {{ .value }} | {{ .impact }} |
+{{- end }}
+{{- else -}}
+| Asset | Why an attacker wants it | Worst case |
+| ----- | ------------------------ | ---------- |
+| Customer records | Resale, extortion | Regulatory breach |
+{{- end }}
+
+## Trust boundaries
+{{ range .Values.boundaries }}
+- {{ . }}
+{{- else }}
+- Internet to edge: anything crossing it is hostile until proven otherwise.
+- Service to datastore: credentials, network policy, least privilege.
+- Operator to production: who can reach it, with what, and who sees that they did.
+{{- end }}
+
+## STRIDE
+
+| Category | Threat | Mitigation | Status |
+| -------- | ------ | ---------- | ------ |
+{{- range .Values.threats }}
+| {{ .category }} | {{ .threat }} | {{ .mitigation }} | {{ .status | default "open" }} |
+{{- else }}
+| Spoofing | Someone authenticates as another user | Per-request auth, short-lived tokens | open |
+| Tampering | Payload modified between services | mTLS, signed messages | open |
+| Repudiation | An action cannot be traced to an actor | Append-only audit log, clock sync | open |
+| Information disclosure | Data read by the wrong party | Encryption at rest and in transit, scoped queries | open |
+| Denial of service | The system is made unavailable | Rate limits, quotas, autoscaling with a ceiling | open |
+| Elevation of privilege | A user gains rights they were not granted | Deny by default, review of every role change | open |
+{{- end }}
+
+## Accepted risks
+{{ range .Values.acceptedRisks }}
+- **{{ .risk }}** — accepted by {{ .by }} until {{ .until }}. {{ .why }}
+{{- else }}
+_None yet. An accepted risk needs a name, an owner and an expiry date, or it is
+not accepted — it is forgotten._
+{{- end }}
+
+## Open questions
+{{ range .Values.questions }}
+- {{ . }}
+{{- else }}
+- What have we assumed here that nobody has verified?
+{{- end }}

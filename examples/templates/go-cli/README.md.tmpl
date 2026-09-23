@@ -1,0 +1,19 @@
+# {{ .Name }}
+
+{{ .Values.summary | default "One line about what this does." }}
+
+## Build
+
+```bash
+make build
+./bin/{{ .Name }} --version
+```
+
+## Install
+
+```bash
+go install {{ .Values.module | default (printf "example.com/%s" .Name) }}/cmd/{{ .Name }}@latest
+```
+
+---
+Started {{ .Date }} by {{ .Values.author | default .User }}.

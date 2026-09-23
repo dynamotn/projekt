@@ -1,0 +1,56 @@
+{{- /* Amounts are in minor units (cents), so the arithmetic below stays exact. */ -}}
+{{- $v := .Values -}}
+{{- $currency := $v.currency | default "USD" -}}
+{{- $income := 0 -}}
+{{- $spend := 0 -}}
+# Budget — {{ $v.month | default (.Now | date "January 2006") }}
+
+Prepared by {{ $v.owner | default .User }} on {{ .Date }}. All amounts in {{ $currency }}.
+
+## Income
+
+| Source | Planned |
+| ------ | ------- |
+{{- range $v.income }}
+{{- $income = add $income .amountCents }}
+| {{ .source }} | {{ div .amountCents 100 }}.{{ printf "%02d" (mod .amountCents 100) }} |
+{{- else }}
+| _nothing declared_ | 0.00 |
+{{- end }}
+| **Total** | **{{ div $income 100 }}.{{ printf "%02d" (mod $income 100) }}** |
+
+## Spending
+
+| Category | Planned | Share of income |
+| -------- | ------- | --------------- |
+{{- range $v.categories }}
+{{- $spend = add $spend .amountCents }}
+| {{ .name }} | {{ div .amountCents 100 }}.{{ printf "%02d" (mod .amountCents 100) }} | {{ if $income }}{{ div (mul .amountCents 100) $income }}%{{ else }}—{{ end }} |
+{{- else }}
+| _nothing declared_ | 0.00 | — |
+{{- end }}
+| **Total** | **{{ div $spend 100 }}.{{ printf "%02d" (mod $spend 100) }}** | {{ if $income }}**{{ div (mul $spend 100) $income }}%**{{ else }}—{{ end }} |
+
+## What is left
+{{/* sprig has no abs, so the size and the sign are carried separately. */ -}}
+{{ $left := sub $income $spend }}{{ $size := $left }}{{ if lt $left 0 }}{{ $size = sub 0 $left }}{{ end }}
+| | |
+| --- | --- |
+| Income | {{ div $income 100 }}.{{ printf "%02d" (mod $income 100) }} |
+| Spending | {{ div $spend 100 }}.{{ printf "%02d" (mod $spend 100) }} |
+| **{{ if lt $left 0 }}Shortfall{{ else }}Left to save{{ end }}** | **{{ div $size 100 }}.{{ printf "%02d" (mod $size 100) }}** |
+
+{{ if lt $left 0 -}}
+> This budget does not balance. Something above has to come down before the
+> month starts, rather than being discovered in week three.
+{{- else if $income -}}
+> That is {{ div (mul $left 100) $income }}% of income going to savings this month.
+{{- end }}
+
+## Rules for the month
+{{ range $v.rules }}
+- {{ . }}
+{{- else }}
+- Anything above {{ $v.reviewThreshold | default "100" }} {{ $currency }} waits a day before it is bought.
+- Savings move on payday, not on whatever is left at the end.
+{{- end }}

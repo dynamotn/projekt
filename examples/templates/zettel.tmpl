@@ -1,0 +1,37 @@
+---
+id: {{ .Now | date "20060102150405" }}
+title: {{ .Values.title | default .Name }}
+created: {{ .Now | date "2006-01-02 15:04" }}
+tags: [{{ range $i, $tag := .Values.tags }}{{ if $i }}, {{ end }}{{ $tag }}{{ else }}inbox{{ end }}]
+{{- with .Values.source }}
+source: {{ . }}
+{{- end }}
+status: {{ .Values.status | default "seedling" }}
+---
+
+# {{ .Values.title | default .Name }}
+
+> {{ .Values.claim | default "One idea, in one sentence. If it needs two, it is two notes." }}
+
+## The idea
+
+{{ .Values.body | default "Write it in your own words. A quote you did not rephrase is a quote, not a note." }}
+
+## Why it matters
+
+## Against it
+
+What would have to be true for this to be wrong?
+
+## Links
+{{ range .Values.links }}
+- [[{{ . }}]]
+{{- else }}
+- [[ ]]
+{{- end }}
+{{- with .Values.source }}
+
+## Source
+
+{{ . }}{{ with $.Values.page }}, p. {{ . }}{{ end }}
+{{- end }}

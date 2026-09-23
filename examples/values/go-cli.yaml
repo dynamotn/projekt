@@ -1,0 +1,5 @@
+# t new go-cli ./backup-tool --name backup-tool -f examples/values/go-cli.yaml
+module: example.com/acme/backup-tool
+goVersion: "1.24"
+summary: copies a directory somewhere safer, on a schedule
+author: Jane Doe

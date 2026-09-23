@@ -1,0 +1,3 @@
+module {{ .Values.module | default (printf "example.com/%s" .Name) }}
+
+go {{ .Values.goVersion | default "1.24" }}

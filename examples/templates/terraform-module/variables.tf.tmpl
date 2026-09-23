@@ -1,0 +1,30 @@
+variable "name_prefix" {
+  description = "Prefix every resource name carries, usually the team or product."
+  type        = string
+}
+
+variable "environment" {
+  description = "Deployment environment the resources belong to."
+  type        = string
+
+  validation {
+    condition     = contains([{{ range $i, $e := .Values.environments }}{{ if $i }}, {{ end }}"{{ $e }}"{{ else }}"dev", "staging", "prod"{{ end }}], var.environment)
+    error_message = "Unknown environment."
+  }
+}
+
+variable "tags" {
+  description = "Extra tags merged over the module's own."
+  type        = map(string)
+  default     = {}
+}
+{{- range .Values.variables }}
+
+variable "{{ .name }}" {
+  description = "{{ .description }}"
+  type        = {{ .type | default "string" }}
+{{- if hasKey . "default" }}
+  default     = {{ .default }}
+{{- end }}
+}
+{{- end }}

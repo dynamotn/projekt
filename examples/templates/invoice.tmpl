@@ -1,0 +1,46 @@
+{{- /* Amounts are in minor units (cents): integer arithmetic, no rounding drift. */ -}}
+{{- $v := .Values -}}
+{{- $currency := $v.currency | default "USD" -}}
+{{- $subtotal := 0 -}}
+# Invoice {{ $v.number | default (printf "INV-%s-001" (.Now | date "2006")) }}
+
+| | |
+| --- | --- |
+| **Issued** | {{ .Date }} |
+| **Due** | {{ $v.due | default (dateModify (printf "%dh" (mul ($v.netDays | default 14) 24)) .Now | date "2006-01-02") }} |
+| **From** | {{ $v.from | default .User }} |
+| **To** | {{ $v.to | default "Client name" }} |
+{{- with $v.reference }}
+| **Reference** | {{ . }} |
+{{- end }}
+
+## Work
+
+| Description | Qty | Unit ({{ $currency }}) | Amount ({{ $currency }}) |
+| ----------- | --: | ---------------------: | -----------------------: |
+{{- range $v.items }}
+{{- $amount := mul .qty .unitCents }}
+{{- $subtotal = add $subtotal $amount }}
+| {{ .description }} | {{ .qty }} | {{ div .unitCents 100 }}.{{ printf "%02d" (mod .unitCents 100) }} | {{ div $amount 100 }}.{{ printf "%02d" (mod $amount 100) }} |
+{{- else }}
+| _no line item_ | 0 | 0.00 | 0.00 |
+{{- end }}
+
+{{ $taxRate := $v.taxPercent | default 0 -}}
+{{ $tax := div (mul $subtotal $taxRate) 100 -}}
+{{ $total := add $subtotal $tax -}}
+| | | **Subtotal** | **{{ div $subtotal 100 }}.{{ printf "%02d" (mod $subtotal 100) }}** |
+{{ if $taxRate -}}
+| | | {{ $v.taxName | default "VAT" }} {{ $taxRate }}% | {{ div $tax 100 }}.{{ printf "%02d" (mod $tax 100) }} |
+{{ end -}}
+| | | **Total due** | **{{ div $total 100 }}.{{ printf "%02d" (mod $total 100) }}** |
+
+## Payment
+{{ range $key, $value := $v.payment }}
+- **{{ $key }}**: {{ $value }}
+{{- else }}
+- **Bank**: account details here
+- **Terms**: net {{ $v.netDays | default 14 }} days
+{{- end }}
+
+{{ with $v.note }}> {{ . }}{{ end }}

@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
 )
 
 func NewProjektTemplateCmd(out io.Writer) *cobra.Command {
@@ -15,6 +16,17 @@ func NewProjektTemplateCmd(out io.Writer) *cobra.Command {
 		Aliases: []string{"t", "tpl"},
 		Short:   "Create a template file from various sources",
 	}
+
+	f := cmd.PersistentFlags()
+	f.StringVar(&tplutil.TemplateDir, "template-dir", "", "Template folder (default is $XDG_DATA_HOME/projekt/templates)")
+
+	cmd.AddCommand(
+		NewTemplateListCmd(out),
+		NewTemplateNewCmd(out),
+		NewTemplateAddCmd(out),
+		NewTemplateShowCmd(out),
+		NewTemplatePathCmd(out),
+	)
 
 	cli.SetColorAndStyles(cmd)
 	return cmd

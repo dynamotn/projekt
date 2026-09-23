@@ -1,0 +1,29 @@
+# t new terraform-module ./modules/bucket --name bucket -f examples/values/terraform-module.yaml
+summary: An S3 bucket with encryption, versioning and no public access
+owner: platform-team
+namePrefix: acme
+terraformVersion: 1.9.0
+environments: [dev, staging, prod]
+costCenter: CC-4471
+providers:
+  - name: aws
+    source: hashicorp/aws
+    version: "~> 5.0"
+variables:
+  - name: versioning_enabled
+    description: Keep every object version
+    type: bool
+    default: "true"
+  - name: retention_days
+    description: How long a noncurrent version is kept
+    type: number
+    default: "90"
+  - name: kms_key_arn
+    description: Customer managed key used for encryption
+outputs:
+  - name: bucket_arn
+    description: ARN of the bucket
+    value: aws_s3_bucket.this.arn
+  - name: bucket_name
+    description: Name of the bucket
+    value: aws_s3_bucket.this.id

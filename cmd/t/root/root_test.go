@@ -147,22 +147,30 @@ func TestNewProjektTemplateCmd_Aliases(t *testing.T) {
 	}
 }
 
-func TestNewRootCmd_NoExtraCommands(t *testing.T) {
+func TestNewRootCmd_TemplateCommands(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := NewRootCmd(&buf)
 
-	// Should only have version command and help
-	commands := cmd.Commands()
-
-	// Filter out help command (automatically added by cobra)
-	actualCommands := []string{}
-	for _, c := range commands {
+	// Filter out the commands cobra adds on its own
+	actualCommands := map[string]bool{}
+	for _, c := range cmd.Commands() {
 		if c.Name() != "help" && c.Name() != "completion" {
-			actualCommands = append(actualCommands, c.Name())
+			actualCommands[c.Name()] = true
 		}
 	}
 
-	if len(actualCommands) != 1 || actualCommands[0] != "version" {
-		t.Errorf("NewRootCmd() should only have version command, got: %v", actualCommands)
+	for _, name := range []string{"version", "list", "new", "add", "show", "path"} {
+		if !actualCommands[name] {
+			t.Errorf("NewRootCmd() missing %q subcommand, got: %v", name, actualCommands)
+		}
+	}
+}
+
+func TestNewRootCmd_TemplateDirFlag(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := NewRootCmd(&buf)
+
+	if cmd.PersistentFlags().Lookup("template-dir") == nil {
+		t.Error("NewRootCmd() missing --template-dir flag")
 	}
 }

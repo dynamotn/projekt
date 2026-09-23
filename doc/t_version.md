@@ -46,7 +46,8 @@ t version [flags]
 ### Options inherited from parent commands
 
 ```
-  -v, --verbose string   Log level, available options are: (trace, debug, info, warn, error, fatal) (default "info")
+      --template-dir string   Template folder (default is $XDG_DATA_HOME/projekt/templates)
+  -v, --verbose string        Log level, available options are: (trace, debug, info, warn, error, fatal) (default "info")
 ```
 
 ### SEE ALSO

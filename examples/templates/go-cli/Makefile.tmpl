@@ -1,0 +1,23 @@
+BINARY  = {{ .Name }}
+MODULE  = {{ .Values.module | default (printf "example.com/%s" .Name) }}
+VERSION = $(shell $(VCS) describe --tags --always --dirty 2>/dev/null || echo dev)
+VCS     = git
+
+LDFLAGS = -X main.version=$(VERSION)
+
+.PHONY: build
+build:
+	go build -ldflags '$(LDFLAGS)' -o bin/$(BINARY) ./cmd/$(BINARY)
+
+.PHONY: test
+test:
+	go test -race ./...
+
+.PHONY: lint
+lint:
+	gofmt -l .
+	go vet ./...
+
+.PHONY: clean
+clean:
+	rm -rf bin

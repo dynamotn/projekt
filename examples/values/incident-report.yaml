@@ -1,0 +1,46 @@
+# t new incident-report ./incidents/INC-20260923.md -f examples/values/incident-report.yaml
+id: INC-20260923
+title: Checkout unavailable for 41 minutes
+severity: SEV1
+status: resolved
+commander: Jane Doe
+scribe: Sam Okafor
+timezone: UTC
+customerImpact: Roughly 12% of checkout attempts failed
+summary: >-
+  A schema migration took an exclusive lock on the orders table during peak
+  traffic. Checkout timed out until the migration was cancelled and re-run
+  with a lock timeout.
+timeline:
+  - time: "09:14"
+    event: Migration starts as part of the regular release
+  - time: "09:17"
+    event: Checkout error rate alert fires
+  - time: "09:19"
+    event: Responder acknowledges, declares SEV1
+  - time: "09:41"
+    event: Migration identified as the cause
+  - time: "09:52"
+    event: Migration cancelled, lock released
+  - time: "09:58"
+    event: Error rate back to baseline, incident resolved
+impact:
+  - Checkout failed for about 12% of attempts over 41 minutes.
+  - No data was lost; no orders were charged without being recorded.
+factors:
+  - The migration had no lock timeout, so it waited behind a long-running read.
+  - Migrations run in the same window as peak traffic.
+  - The alert named the symptom, not the deploy that caused it.
+actions:
+  - action: Set lock_timeout on every migration, enforced in CI
+    owner: platform-team
+    due: "2026-10-07"
+    prevents: true
+  - action: Move schema changes out of the peak window
+    owner: platform-team
+    due: "2026-10-14"
+    prevents: true
+  - action: Link the active deploy into the alert payload
+    owner: observability
+    due: "2026-10-21"
+    prevents: false

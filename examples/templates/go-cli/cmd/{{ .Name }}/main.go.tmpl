@@ -1,0 +1,33 @@
+// Command {{ .Name }} {{ .Values.summary | default "does one thing, well" }}.
+//
+// Generated from the {{ .Template }} template on {{ .Date }}.
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+)
+
+// version is stamped at build time with -ldflags.
+var version = "dev"
+
+func main() {
+	showVersion := flag.Bool("version", false, "print the version and exit")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("{{ .Name }}", version)
+		return
+	}
+
+	if err := run(flag.Args()); err != nil {
+		fmt.Fprintln(os.Stderr, "{{ .Name }}:", err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
+	fmt.Println("hello from {{ .Name }}")
+	return nil
+}

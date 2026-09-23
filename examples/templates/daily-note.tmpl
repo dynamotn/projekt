@@ -1,0 +1,29 @@
+---
+id: {{ .Now | date "2006-01-02" }}
+title: {{ .Now | date "Monday, 02 January 2006" }}
+tags: [daily{{ range .Values.tags }}, {{ . }}{{ end }}]
+---
+
+# {{ .Now | date "Monday, 02 January 2006" }}
+
+[[{{ dateModify "-24h" .Now | date "2006-01-02" }}]] ← → [[{{ dateModify "24h" .Now | date "2006-01-02" }}]]
+
+## Today
+{{ range .Values.tasks }}
+- [ ] {{ . }}
+{{- else }}
+- [ ]
+{{- end }}
+
+## Notes
+
+## Met
+{{ range .Values.people }}
+- [[{{ . }}]] —
+{{- end }}
+
+## Closing the day
+
+- What moved:
+- What stuck:
+- Tomorrow's first thing:

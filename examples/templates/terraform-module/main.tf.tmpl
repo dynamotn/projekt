@@ -1,0 +1,36 @@
+# {{ .Name }} — {{ .Values.summary | default "one module, one job" }}
+# Generated on {{ .Date }} by {{ .Values.owner | default .User }}.
+
+terraform {
+  required_version = ">= {{ .Values.terraformVersion | default "1.9.0" }}"
+
+  required_providers {
+{{- range .Values.providers }}
+    {{ .name }} = {
+      source  = "{{ .source }}"
+      version = "{{ .version }}"
+    }
+{{- else }}
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+{{- end }}
+  }
+}
+
+locals {
+  name = "${var.name_prefix}-{{ .Name }}"
+
+  tags = merge(
+    {
+      Module      = "{{ .Name }}"
+      ManagedBy   = "terraform"
+      Environment = var.environment
+{{- with .Values.costCenter }}
+      CostCenter  = "{{ . }}"
+{{- end }}
+    },
+    var.tags,
+  )
+}

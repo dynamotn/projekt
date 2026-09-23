@@ -1,0 +1,27 @@
+# t new monthly-budget ./2026-09.md -f examples/values/monthly-budget.yaml
+# Amounts in minor units (cents).
+month: September 2026
+owner: Jane Doe
+currency: EUR
+income:
+  - source: Salary, after tax
+    amountCents: 420000
+  - source: Side contract
+    amountCents: 65000
+categories:
+  - name: Rent and utilities
+    amountCents: 165000
+  - name: Groceries
+    amountCents: 60000
+  - name: Transport
+    amountCents: 18000
+  - name: Insurance and health
+    amountCents: 42000
+  - name: Learning
+    amountCents: 15000
+  - name: Fun
+    amountCents: 40000
+rules:
+  - Anything above 100 EUR waits a day before it is bought.
+  - Savings move on payday, not on whatever is left at the end.
+  - One no-spend day a week.

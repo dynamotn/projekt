@@ -1,0 +1,55 @@
+# Security Policy
+
+## Supported versions
+
+| Version | Supported |
+| ------- | --------- |
+{{- range .Values.supported }}
+| {{ .version }} | {{ if .supported }}yes{{ else }}no{{ end }} |
+{{- else }}
+| latest | yes |
+| older | no |
+{{- end }}
+
+## Reporting a vulnerability
+
+Report privately to **{{ .Values.contact | default "security@example.com" }}**{{ with .Values.pgp }}, encrypted to `{{ . }}` if you'd rather{{ end }}.
+Please do not open a public issue for a vulnerability — a public issue is a
+disclosure, and it starts the clock before we can do anything about it.
+
+Include what you have: the version, what an attacker gets, and the shortest
+path you found to it. A proof of concept helps; a full exploit is not required.
+
+## What happens next
+
+| Step | When |
+| ---- | ---- |
+| We acknowledge your report | within {{ .Values.ackDays | default 2 }} business days |
+| We confirm or dispute the finding | within {{ .Values.triageDays | default 7 }} days |
+| We ship a fix for a confirmed issue | within {{ .Values.fixDays | default 90 }} days |
+| We publish an advisory{{ with .Values.credit }}, crediting you unless you'd rather we didn't{{ end }} | with the fix |
+
+We will keep you updated while that runs, rather than going quiet.
+
+## Scope
+
+{{ with .Values.inScope }}In scope:
+{{- range . }}
+- {{ . }}
+{{- end }}
+
+{{ end -}}
+{{ with .Values.outOfScope }}Out of scope:
+{{- range . }}
+- {{ . }}
+{{- end }}
+
+{{ end -}}
+## Safe harbour
+
+We will not pursue or support legal action against research that follows this
+policy in good faith: no privacy violations, no data destruction, no service
+degradation, and no access beyond what proving the issue requires.
+
+---
+{{ .Values.project | default .Project }} — policy last reviewed {{ .Date }}.

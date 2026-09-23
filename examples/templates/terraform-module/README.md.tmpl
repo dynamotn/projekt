@@ -1,0 +1,32 @@
+# terraform-{{ .Name }}
+
+{{ .Values.summary | default "One module, one job." }}
+
+## Usage
+
+```hcl
+module "{{ .Name }}" {
+  source = "{{ .Values.source | default (printf "./modules/%s" .Name) }}"
+
+  name_prefix = "{{ .Values.namePrefix | default "acme" }}"
+  environment = "dev"
+
+  tags = {
+    Owner = "{{ .Values.owner | default .User }}"
+  }
+}
+```
+
+## Inputs
+
+| Name | Description | Type | Required |
+| ---- | ----------- | ---- | -------- |
+| `name_prefix` | Prefix every resource name carries | `string` | yes |
+| `environment` | Deployment environment | `string` | yes |
+| `tags` | Extra tags merged over the module's own | `map(string)` | no |
+{{- range .Values.variables }}
+| `{{ .name }}` | {{ .description }} | `{{ .type | default "string" }}` | {{ if hasKey . "default" }}no{{ else }}yes{{ end }} |
+{{- end }}
+
+---
+Generated on {{ .Date }}.

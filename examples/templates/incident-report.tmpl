@@ -1,0 +1,65 @@
+# {{ .Values.id | default (printf "INC-%s" (.Now | date "20060102")) }} — {{ .Values.title | default .Name }}
+
+| | |
+| --- | --- |
+| **Severity** | {{ .Values.severity | default "SEV2" }} |
+| **Status** | {{ .Values.status | default "investigating" }} |
+| **Detected** | {{ .Values.detectedAt | default (.Now | date "2006-01-02 15:04 MST") }} |
+| **Commander** | {{ .Values.commander | default .User }} |
+| **Scribe** | {{ .Values.scribe | default "unassigned" }} |
+{{- with .Values.customerImpact }}
+| **Customer impact** | {{ . }} |
+{{- end }}
+
+## What happened
+
+{{ .Values.summary | default "Two or three sentences, written for someone who was asleep when it started." }}
+
+## Timeline
+
+All times {{ .Values.timezone | default "UTC" }}.
+
+| Time | What we saw, or did |
+| ---- | ------------------- |
+{{- range .Values.timeline }}
+| {{ .time }} | {{ .event }} |
+{{- else }}
+| 00:00 | First alert fires |
+| 00:05 | Responder acknowledges |
+| 00:00 | Mitigation applied |
+| 00:00 | Service confirmed healthy |
+{{- end }}
+
+## Impact
+{{ range .Values.impact }}
+- {{ . }}
+{{- else }}
+- Who was affected, how many, and for how long.
+- What they could not do.
+- What data, if any, was exposed or lost.
+{{- end }}
+
+## Contributing factors
+{{ range .Values.factors }}
+- {{ . }}
+{{- else }}
+- The change, condition or assumption that made this possible.
+- What made it hard to see.
+- What made it hard to fix quickly.
+{{- end }}
+
+No single person is a contributing factor. If the report names one, it is not
+finished.
+
+## Action items
+
+| Action | Owner | Due | Prevents recurrence? |
+| ------ | ----- | --- | -------------------- |
+{{- range .Values.actions }}
+| {{ .action }} | {{ .owner }} | {{ .due }} | {{ if .prevents }}yes{{ else }}no, reduces impact{{ end }} |
+{{- else }}
+| | | | |
+{{- end }}
+
+---
+Report opened {{ .Date }} by {{ .User }}.

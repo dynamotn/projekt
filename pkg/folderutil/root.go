@@ -17,42 +17,33 @@
 package folderutil
 
 import (
-	"encoding/json"
-	"fmt"
 	"io"
-	"strings"
-
-	"github.com/jedib0t/go-pretty/v6/table"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
 
-// OutputFormat selects how ListFolders renders its result.
-type OutputFormat string
+// The listing formats live in the cli package, so that every command that
+// lists something renders it the same way. They are kept here under their
+// original names for the callers that already use them.
+type OutputFormat = cli.OutputFormat
 
 const (
 	// OutputTable is the bordered, optionally coloured table meant for reading.
-	OutputTable OutputFormat = "table"
+	OutputTable = cli.OutputTable
 	// OutputJSON is an array of objects, one per folder.
-	OutputJSON OutputFormat = "json"
-	// OutputTSV is one folder per line with tab-separated columns, meant for
-	// shell scripts and completion, which should never have to parse a table.
-	OutputTSV OutputFormat = "tsv"
+	OutputJSON = cli.OutputJSON
+	// OutputTSV is one folder per line with tab-separated columns.
+	OutputTSV = cli.OutputTSV
 )
 
 // OutputFormats lists the accepted --output values, for validation and for
 // shell completion.
-var OutputFormats = []string{string(OutputTable), string(OutputJSON), string(OutputTSV)}
+var OutputFormats = cli.OutputFormats
 
 // ParseOutputFormat validates a --output value.
 func ParseOutputFormat(s string) (OutputFormat, error) {
-	switch OutputFormat(s) {
-	case OutputTable, OutputJSON, OutputTSV:
-		return OutputFormat(s), nil
-	default:
-		return "", fmt.Errorf("unknown output format %q, want one of: %s", s, strings.Join(OutputFormats, ", "))
-	}
+	return cli.ParseOutputFormat(s)
 }
 
 // ListOption contains options for listing folders
@@ -69,20 +60,6 @@ type ListOption struct {
 	Tags []string
 }
 
-// listColumn is one column of a listing, under the label a table shows and the
-// key a JSON object uses.
-type listColumn struct {
-	header string
-	key    string
-}
-
-// listView is a rendered-format-independent listing: the columns, and one slice
-// of values per folder.
-type listView struct {
-	columns []listColumn
-	rows    [][]any
-}
-
 // ImportFolderToConfig adds a folder to the configuration
 func ImportFolderToConfig(f *lazypath.Folder) error {
 	return f.AddToConfig()
@@ -95,65 +72,60 @@ func ListFolders(out io.Writer, o *ListOption) error {
 		return err
 	}
 
-	switch o.Output {
-	case OutputJSON:
-		return view.encodeJSON(out)
-	case OutputTSV:
-		return view.encodeTSV(out, o.NoHeaders)
-	case OutputTable, "":
-		return view.encodeTable(out, o)
-	default:
-		return fmt.Errorf("unknown output format %q, want one of: %s", o.Output, strings.Join(OutputFormats, ", "))
-	}
+	return cli.EncodeList(out, view, cli.ListOutputOption{
+		NoHeaders: o.NoHeaders,
+		NoColor:   o.NoColor,
+		Output:    o.Output,
+	})
 }
 
 // buildListView collects what to list, without deciding how to render it.
-func buildListView(o *ListOption) (listView, error) {
+func buildListView(o *ListOption) (cli.ListView, error) {
 	if o.IsPlain {
-		view := listView{columns: []listColumn{
-			{header: "PATH", key: "path"},
-			{header: "NAME", key: "name"},
-			{header: "PREFIX", key: "prefix"},
-			{header: "REGEX", key: "regex"},
-			{header: "PRIORITY", key: "priority"},
-			{header: "IS WORKSPACE", key: "isWorkspace"},
-			{header: "TAGS", key: "tags"},
+		view := cli.ListView{Columns: []cli.ListColumn{
+			{Header: "PATH", Key: "path"},
+			{Header: "NAME", Key: "name"},
+			{Header: "PREFIX", Key: "prefix"},
+			{Header: "REGEX", Key: "regex"},
+			{Header: "PRIORITY", Key: "priority"},
+			{Header: "IS WORKSPACE", Key: "isWorkspace"},
+			{Header: "TAGS", Key: "tags"},
 		}}
 		for _, folder := range lazypath.GetConfig().Folders {
 			if !lazypath.HasTags(folder.Tags, o.Tags) {
 				continue
 			}
-			view.rows = append(view.rows, []any{
+			view.AppendRow(
 				folder.Path, folder.Name, folder.Prefix,
 				folder.GetRegexMatch(), folder.Priority, folder.IsWorkspace,
 				folder.GetTags(),
-			})
+			)
 		}
 		return view, nil
 	}
 
 	folders, err := ParseConfig(lazypath.GetConfig())
 	if err != nil {
-		return listView{}, err
+		return cli.ListView{}, err
 	}
 	folders = FilterByTags(folders, o.Tags)
 
 	if o.ShortOnly {
-		view := listView{columns: []listColumn{{header: "SHORT NAME", key: "shortName"}}}
+		view := cli.ListView{Columns: []cli.ListColumn{{Header: "SHORT NAME", Key: "shortName"}}}
 		for _, folder := range folders {
-			view.rows = append(view.rows, []any{folder.ShortName})
+			view.AppendRow(folder.ShortName)
 		}
 		return view, nil
 	}
 
-	view := listView{columns: []listColumn{
-		{header: "SHORT NAME", key: "shortName"},
-		{header: "PATH", key: "path"},
-		{header: "WORKSPACE PATH", key: "workspace"},
-		{header: "TAGS", key: "tags"},
+	view := cli.ListView{Columns: []cli.ListColumn{
+		{Header: "SHORT NAME", Key: "shortName"},
+		{Header: "PATH", Key: "path"},
+		{Header: "WORKSPACE PATH", Key: "workspace"},
+		{Header: "TAGS", Key: "tags"},
 	}}
 	for _, folder := range folders {
-		view.rows = append(view.rows, []any{folder.ShortName, folder.Path, folder.Workspace, folder.Tags})
+		view.AppendRow(folder.ShortName, folder.Path, folder.Workspace, folder.Tags)
 	}
 	return view, nil
 }
@@ -171,88 +143,6 @@ func FilterByTags(folders []ParsedFolder, tags []string) []ParsedFolder {
 		}
 	}
 	return result
-}
-
-func (v listView) encodeTable(out io.Writer, o *ListOption) error {
-	tw := table.NewWriter()
-
-	if !o.NoHeaders {
-		header := make(table.Row, 0, len(v.columns))
-		for _, col := range v.columns {
-			header = append(header, col.header)
-		}
-		tw.AppendHeader(header)
-	}
-	for _, row := range v.rows {
-		cells := make(table.Row, 0, len(row))
-		for _, cell := range row {
-			cells = append(cells, displayValue(cell))
-		}
-		tw.AppendRow(cells)
-	}
-
-	return cli.EncodeTable(out, tw, o.NoColor)
-}
-
-// displayValue renders a cell for the two text formats. A list of tags reads as
-// "go,work" rather than Go's default "[go work]".
-func displayValue(cell any) string {
-	if list, ok := cell.([]string); ok {
-		return strings.Join(list, ",")
-	}
-	return fmt.Sprint(cell)
-}
-
-// encodeTSV writes one folder per line, so that a shell script can read the
-// listing with `read` or `cut` instead of stripping table borders.
-func (v listView) encodeTSV(out io.Writer, noHeaders bool) error {
-	var b strings.Builder
-
-	if !noHeaders {
-		headers := make([]string, 0, len(v.columns))
-		for _, col := range v.columns {
-			headers = append(headers, col.header)
-		}
-		b.WriteString(strings.Join(headers, "\t"))
-		b.WriteByte('\n')
-	}
-	for _, row := range v.rows {
-		cells := make([]string, 0, len(row))
-		for _, cell := range row {
-			cells = append(cells, displayValue(cell))
-		}
-		b.WriteString(strings.Join(cells, "\t"))
-		b.WriteByte('\n')
-	}
-
-	_, err := io.WriteString(out, b.String())
-	return err
-}
-
-// encodeJSON writes an array of objects, one per folder, keyed by column. The
-// array is always present, so a consumer never has to special-case no folders.
-func (v listView) encodeJSON(out io.Writer) error {
-	objects := make([]map[string]any, 0, len(v.rows))
-	for _, row := range v.rows {
-		object := make(map[string]any, len(v.columns))
-		for i, col := range v.columns {
-			object[col.key] = jsonValue(row[i])
-		}
-		objects = append(objects, object)
-	}
-
-	enc := json.NewEncoder(out)
-	enc.SetIndent("", "  ")
-	return enc.Encode(objects)
-}
-
-// jsonValue keeps an untagged folder's tags as [] rather than null, for the
-// same reason an empty listing is []: a consumer should only meet one shape.
-func jsonValue(cell any) any {
-	if list, ok := cell.([]string); ok && list == nil {
-		return []string{}
-	}
-	return cell
 }
 
 // RemoveFolderFromConfig removes a folder from the configuration by path
