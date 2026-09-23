@@ -1,4 +1,4 @@
-# Example templates
+# Example templates and boilerplates
 
 A starter set for `t`, covering the kinds of file most people end up writing by
 hand over and over. Try them without installing anything:
@@ -92,4 +92,23 @@ t --template-dir examples/templates new threat-model --dry-run
 > Quote it, as the values files here do, or format it with `date` in the
 > template.
 
-See [../doc/templates.md](../doc/templates.md) for the full command reference.
+## Boilerplate recipes
+
+[boilerplates/](boilerplates) holds three recipes for `b`, which creates a
+whole project from a template and registers it:
+
+| Recipe | What it does |
+| ------ | ------------ |
+| `go-cli` | Renders the `go-cli` template; no workspace, so a plain name lands in the current folder |
+| `oss-tool` | The same template, but into `~/oss` with the `oss` prefix and tags — and when `~/oss` is a workspace in your config, nothing is added to it, because the workspace already reaches the new project |
+| `repo-ci` | Drops the `github-ci` workflow into a repository that already exists, and sets `register.skip`, because there is no new project to register |
+
+```bash
+b --boilerplate-dir examples/boilerplates --template-dir examples/templates list
+b --boilerplate-dir examples/boilerplates --template-dir examples/templates \
+  new go-cli /tmp/myapp --dry-run
+```
+
+See [../doc/templates.md](../doc/templates.md) and
+[../doc/boilerplates.md](../doc/boilerplates.md) for the full command
+reference.

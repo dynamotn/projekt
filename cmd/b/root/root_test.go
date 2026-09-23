@@ -128,3 +128,33 @@ func TestNewRootCmd_Aliases(t *testing.T) {
 		t.Errorf("NewRootCmd() should have no aliases, got %d", len(cmd.Aliases))
 	}
 }
+
+func TestNewRootCmd_BoilerplateCommands(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := NewRootCmd(&buf)
+
+	// Filter out the commands cobra adds on its own
+	actualCommands := map[string]bool{}
+	for _, c := range cmd.Commands() {
+		if c.Name() != "help" && c.Name() != "completion" {
+			actualCommands[c.Name()] = true
+		}
+	}
+
+	for _, name := range []string{"version", "list", "new", "show", "path"} {
+		if !actualCommands[name] {
+			t.Errorf("NewRootCmd() missing %q subcommand, got: %v", name, actualCommands)
+		}
+	}
+}
+
+func TestNewRootCmd_Flags(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := NewRootCmd(&buf)
+
+	for _, name := range []string{"boilerplate-dir", "template-dir", "config"} {
+		if cmd.PersistentFlags().Lookup(name) == nil {
+			t.Errorf("NewRootCmd() missing --%s flag", name)
+		}
+	}
+}

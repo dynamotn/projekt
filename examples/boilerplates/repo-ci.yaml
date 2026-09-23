@@ -1,0 +1,28 @@
+# b new repo-ci ./some-existing-repo --force
+#
+# Not every boilerplate creates something to jump to: this one drops a GitHub
+# Actions workflow into a repository that already exists, so it asks not to be
+# registered.
+description: GitHub Actions workflow for an existing repository
+source:
+  template: github-ci
+vars:
+  - name: workflow
+    prompt: Workflow name
+    default: "{{ .Name }}"
+  - name: branch
+    prompt: Branch it runs on
+    default: main
+  - name: runner
+    type: choice
+    choices: [ubuntu-latest, macos-latest, windows-latest]
+    default: ubuntu-latest
+  - name: goVersion
+    prompt: Go version
+    default: "1.24"
+  - name: publishCoverage
+    prompt: Upload the coverage profile
+    type: bool
+    default: "no"
+register:
+  skip: true

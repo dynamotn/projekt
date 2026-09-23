@@ -12,6 +12,7 @@ A smart command to work with your project folder
 
 ### SEE ALSO
 
+* [projekt boilerplate](projekt_boilerplate.md)	 - Create boilerplate project folder of a language/framework/tool...
 * [projekt config](projekt_config.md)	 - Inspect and edit your configuration file
 * [projekt folder](projekt_folder.md)	 - Manage your project folder
 * [projekt init](projekt_init.md)	 - Initialize to install other needed commands

@@ -1,0 +1,22 @@
+# b new oss-tool mytool
+#
+# Everything lands in ~/oss, and the project answers to `pj oss-mytool`. When
+# ~/oss is already a workspace in your config, no entry is added: the workspace
+# reaches the new folder on its own.
+description: Go CLI that lives in the ~/oss workspace
+source:
+  template: go-cli
+vars:
+  - name: module
+    prompt: Go module path
+    default: "github.com/{{ .User }}/{{ .Name }}"
+    required: true
+  - name: summary
+    prompt: What does it do, in one line
+  - name: author
+    default: "{{ .User }}"
+register:
+  workspace: ~/oss
+  prefix: oss
+  tags: [oss, go]
+  priority: 10
