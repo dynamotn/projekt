@@ -57,6 +57,7 @@ A single static Go binary each, no daemon, no index to rebuild — your config f
 - **Templates that name their own files** — `t new` renders a Go template, or a whole folder of them, from a store you own; the path segments are templates too, and `-i` asks you for the rest.
 - **Two branches at once** — `worktree add` checks out a branch beside your work and gives it a name, so `pj myapp@PROJ-123` is the whole context switch.
 - **Your config is safe** — an unreadable or malformed config file is never silently overwritten, and `config check` tells you what is wrong with it.
+- **One config, two machines** — `include` composes it from shared files, and `config.<hostname>.yaml` holds what only this machine has. Writes only ever touch your own file.
 - **Shell-native** — a one-line `eval` for bash, zsh or fish, with completion. No plugin manager required.
 - **Boring to install** — `make all`, or grab a release binary. Linux and macOS, amd64 and arm64.
 
@@ -157,6 +158,10 @@ folders:
 | `regex`        | Workspace only — which children count. Defaults to `^[^.].+`, so dotfiles are skipped |
 | `priority`     | Tie-breaker: when two folders resolve to the same short name, the higher one wins     |
 | `tags`         | Labels to filter on later. A workspace passes its tags to every folder inside it      |
+
+| Top-level key | What it does |
+| ------------- | ------------ |
+| `include`     | Other configuration files to merge after this one, read only |
 
 A `worktrees:` section holds the working trees `projekt worktree` creates; see
 [doc/worktrees.md](doc/worktrees.md).
@@ -417,6 +422,47 @@ inside a workspace that already reaches it, in which case there is nothing to
 add and `b` tells you the name it already answers to. A starter set of recipes
 ships in [examples/boilerplates](examples/boilerplates); see
 [doc/boilerplates.md](doc/boilerplates.md) for the rest.
+
+## 🧷 One config, two machines
+
+A work laptop and a personal one share a dotfiles repository and disagree about
+half their folders. `include` composes the configuration instead of forking it:
+
+```yaml
+# ~/.config/projekt/config.yaml
+include:
+  - ~/dotfiles/projekt/shared.yaml   # the folders both machines have
+  - team.yaml                        # relative to the file that names it
+folders:
+  - path: /home/me/scratch           # and this machine's own
+```
+
+A file named `config.<hostname>.yaml` beside the main one is merged too,
+without being listed — that is the machine-specific half, and it needs no
+condition:
+
+```
+~/.config/projekt/config.yaml            # everywhere
+~/.config/projekt/config.work-laptop.yaml # only here
+```
+
+**Includes are read only.** `folder add`, `worktree add` and everything else
+that writes writes the main file and nothing else, so an included folder is
+never copied into your local configuration and a shared file is never edited
+behind your back. `projekt config check` prints what it is reading:
+
+```console
+$ projekt config check
+Checking /home/me/.config/projekt/config.yaml
+Including /home/me/dotfiles/projekt/shared.yaml
+Including /home/me/.config/projekt/config.work-laptop.yaml
+7 folder(s), 1 worktree(s), 2 git server(s): 0 error(s), 0 warning(s)
+```
+
+The file you are looking at comes first, then its includes in order, which is
+the order `priority` already resolves collisions in. A file is read once even
+when two others include it, a cycle is harmless, and an include that is missing
+or malformed is a warning rather than the end of the configuration.
 
 ## 📚 Commands
 

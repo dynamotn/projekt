@@ -97,6 +97,7 @@ func (w *Worktree) AddToConfig() error {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}
+	refreshEffective()
 
 	cli.Info("Added worktree %s to config", w.ShortName())
 	return nil
@@ -120,6 +121,7 @@ func RemoveWorktreeFromConfig(project, name string) error {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}
+	refreshEffective()
 
 	cli.Info("Removed worktree %s%s%s from config", project, WorktreeSeparator, name)
 	return nil

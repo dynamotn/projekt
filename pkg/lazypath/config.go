@@ -17,7 +17,10 @@ import (
 
 var (
 	CfgFile string
-	c       Config
+	// c is this machine's configuration file: what gets written.
+	c Config
+	// effective is c plus everything it includes: what gets read.
+	effective Config
 	// loadErr records why the existing config file could not be read. Commands
 	// must refuse to run, and above all refuse to write, while it is set:
 	// writing would replace the unreadable file with the empty in-memory config.
@@ -32,6 +35,13 @@ func LoadError() error {
 
 // Config represents the application configuration
 type Config struct {
+	// Include names other configuration files to read after this one. A
+	// relative path is resolved against the file that names it, so a dotfiles
+	// repository can be checked out anywhere.
+	//
+	// Includes are read only: every command that writes writes this file.
+	Include []string `yaml:"include,omitempty" mapstructure:"include"`
+
 	Folders    []Folder    `yaml:"folders" mapstructure:"folders"`
 	GitServers []GitServer `yaml:"gitServers" mapstructure:"gitServers"`
 	// Worktrees are extra working trees of a project, reachable by name like
@@ -56,7 +66,13 @@ func unmarshalConfig() {
 	if err != nil {
 		cli.Error("Unable to decode into struct %v", err)
 	}
-	if err := c.Validate(); err != nil {
+
+	// What commands read is this file plus what it includes; what they write
+	// is only ever this file. Keeping the two apart is what stops `folder add`
+	// from copying an included folder into the local configuration.
+	effective = mergeIncludes(c, ConfigFile())
+
+	if err := effective.Validate(); err != nil {
 		cli.Warn("Config validation warning %v", err)
 	}
 }
@@ -241,6 +257,14 @@ func (c *Config) Validate() error {
 // GetConfig returns the current configuration
 func GetConfig() Config {
 	unmarshalConfig()
+	return effective
+}
+
+// OwnConfig returns only this machine's configuration file, without what it
+// includes. It is what the commands that write look at, because an included
+// entry is not theirs to change.
+func OwnConfig() Config {
+	unmarshalConfig()
 	return c
 }
 
@@ -260,6 +284,7 @@ func ConfigFile() string {
 // what the file said before the edit.
 func ReloadConfig() error {
 	c = Config{}
+	effective = Config{}
 	loadErr = nil
 
 	if err := viper.ReadInConfig(); err != nil {
@@ -275,11 +300,13 @@ func ReloadConfig() error {
 // SetTestConfig sets the configuration for testing purposes
 func SetTestConfig(config Config) {
 	c = config
+	effective = config
 }
 
 // ResetTestConfig resets the configuration to empty state
 func ResetTestConfig() {
 	c = Config{}
+	effective = Config{}
 	loadErr = nil
 }
 

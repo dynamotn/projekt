@@ -69,6 +69,15 @@ func runConfigCheck(out io.Writer, strict bool) error {
 	}
 
 	config := loadConfigQuietly()
+
+	// What is checked is this file plus what it includes, so say which files
+	// those are: a problem in one of them is reported against the whole.
+	for _, included := range lazypath.IncludedFiles() {
+		if _, err := fmt.Fprintf(out, "Including %s\n", included); err != nil {
+			return err
+		}
+	}
+
 	diags := append(config.Diagnose(), folderutil.DiagnoseWorktrees(config)...)
 
 	var errorCount, warningCount int

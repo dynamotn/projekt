@@ -192,6 +192,7 @@ func (f *Folder) AddToConfig() error {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}
+	refreshEffective()
 
 	cli.Info("Added %s to config", f.Path)
 	return nil
@@ -218,6 +219,7 @@ func RemoveFromConfig(path string) error {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}
+	refreshEffective()
 
 	cli.Info("Removed %s from config", path)
 	return nil
