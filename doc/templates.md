@@ -96,6 +96,65 @@ Besides `.Values`, a template is given:
 A value that was never set renders as empty rather than failing, so
 `{{ .Values.license | default "MIT" }}` is the way to make one optional.
 
+## Answering questions instead of passing flags
+
+`--interactive` (`-i`) asks for what is missing, one question per value:
+
+```console
+$ t new invoice ./INV-001.md -i
+Values for invoice:
+  Invoice number [INV-2026-001]: INV-2026-021
+  Who is invoicing [jane]:
+  Who is billed: Acme GmbH
+  currency (EUR/USD/GBP/VND) [EUR]:
+  Payment terms, in days [14]: 30
+  Tax rate, in percent [0]: 19
+```
+
+- An empty answer takes the default in brackets, and a value with no default
+  stays unset, so the template's own `| default` still applies.
+- Anything already given with `--set` or `--values` is never asked again, which
+  makes `-i` a way to fill in the rest rather than all of it.
+- An answer of the wrong shape is refused and asked again — `8o8o` for a number,
+  or a choice that is not on the list.
+- Questions go to standard error, so `t new x -i --dry-run > file` still writes
+  only the rendered template to the file.
+- Answers can be piped in, one line each. When the input runs out the remaining
+  values fall back to their defaults, and a required one without an answer is
+  an error rather than an empty file.
+
+### Saying what to ask
+
+A template declares its questions in a `.vars.yaml`: next to a file template as
+`<name>.vars.yaml`, and inside a folder template as `.vars.yaml`, where it
+travels with the folder. It is never listed as a template and never rendered.
+
+```yaml
+vars:
+  - name: module              # the key under .Values; dots nest
+    prompt: Go module path    # the question; defaults to the name
+    default: "example.com/{{ .Name }}"   # rendered, so .Name and .User work
+    required: true            # ask again rather than accept an empty answer
+  - name: runner
+    type: choice
+    choices: [ubuntu-latest, macos-latest, windows-latest]
+    default: ubuntu-latest
+  - name: netDays
+    type: int
+    default: "14"
+  - name: publishCoverage
+    type: bool                # y/yes/true/1, n/no/false/0
+    default: "no"
+  - name: tags
+    type: list                # comma separated
+    default: inbox
+```
+
+A template without a manifest is still usable interactively: the questions are
+then the `.Values` keys read out of the template itself, in the order they
+appear. Keys the template loops over are left out — a list or a map is not
+something to type at a prompt, and belongs in a `--values` file.
+
 ## Writing a template
 
 The quickest start is to import a file or a folder you already have; its
@@ -115,7 +174,8 @@ $EDITOR "$(t path go-cli)"       # bash
 ```
 
 `t list` shows what the store holds and `t show <template>` prints the source
-of one, a folder template file by file. The examples folder is the other way in:
+of one, a folder template file by file. To see what a template will ask for,
+run it with `-i --dry-run`. The examples folder is the other way in:
 copy what you want out of it, or read it for what a template can do. Like `projekt folder list`, the listing
 renders in the format you ask for:
 

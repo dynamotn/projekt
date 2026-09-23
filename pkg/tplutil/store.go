@@ -111,6 +111,10 @@ func List() ([]Template, error) {
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
+		// A manifest describes the template it sits next to.
+		if strings.HasSuffix(name, VarsFile) {
+			continue
+		}
 		if entry.IsDir() {
 			templates = append(templates, Template{
 				Name: name,

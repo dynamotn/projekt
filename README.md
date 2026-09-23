@@ -278,6 +278,7 @@ t add ./LICENSE                  # turn a file you already have into a template
 t list                           # what the store holds
 t new license LICENSE --set author='Jane Doe'
 t new go-cli ./myapp --name myapp --set module=example.com/myapp
+t new invoice ./INV-001.md -i    # or let it ask you
 t new dockerfile --dry-run       # render to stdout, write nothing
 ```
 
@@ -295,8 +296,10 @@ A template is either one file or a whole folder. In a folder template the
 ```
 
 Values come from repeatable `--set key=value` (dots nest, and the value keeps
-its YAML type, so `port=8080` is a number) and `--values file.yaml`, merged
-deeply with `--set` winning. A template reaches them through `.Values`, and is
+its YAML type, so `port=8080` is a number), `--values file.yaml`, merged deeply
+with `--set` winning, or `--interactive`, which asks for whatever is still
+missing — from the template's `.vars.yaml` when it has one, and otherwise from
+the `.Values` keys read out of the template itself. A template reaches them through `.Values`, and is
 handed `.Name`, `.Project`, `.Dir`, `.Path`, `.Template`, `.User`, `.Now`,
 `.Date` and `.Year` besides. A value nobody set renders empty rather than
 failing, so `{{ .Values.license | default "MIT" }}` makes one optional.

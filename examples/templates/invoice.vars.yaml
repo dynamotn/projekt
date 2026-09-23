@@ -1,0 +1,30 @@
+vars:
+  - name: number
+    prompt: Invoice number
+    default: "INV-{{ .Year }}-001"
+  - name: from
+    prompt: Who is invoicing
+    default: "{{ .User }}"
+    required: true
+  - name: to
+    prompt: Who is billed
+    required: true
+  - name: currency
+    type: choice
+    choices: [EUR, USD, GBP, VND]
+    default: EUR
+  - name: netDays
+    prompt: Payment terms, in days
+    type: int
+    default: "14"
+  - name: taxPercent
+    prompt: Tax rate, in percent
+    type: int
+    default: "0"
+  - name: taxName
+    prompt: Tax called
+    default: VAT
+  - name: reference
+    prompt: Purchase order or reference
+  - name: note
+    prompt: Closing note

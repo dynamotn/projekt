@@ -1,0 +1,12 @@
+vars:
+  - name: module
+    prompt: Go module path
+    default: "example.com/{{ .Name }}"
+    required: true
+  - name: summary
+    prompt: What does it do, in one line
+  - name: author
+    default: "{{ .User }}"
+  - name: goVersion
+    prompt: Go version
+    default: "1.24"

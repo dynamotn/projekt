@@ -27,16 +27,23 @@ Variables available to a template:
   .Now       Current time, .Date (2006-01-02) and .Year
   .Values    Everything given with --set and --values
 
+With --interactive the missing values are asked for, one question per value.
+A template says what to ask in its .vars.yaml; without one, the questions are
+the .Values keys read out of the template itself. Anything already given with
+--set or --values is never asked again.
+
 Examples:
 
   t new license LICENSE --set author='Jane Doe'
   t new go-cli ./myapp --set module=example.com/myapp
+  t new invoice ./INV-001.md --interactive
   t new dockerfile --dry-run`
 
 func NewTemplateNewCmd(out io.Writer) *cobra.Command {
 	var (
-		sets       []string
-		valueFiles []string
+		sets        []string
+		valueFiles  []string
+		interactive bool
 	)
 	o := tplutil.RenderOptions{Out: out}
 
@@ -68,6 +75,12 @@ func NewTemplateNewCmd(out io.Writer) *cobra.Command {
 			// --set wins over --values, the same way a flag wins over a file.
 			o.Values = tplutil.MergeValues(fileValues, setValues)
 
+			if interactive {
+				if o.Values, err = askForValues(cmd, o); err != nil {
+					return err
+				}
+			}
+
 			written, err := tplutil.Render(o)
 			if err != nil {
 				return err
@@ -88,8 +101,39 @@ func NewTemplateNewCmd(out io.Writer) *cobra.Command {
 	f.StringVarP(&o.Name, "name", "n", "", "Name of the rendered file, also available as '.Name'")
 	f.StringArrayVarP(&sets, "set", "s", nil, "Set a template value, like -s key=value or -s author.name=me (repeatable)")
 	f.StringArrayVarP(&valueFiles, "values", "f", nil, "YAML file of template values (repeatable)")
+	f.BoolVarP(&interactive, "interactive", "i", false, "Ask for the values the template needs")
 	f.BoolVarP(&o.Force, "force", "F", false, "Overwrite files that already exist")
 	f.BoolVarP(&o.DryRun, "dry-run", "d", false, "Print the rendered result instead of writing files")
 
 	return cmd
+}
+
+// askForValues asks for whatever the template needs and is not already set.
+//
+// The questions go to stderr, so that a piped `--dry-run` still receives only
+// the rendered template.
+func askForValues(cmd *cobra.Command, o tplutil.RenderOptions) (tplutil.Values, error) {
+	vars, err := tplutil.Vars(o.Template)
+	if err != nil {
+		return nil, err
+	}
+
+	base, err := tplutil.BaseContext(o)
+	if err != nil {
+		return nil, err
+	}
+
+	prompt := cmd.ErrOrStderr()
+	if len(vars) == 0 {
+		fmt.Fprintf(prompt, "%s takes no values.\n", o.Template.Name)
+		return o.Values, nil
+	}
+	fmt.Fprintf(prompt, "Values for %s:\n", o.Template.Name)
+
+	values, err := tplutil.Prompter{In: cmd.InOrStdin(), Out: prompt}.Ask(vars, o.Values, base)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Fprintln(prompt)
+	return values, nil
 }

@@ -22,10 +22,16 @@ Variables available to a template:
   .Now       Current time, .Date (2006-01-02) and .Year
   .Values    Everything given with --set and --values
 
+With --interactive the missing values are asked for, one question per value.
+A template says what to ask in its .vars.yaml; without one, the questions are
+the .Values keys read out of the template itself. Anything already given with
+--set or --values is never asked again.
+
 Examples:
 
   t new license LICENSE --set author='Jane Doe'
   t new go-cli ./myapp --set module=example.com/myapp
+  t new invoice ./INV-001.md --interactive
   t new dockerfile --dry-run
 
 ```
@@ -38,6 +44,7 @@ projekt template new [template] [destination] [flags]
   -d, --dry-run              Print the rendered result instead of writing files
   -F, --force                Overwrite files that already exist
   -h, --help                 help for new
+  -i, --interactive          Ask for the values the template needs
   -n, --name string          Name of the rendered file, also available as '.Name'
   -s, --set stringArray      Set a template value, like -s key=value or -s author.name=me (repeatable)
   -f, --values stringArray   YAML file of template values (repeatable)

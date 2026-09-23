@@ -1,8 +1,10 @@
 package tplutil
 
 import (
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -105,6 +107,52 @@ func TestExampleValuesRender(t *testing.T) {
 				Values:   values,
 			}); err != nil {
 				t.Fatalf("Render(%s) with %s error = %v", name, valuesFile, err)
+			}
+		})
+	}
+}
+
+// TestExampleTemplatesAsk checks that every example template can say what it
+// needs: a manifest that parses, or keys read out of the template itself.
+func TestExampleTemplatesAsk(t *testing.T) {
+	if _, err := os.Stat(exampleStore); err != nil {
+		t.Skipf("no example store at %s: %v", exampleStore, err)
+	}
+
+	previous := TemplateDir
+	TemplateDir = exampleStore
+	t.Setenv("PROJEKT_TEMPLATE_DIR", "")
+	t.Cleanup(func() { TemplateDir = previous })
+
+	templates, err := List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	for _, tpl := range templates {
+		t.Run(tpl.Name, func(t *testing.T) {
+			vars, err := Vars(tpl)
+			if err != nil {
+				t.Fatalf("Vars(%s) error = %v", tpl.Name, err)
+			}
+
+			base, err := BaseContext(RenderOptions{Template: tpl, Name: "example"})
+			if err != nil {
+				t.Fatalf("BaseContext(%s) error = %v", tpl.Name, err)
+			}
+
+			seen := map[string]bool{}
+			for _, v := range vars {
+				if seen[v.Name] {
+					t.Errorf("%s asks for %q twice", tpl.Name, v.Name)
+				}
+				seen[v.Name] = true
+
+				// Every default must render, or the first question fails.
+				if _, err := (Prompter{In: strings.NewReader(""), Out: io.Discard}).
+					Ask([]Var{v}, Values{}, base); err != nil && !v.Required {
+					t.Errorf("%s: asking for %q failed: %v", tpl.Name, v.Name, err)
+				}
 			}
 		})
 	}

@@ -1,0 +1,20 @@
+vars:
+  - name: title
+    default: "{{ .Name }}"
+    required: true
+  - name: claim
+    prompt: The idea, in one sentence
+    required: true
+  - name: tags
+    prompt: Tags, comma separated
+    type: list
+    default: inbox
+  - name: status
+    type: choice
+    choices: [seedling, budding, evergreen]
+    default: seedling
+  - name: source
+    prompt: Where it came from
+  - name: page
+    prompt: Page
+    type: int

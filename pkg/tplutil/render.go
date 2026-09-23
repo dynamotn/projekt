@@ -36,6 +36,20 @@ type RenderOptions struct {
 	Out io.Writer
 }
 
+// BaseContext returns what a template is given before any value is asked for,
+// so that a default like `{{ .User }}` in a manifest renders the same way the
+// template itself would.
+func BaseContext(o RenderOptions) (map[string]any, error) {
+	if o.Template.IsDir() {
+		return context(o, ""), nil
+	}
+	target, err := fileTarget(o)
+	if err != nil {
+		return nil, err
+	}
+	return context(o, target), nil
+}
+
 // Render renders a template and reports every file it created, in the order
 // they were written.
 func Render(o RenderOptions) ([]string, error) {
@@ -136,6 +150,10 @@ func renderDir(o RenderOptions) ([]string, error) {
 		if entry.IsDir() && entry.Name() == ".git" {
 			return fs.SkipDir
 		}
+		// The manifest describes the template, it is not part of the output.
+		if !entry.IsDir() && entry.Name() == VarsFile {
+			return nil
+		}
 
 		target, err := renderPath(o, root, relative)
 		if err != nil {
@@ -232,9 +250,14 @@ func context(o RenderOptions, target string) map[string]any {
 		dir = filepath.Dir(target)
 	}
 
+	if name == "" && o.Template.IsDir() {
+		// A folder template creates the project, so the folder it is written
+		// to is its name: `t new go-cli ./myapp` gives `.Name` "myapp".
+		name = filepath.Base(dir)
+	}
+
 	project := filepath.Base(dir)
 	if o.Template.IsDir() && name != "" {
-		// A folder template usually creates the project itself.
 		project = name
 	}
 

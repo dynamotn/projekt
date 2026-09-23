@@ -41,6 +41,17 @@ t add examples/templates/adr.tmpl --name adr
 | `monthly-budget` | file | finance | `t new monthly-budget ./2026-09.md -f examples/values/monthly-budget.yaml` |
 | `invoice` | file | finance | `t new invoice ./INV-2026-014.md -f examples/values/invoice.yaml` |
 
+Six of them — `adr`, `invoice`, `zettel`, `incident-report`, `go-cli` and
+`github-ci` — ship a `.vars.yaml`, so `-i` asks proper questions with defaults,
+choices and types:
+
+```bash
+t --template-dir examples/templates new invoice ./INV-001.md -i
+```
+
+The other eight have no manifest, and `-i` still works: the questions are the
+`.Values` keys read out of the template.
+
 Every one of them renders with no values at all — the defaults produce a usable
 skeleton — so `--dry-run` is the fastest way to see what a template does:
 
@@ -68,6 +79,13 @@ t --template-dir examples/templates new threat-model --dry-run
   (cents) and format with `div`/`mod`, so no total is off by a rounding step.
 - **Dates.** `.Date`, `.Year` and `.Now` come for free; `dateModify` shifts them,
   which is how `invoice` works out a due date from `netDays`.
+- **Questions worth asking.** `adr` and `incident-report` use a `choice` so a
+  status cannot be typed wrong, `invoice` reads `netDays` as an `int`, `zettel`
+  reads tags as a `list`, `github-ci` reads a `bool`, and several defaults are
+  templates of their own: `"example.com/{{ .Name }}"`, `"{{ .User }}"`.
+- **Where the manifest lives.** `go-cli` and `github-ci` keep theirs inside the
+  folder as `.vars.yaml`, so copying the folder carries its questions along; the
+  file templates use `<name>.vars.yaml` beside them.
 
 > One YAML trap worth knowing: an unquoted `2026-12-31` in a values file is a
 > timestamp, not a string, and renders as `2026-12-31 00:00:00 +0000 UTC`.

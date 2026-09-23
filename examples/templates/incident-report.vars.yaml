@@ -1,0 +1,25 @@
+vars:
+  - name: title
+    prompt: What broke, in a headline
+    required: true
+  - name: severity
+    type: choice
+    choices: [SEV1, SEV2, SEV3, SEV4]
+    default: SEV2
+  - name: status
+    type: choice
+    choices: [investigating, mitigated, resolved]
+    default: investigating
+  - name: id
+    prompt: Incident id
+    default: "INC-{{ .Now | date \"20060102\" }}"
+  - name: commander
+    prompt: Incident commander
+    default: "{{ .User }}"
+    required: true
+  - name: scribe
+  - name: timezone
+    prompt: Timezone the timeline is written in
+    default: UTC
+  - name: customerImpact
+    prompt: Customer impact, in one line

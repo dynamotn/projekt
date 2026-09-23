@@ -1,0 +1,22 @@
+# What `t new adr -i` asks for. Without this file the questions would be the
+# .Values keys read out of the template itself.
+vars:
+  - name: title
+    prompt: What is being decided
+    required: true
+  - name: number
+    prompt: ADR number
+    default: "0001"
+  - name: status
+    type: choice
+    choices: [proposed, accepted, rejected, superseded]
+    default: proposed
+  - name: deciders
+    prompt: Who decided
+    default: "{{ .User }}"
+  - name: supersedes
+    prompt: Supersedes which ADR (blank for none)
+  - name: context
+    prompt: Why now
+  - name: decision
+    prompt: What we will do
