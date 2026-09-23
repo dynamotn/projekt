@@ -9,6 +9,9 @@ This command will:
 - Clone missing repositories
 - Check existing repositories
 
+Missing repositories are cloned concurrently. Use --forks to change how many
+run at once, or --forks 1 to clone them one after another.
+
 Use --dry-run to see what would be done without making changes.
 
 ```
@@ -18,8 +21,9 @@ projekt folder sync [flags]
 ### Options
 
 ```
-      --dry-run   Show what would be done without making changes
-  -h, --help      help for sync
+      --dry-run     Show what would be done without making changes
+      --forks int   Number of repositories to clone concurrently (default 4)
+  -h, --help        help for sync
 ```
 
 ### Options inherited from parent commands

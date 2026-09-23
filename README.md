@@ -32,7 +32,7 @@ A single static Go binary, no daemon, no index to rebuild — your config file *
 
 - **Jump, don't navigate** — `pj <short-name>` resolves a project folder and takes you there. Deep trees stop mattering.
 - **Workspaces, not just folders** — point at a parent directory once and every child inside it becomes a jumpable project, filtered by your own regex.
-- **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it.
+- **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time.
 - **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
 - **Your config is safe** — an unreadable or malformed config file is never silently overwritten.
 - **Shell-native** — a one-line `eval` for bash or fish. No plugin manager required.
@@ -150,7 +150,8 @@ folders:
 ```bash
 projekt folder check          # [OK] / [MISSING] / [NOT GIT] / [WARNING] per repo
 projekt folder sync --dry-run # what would be cloned
-projekt folder sync           # clone the missing ones
+projekt folder sync           # clone the missing ones, 4 at a time
+projekt folder sync --forks 1 # one after another instead
 ```
 
 SSH and HTTPS are both supported, including `ssh://host:port` URLs, and
@@ -168,7 +169,7 @@ Full details in [doc/git-integration.md](doc/git-integration.md).
 | [`folder get`](doc/projekt_folder_get.md)            | Resolve a short name to a path — what `pj` calls           |
 | [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |
 | [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos exist, are repos, match remote |
-| [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories, with `--dry-run`               |
+| [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories in parallel, with `--dry-run`   |
 | [`init`](doc/projekt_init.md)                        | Emit the shell integration for bash or fish           |
 | [`version`](doc/projekt_version.md)                  | Version, commit, tree state and build time                 |
 
