@@ -105,6 +105,40 @@ dybatpho::text_indent "$(cat "${DYBATPHO_TEST_SNAPSHOT_DIR}/release-run.snap")" 
 dybatpho::assert_cli_snapshot release-run -- release_tool "${workdir}/dist2"
 dybatpho::success "CLI output is stable across runs"
 
+dybatpho::header "GOLDEN UPDATE"
+# After an intended change to the output, regenerate every snapshot in one run
+# instead of deleting `.snap` files by hand:
+#
+#   UPDATE_SNAPSHOTS=1 bats test/
+#
+# The switch is read on every comparison, so it rewrites whatever the suite
+# touches. `0`, `false` and an empty value all leave the baselines alone.
+export UPDATE_SNAPSHOTS=1
+dybatpho::assert_cli_snapshot release-run -- release_tool "${workdir}/dist3"
+export UPDATE_SNAPSHOTS=0
+dybatpho::info "Snapshot after the bulk update:"
+dybatpho::text_indent "$(cat "${DYBATPHO_TEST_SNAPSHOT_DIR}/release-run.snap")" "  "
+dybatpho::success "Baseline regenerated, then comparison resumed"
+
+dybatpho::header "DURATION BUDGETS"
+# A budget guards the shape of the cost, not the exact millisecond count.
+# Several runs keep the fastest, so one descheduled run does not fail a suite.
+export DYBATPHO_TEST_DURATION_RUNS=3
+dybatpho::assert_duration_under 5000 -- release_tool "${workdir}/dist4"
+dybatpho::info "Fastest run: ${DYBATPHO_TEST_LAST_DURATION_MS}ms"
+
+# A benchmark only measures and reports; assert on the median when you want it
+# enforced.
+dybatpho::benchmark release-tool 3 -- release_tool "${workdir}/dist5"
+dybatpho::success "Release path stayed inside its budget"
+
+# An overrun is reported, not fatal, like every other assertion here.
+if dybatpho::assert_duration_under 1 -- sleep 0.05; then
+  dybatpho::error "Expected the overrun to be reported"
+else
+  dybatpho::warn "Overrun reported as expected"
+fi
+
 # --- failure reporting -------------------------------------------------------
 
 dybatpho::header "FAILURE REPORTING"

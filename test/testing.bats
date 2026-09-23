@@ -2,6 +2,8 @@ setup() {
   load test_helper
   export DYBATPHO_TEST_SNAPSHOT_DIR="${BATS_TEST_TMPDIR}/snapshots"
   export DYBATPHO_TEST_UPDATE_SNAPSHOTS=false
+  export UPDATE_SNAPSHOTS=""
+  export DYBATPHO_TEST_DURATION_RUNS=1
   DYBATPHO_TEST_FAILURES=0
   dybatpho::snapshot_scrub_reset
 }
@@ -260,6 +262,87 @@ setup() {
   run --separate-stderr dybatpho::assert_cli_snapshot name --
   assert_failure
   assert_stderr --partial "Expected a command to run after --"
+}
+
+@test "UPDATE_SNAPSHOTS=1 rewrites snapshots and an off value leaves them alone" {
+  dybatpho::assert_snapshot golden "recorded"
+
+  # The unprefixed alias is what a contributor types in front of the runner.
+  UPDATE_SNAPSHOTS=1
+  dybatpho::assert_snapshot golden "regenerated"
+  assert_equal "$(cat "${DYBATPHO_TEST_SNAPSHOT_DIR}/golden.snap")" "regenerated"
+
+  # `0` is off here, however `dybatpho::is true` reads it: an environment
+  # variable set to zero must not quietly rewrite the baseline.
+  UPDATE_SNAPSHOTS=0
+  run --separate-stderr dybatpho::assert_snapshot golden "drifted"
+  assert_failure
+  assert_stderr --partial "does not match"
+  assert_equal "$(cat "${DYBATPHO_TEST_SNAPSHOT_DIR}/golden.snap")" "regenerated"
+}
+
+@test "dybatpho::assert_duration_under passes under its budget and reports an overrun" {
+  dybatpho::assert_duration_under 10000 -- true
+  assert [ "${DYBATPHO_TEST_LAST_DURATION_MS}" -ge 0 ]
+
+  run --separate-stderr dybatpho::assert_duration_under 0 -- true
+  assert_failure
+  assert_stderr --partial "Expected to finish in under 0ms"
+
+  # A command that fails is a failure, not a fast run.
+  run --separate-stderr dybatpho::assert_duration_under 10000 -- bash -c 'printf "boom\n" >&2; exit 4'
+  assert_failure
+  assert_stderr --partial "exited 4"
+  assert_stderr --partial "boom"
+}
+
+@test "dybatpho::assert_duration_under keeps the fastest of several runs" {
+  DYBATPHO_TEST_DURATION_RUNS=3
+  dybatpho::assert_duration_under 10000 -- true
+  DYBATPHO_TEST_DURATION_RUNS=1
+
+  run --separate-stderr dybatpho::assert_duration_under 100 -- true extra
+  assert_success
+
+  run --separate-stderr dybatpho::assert_duration_under later -- true
+  assert_failure
+  assert_stderr --partial "Expected a budget in milliseconds"
+
+  run --separate-stderr dybatpho::assert_duration_under 100 true
+  assert_failure
+  assert_stderr --partial "Expected: milliseconds -- command"
+
+  run --separate-stderr dybatpho::assert_duration_under 100 --
+  assert_failure
+  assert_stderr --partial "Expected a command to run after --"
+}
+
+@test "dybatpho::benchmark reports the fastest, median, and slowest run" {
+  run dybatpho::benchmark startup 3 -- true
+  assert_success
+  assert_output --partial "startup runs=3"
+  assert_output --partial "median="
+
+  dybatpho::benchmark startup 3 -- true > /dev/null
+  assert [ "${DYBATPHO_TEST_BENCH_MIN_MS}" -le "${DYBATPHO_TEST_BENCH_MEDIAN_MS}" ]
+  assert [ "${DYBATPHO_TEST_BENCH_MEDIAN_MS}" -le "${DYBATPHO_TEST_BENCH_MAX_MS}" ]
+  assert_equal "${DYBATPHO_TEST_LAST_DURATION_MS}" "${DYBATPHO_TEST_BENCH_MEDIAN_MS}"
+
+  run --separate-stderr dybatpho::benchmark startup 0 -- true
+  assert_failure
+  assert_stderr --partial "Expected a positive number of runs"
+
+  run --separate-stderr dybatpho::benchmark startup 2 true
+  assert_failure
+  assert_stderr --partial "Expected: label runs -- command"
+
+  run --separate-stderr dybatpho::benchmark startup 2 --
+  assert_failure
+  assert_stderr --partial "Expected a command to run after --"
+
+  run --separate-stderr dybatpho::benchmark startup 2 -- bash -c 'exit 5'
+  assert_failure
+  assert_stderr --partial "exited 5 on run 1 of 2"
 }
 
 @test "dybatpho::mock_env sets values and unmock_env restores the previous state" {

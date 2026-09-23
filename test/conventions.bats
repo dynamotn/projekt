@@ -113,7 +113,7 @@ fail_with() {
       [ -n "${fn}" ] || continue
       # Match the name followed by a non-name character so a shorter function
       # can't be satisfied by a longer one that merely starts with it.
-      grep -qE "${fn//:/\\:}([^A-Za-z0-9_]|$)" "${doc}" ||
+      grep -qE "${fn}([^A-Za-z0-9_]|$)" "${doc}" ||
         violations+="${module}: ${fn} is not documented in doc/${module}.md"$'\n'
     done < <(public_functions "${source}")
   done
@@ -129,7 +129,7 @@ fail_with() {
     [ -f "${test_file}" ] || continue
     while read -r fn; do
       [ -n "${fn}" ] || continue
-      grep -qE "${fn//:/\\:}([^A-Za-z0-9_]|$)" "${test_file}" ||
+      grep -qE "${fn}([^A-Za-z0-9_]|$)" "${test_file}" ||
         violations+="${module}: ${fn} is never named in test/${module}.bats"$'\n'
     done < <(public_functions "${source}")
   done

@@ -123,6 +123,45 @@ once that shell exits.
 3. **Given** fixture content on stdin, **When** `-` is passed as the content,
    **Then** the content is read from the redirected input
 
+### User Story 6 - Regenerate snapshots in bulk after an intended change (Priority: P2)
+
+As a CLI maintainer, I want one switch that rewrites every stored snapshot, so
+that an intended output change does not mean deleting `.snap` files by hand.
+
+**Independent Test**: Record a snapshot, run the suite again with the switch set
+and different text, and verify the stored baseline was replaced.
+
+**Acceptance Scenarios**:
+
+1. **Given** stored snapshots and `UPDATE_SNAPSHOTS=1`, **When** the suite runs,
+   **Then** every snapshot it touches is rewritten and no comparison fails
+2. **Given** `UPDATE_SNAPSHOTS=0`, an empty value, or no value at all, **When**
+   the suite runs, **Then** snapshots are compared as usual and the stored
+   baselines are left untouched
+
+### User Story 7 - Keep a hot path inside a time budget (Priority: P2)
+
+As a CLI maintainer, I want to assert that a command finishes in under a stated
+number of milliseconds, so that a performance regression fails the suite instead
+of being reported by a user.
+
+**Independent Test**: Assert a trivial command against a generous budget and
+against a zero budget, and verify the pass and the reported overrun.
+
+**Acceptance Scenarios**:
+
+1. **Given** a command that finishes inside the budget, **When** the assertion
+   runs, **Then** it passes and publishes the measured milliseconds
+2. **Given** a command that takes at least the budget, **When** the assertion
+   runs, **Then** it fails naming both the budget and the measured time
+3. **Given** a command that exits non-zero, **When** it is timed, **Then** the
+   assertion fails with the command's exit code and output rather than treating
+   a crash as a fast run
+4. **Given** several runs are configured, **When** the command is timed, **Then**
+   the fastest run decides, so one descheduled run does not fail the suite
+5. **Given** a benchmark over several runs, **When** it finishes, **Then** it
+   reports the fastest, median, and slowest run and asserts nothing
+
 ### Example Workflow
 
 ```bash
@@ -235,6 +274,21 @@ dybatpho::unmock_all
   from redirected stdin.
 - **FR-022**: `unmock_all` MUST remove every command and HTTP mock, restore the
   environment, and clear registered snapshot substitutions.
+- **FR-023**: Snapshot rewriting MUST also be switchable through the unprefixed
+  `UPDATE_SNAPSHOTS` variable, so a whole suite regenerates with
+  `UPDATE_SNAPSHOTS=1 <test runner>`.
+- **FR-024**: Both snapshot switches MUST read `1`, `true`, `yes`, and `on` as
+  on, and every other value, including `0` and an empty value, as off, so a
+  baseline is never rewritten by accident.
+- **FR-025**: `assert_duration_under` MUST run a command, fail when it exits
+  non-zero, fail when it takes at least the stated budget in milliseconds, and
+  publish the measured time in `DYBATPHO_TEST_LAST_DURATION_MS`.
+- **FR-026**: `assert_duration_under` MUST repeat the command
+  `DYBATPHO_TEST_DURATION_RUNS` times and judge the fastest run.
+- **FR-027**: `benchmark` MUST time a command over a given number of runs and
+  report the fastest, median, and slowest in milliseconds, on stdout and in
+  `DYBATPHO_TEST_BENCH_MIN_MS`, `DYBATPHO_TEST_BENCH_MEDIAN_MS`, and
+  `DYBATPHO_TEST_BENCH_MAX_MS`, without asserting anything.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -250,6 +304,9 @@ dybatpho::unmock_all
 - **HTTP Route**: A URL pattern mapped to a status, headers, and body.
 - **Fixture**: A temporary file or directory registered for `trap`-based
   cleanup.
+- **Duration Budget**: A ceiling in milliseconds that a timed command must stay
+  under.
+- **Benchmark Sample**: One timed run of a command, in milliseconds.
 
 ## Success Criteria *(mandatory)*
 
@@ -265,6 +322,10 @@ dybatpho::unmock_all
   a stored snapshot.
 - **SC-005**: No fixture survives the shell that created it, including when the
   script fails or is interrupted.
+- **SC-006**: An intended output change is absorbed by one run of the suite with
+  `UPDATE_SNAPSHOTS=1`, with no `.snap` file edited or deleted by hand.
+- **SC-007**: A command that grows slower than its stated budget fails the suite
+  with both numbers in the diagnostic.
 
 ## Integration Tests *(mandatory)*
 
@@ -291,6 +352,13 @@ dybatpho::unmock_all
 - **IT-012**: Verify `assert_mock_called` accepts a whole-argument subset and
   rejects a fragment that spans an argument boundary.
 - **IT-013**: Verify `DYBATPHO_TEST_FAILURES` counts failures and ignores passes.
+- **IT-014**: Record a snapshot, rewrite it with `UPDATE_SNAPSHOTS=1`, and verify
+  that `UPDATE_SNAPSHOTS=0` compares instead of rewriting.
+- **IT-015**: Verify `assert_duration_under` passes under a generous budget,
+  reports an overrun against a zero budget, fails on a command that exits
+  non-zero, and rejects a malformed budget, separator, or empty command.
+- **IT-016**: Verify `benchmark` reports ordered min, median, and max values and
+  fails on a run that exits non-zero.
 
 ## Acceptance Criteria *(mandatory)*
 

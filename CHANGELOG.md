@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`testing` — a time budget and a bulk snapshot refresh.** Two things a suite
+  built on this module had to hand-roll.
+
+  `dybatpho::assert_duration_under` states the budget a command has to stay
+  inside, so a path that turns quadratic fails the suite instead of being
+  reported by a user:
+
+  ```sh
+  dybatpho::assert_duration_under 200 -- ./mytool completions bash
+  ```
+
+  A budget measured on a loaded machine is a flaky test, so
+  `DYBATPHO_TEST_DURATION_RUNS` repeats the command and judges the fastest run:
+  the fastest run is the one that measured the code rather than the scheduler.
+  A command that exits non-zero fails with its own output, because a crash is
+  not a fast run. `dybatpho::benchmark` measures without asserting, reporting
+  the fastest, median and slowest of N runs — the median, since one descheduled
+  run drags a mean and leaves a median where it was.
+
+  Snapshots already had `DYBATPHO_TEST_UPDATE_SNAPSHOTS`; they now also read the
+  unprefixed `UPDATE_SNAPSHOTS`, which is what fits in front of a test runner
+  when an intended output change has to be absorbed across the whole suite:
+
+  ```sh
+  UPDATE_SNAPSHOTS=1 bats test/
+  ```
+
+### Changed
+
+- **A snapshot switch set to `0` now means off.** Both snapshot switches read
+  `1`, `true`, `yes` and `on` as on and everything else as off. Previously the
+  value went through `dybatpho::is true`, which reads `0` as true because it
+  speaks in exit codes — so `DYBATPHO_TEST_UPDATE_SNAPSHOTS=0` rewrote every
+  baseline it touched, and a suite whose snapshots are all rewritten asserts
+  nothing.
+
 ## [4.0.0] - 2026-09-23
 
 ### Added
