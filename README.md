@@ -6,7 +6,9 @@
 [![License](https://img.shields.io/github/license/dynamotn/projekt.svg)](LICENSE)
 
 > **projekt** – Stop `cd`-ing around your disk.
-> One short name jumps to any project you own, and the repos you don't have yet get cloned for you.
+> One short name reaches any project you own — including the ones it clones for
+> you, the ones it scaffolds from your own templates, and the second branch it
+> checks out beside the one you are on.
 
 ---
 
@@ -16,17 +18,33 @@
 cd ~/work/clients/acme/services/backend-api || exit
 cd ../../../../oss/some-library || exit
 git clone git@github.com:myorg/myteam/frontend.git ~/work/myorg/frontend
+mkdir -p ~/work/myorg/new-service && cd $_   # then copy a Makefile from a
+cp -r ../old-service/{Makefile,.github} .    # sibling and edit every name in it
+git stash && git checkout review/PROJ-123    # just to look at a pull request
 ```
 
 ## To this
 
 ```bash
-pj backend-api      # anywhere on your machine, from any shell
-pj oss-some-library # workspaces get a prefix, so names never collide
-projekt folder sync # clone every repo your config knows about, you don't
+pj backend-api                  # anywhere on your machine, from any shell
+pj oss-some-library             # workspaces get a prefix, so names never collide
+projekt folder sync             # clone every repo your config knows about, you don't
+b new go-cli new-service        # created, filled in, and jumpable straight away
+t new adr doc/adr/0007-db.md    # a file from your own template, not a copy
+projekt worktree add backend-api review/PROJ-123
+pj backend-api@PROJ-123         # the pull request, beside your own work
 ```
 
-A single static Go binary, no daemon, no index to rebuild — your config file *is* the index.
+Three binaries. The last two are also `projekt template` and `projekt
+boilerplate`, if you would rather type one name:
+
+| | |
+| --- | --- |
+| `projekt` | folders, working trees, git, config — and the `pj` shell function |
+| `t` | render a file, or a whole tree, from your own template store |
+| `b` | create a project from a boilerplate and put it in your config |
+
+A single static Go binary each, no daemon, no index to rebuild — your config file *is* the index.
 
 ## 🚀 Why projekt?
 
@@ -35,16 +53,17 @@ A single static Go binary, no daemon, no index to rebuild — your config file *
 - **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time. Already have them cloned? `--discover` writes that config for you.
 - **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
 - **Tagged, not just named** — label folders `work`, `oss`, `go`, then point any command at a subset with `--tags`.
+- **New projects that are already on the map** — `b new` renders a boilerplate into the right workspace and registers it, so the next thing you type is `pj`.
+- **Templates that name their own files** — `t new` renders a Go template, or a whole folder of them, from a store you own; the path segments are templates too, and `-i` asks you for the rest.
 - **Two branches at once** — `worktree add` checks out a branch beside your work and gives it a name, so `pj myapp@PROJ-123` is the whole context switch.
 - **Your config is safe** — an unreadable or malformed config file is never silently overwritten, and `config check` tells you what is wrong with it.
-- **Templates that name their own files** — `t new` renders a Go template, or a whole folder of them, from a store you own; the path segments are templates too.
-- **New projects that are already on the map** — `b new` renders a boilerplate into the right workspace and registers it, so the next thing you type is `pj`.
 - **Shell-native** — a one-line `eval` for bash, zsh or fish, with completion. No plugin manager required.
 - **Boring to install** — `make all`, or grab a release binary. Linux and macOS, amd64 and arm64.
 
 ## 📖 What does the name mean?
 
-`projekt` is simply *project* in German — the tool does one thing, and the name says it.
+`projekt` is simply *project* in German — everything here is about one, from
+starting it to reaching it, and the name says so.
 The shell function it installs is `pj`, because you'll type it a hundred times a day.
 
 ## ⚡️ Quick Start
