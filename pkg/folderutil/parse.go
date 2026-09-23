@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
@@ -34,8 +33,12 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 			prefix = folder.Prefix + "-"
 		}
 
+		// Clean the configured path: it is what gets printed and cd'ed into,
+		// and its last element is the fallback short name.
+		folderPath := filepath.Clean(folder.Path)
+
 		if !folder.IsWorkspace {
-			result = appendToParsedFolder(result, shortNames, prefix, folder.Path, "")
+			result = appendToParsedFolder(result, shortNames, prefix+folder.ShortName(), folderPath, folderPath)
 			continue
 		}
 		re, err := regexp.Compile(folder.GetRegexMatch())
@@ -43,14 +46,14 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 			cli.Warn("Cannot compile regex for folder %s: %v", folder.Path, err)
 			continue
 		}
-		entries, err := os.ReadDir(folder.Path)
+		entries, err := os.ReadDir(folderPath)
 		if err != nil {
 			cli.Warn("Cannot read folder %s: %v", folder.Path, err)
 			continue
 		}
 
 		for _, entry := range entries {
-			if !isDirOrLinkToDir(folder.Path, entry) {
+			if !isDirOrLinkToDir(folderPath, entry) {
 				cli.Debug("Not is directory or symlink to directory: %s", entry.Name())
 				continue
 			}
@@ -59,7 +62,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 				continue
 			}
 			cli.Debug("Match: %s", entry.Name())
-			result = appendToParsedFolder(result, shortNames, prefix, folder.Path, entry.Name())
+			result = appendToParsedFolder(result, shortNames, prefix+entry.Name(), filepath.Join(folderPath, entry.Name()), folderPath)
 		}
 	}
 
@@ -99,24 +102,18 @@ func shortNameSet(list []ParsedFolder) map[string]struct{} {
 	return set
 }
 
-func appendToParsedFolder(list []ParsedFolder, shortNames map[string]struct{}, prefix string, folderPath string, childFolderName string) []ParsedFolder {
-	shortName := prefix + childFolderName
-	if childFolderName == "" {
-		shortName = prefix + filepath.Base(folderPath)
-	}
-
-	childFolderPath := strings.TrimRight(filepath.Join(folderPath, childFolderName), "/")
-
+// appendToParsedFolder adds a folder unless its short name is already taken.
+func appendToParsedFolder(list []ParsedFolder, shortNames map[string]struct{}, shortName string, path string, workspace string) []ParsedFolder {
 	// Check for duplicate short names
 	if _, exists := shortNames[shortName]; exists {
-		cli.Debug("Not Valid: " + childFolderPath + " with existed short name " + shortName)
+		cli.Debug("Not Valid: " + path + " with existed short name " + shortName)
 		return list
 	}
 	shortNames[shortName] = struct{}{}
 
 	return append(list, ParsedFolder{
 		ShortName: shortName,
-		Path:      childFolderPath,
-		Workspace: folderPath,
+		Path:      path,
+		Workspace: workspace,
 	})
 }

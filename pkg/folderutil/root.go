@@ -44,10 +44,10 @@ func ListFolders(out io.Writer, o *ListOption) error {
 
 	if o.IsPlain {
 		if !o.NoHeaders {
-			tw.AppendHeader(table.Row{"PATH", "PREFIX", "REGEX", "PRIORITY", "IS WORKSPACE"})
+			tw.AppendHeader(table.Row{"PATH", "NAME", "PREFIX", "REGEX", "PRIORITY", "IS WORKSPACE"})
 		}
 		for _, folder := range lazypath.GetConfig().Folders {
-			tw.AppendRow(table.Row{folder.Path, folder.Prefix, folder.GetRegexMatch(), folder.Priority, folder.IsWorkspace})
+			tw.AppendRow(table.Row{folder.Path, folder.Name, folder.Prefix, folder.GetRegexMatch(), folder.Priority, folder.IsWorkspace})
 		}
 	} else {
 		if !o.NoHeaders {

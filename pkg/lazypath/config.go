@@ -101,6 +101,9 @@ func (c *Config) Validate() error {
 			}
 		}
 		if folder.IsWorkspace {
+			if folder.Name != "" {
+				cli.Warn("Folder %s is a workspace, its name %q is ignored", folder.Path, folder.Name)
+			}
 			if _, err := regexp.Compile(folder.GetRegexMatch()); err != nil {
 				errs = append(errs, fmt.Errorf("folder %s has an invalid regex %q: %w", folder.Path, folder.GetRegexMatch(), err))
 			}

@@ -69,44 +69,44 @@ func TestParseConfig(t *testing.T) {
 
 func TestAppendToParsedFolder(t *testing.T) {
 	tests := []struct {
-		name            string
-		list            []ParsedFolder
-		prefix          string
-		folderPath      string
-		childFolderName string
-		wantLen         int
+		name      string
+		list      []ParsedFolder
+		shortName string
+		path      string
+		workspace string
+		wantLen   int
 	}{
 		{
-			name:            "add new folder",
-			list:            []ParsedFolder{},
-			prefix:          "test-",
-			folderPath:      "/tmp/workspace",
-			childFolderName: "project1",
-			wantLen:         1,
+			name:      "add new folder",
+			list:      []ParsedFolder{},
+			shortName: "test-project1",
+			path:      "/tmp/workspace/project1",
+			workspace: "/tmp/workspace",
+			wantLen:   1,
 		},
 		{
 			name: "skip duplicate short name",
 			list: []ParsedFolder{
 				{ShortName: "test-project1", Path: "/tmp/other", Workspace: "/tmp"},
 			},
-			prefix:          "test-",
-			folderPath:      "/tmp/workspace",
-			childFolderName: "project1",
-			wantLen:         1, // Should not add
+			shortName: "test-project1",
+			path:      "/tmp/workspace/project1",
+			workspace: "/tmp/workspace",
+			wantLen:   1, // Should not add
 		},
 		{
-			name:            "folder without child name",
-			list:            []ParsedFolder{},
-			prefix:          "test-",
-			folderPath:      "/tmp/workspace/myproject",
-			childFolderName: "",
-			wantLen:         1,
+			name:      "folder without workspace",
+			list:      []ParsedFolder{},
+			shortName: "test-myproject",
+			path:      "/tmp/workspace/myproject",
+			workspace: "/tmp/workspace/myproject",
+			wantLen:   1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := appendToParsedFolder(tt.list, shortNameSet(tt.list), tt.prefix, tt.folderPath, tt.childFolderName)
+			got := appendToParsedFolder(tt.list, shortNameSet(tt.list), tt.shortName, tt.path, tt.workspace)
 			if len(got) != tt.wantLen {
 				t.Errorf("appendToParsedFolder() got %d folders, want %d", len(got), tt.wantLen)
 			}
@@ -226,5 +226,42 @@ func TestParseConfig_SymlinkToFileIsSkipped(t *testing.T) {
 	}
 	if names["target.txt"] {
 		t.Error("ParseConfig() included a regular file")
+	}
+}
+
+func TestParseConfig_UsesConfiguredName(t *testing.T) {
+	tmpDir := t.TempDir()
+	dotfiles := filepath.Join(tmpDir, "Dotfiles")
+	if err := os.MkdirAll(filepath.Join(dotfiles, "home"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	config := lazypath.Config{
+		Folders: []lazypath.Folder{
+			// The path deliberately walks back out of "home", the way a
+			// chezmoi-style configuration does.
+			{Path: filepath.Join(dotfiles, "home", ".."), Name: "dot"},
+			{Path: filepath.Join(dotfiles, "home"), Prefix: "x"},
+		},
+	}
+
+	result, err := ParseConfig(config)
+	if err != nil {
+		t.Fatalf("ParseConfig() error = %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("ParseConfig() returned %d folders, want 2", len(result))
+	}
+
+	if result[0].ShortName != "dot" {
+		t.Errorf("ShortName = %q, want dot", result[0].ShortName)
+	}
+	if result[0].Path != dotfiles {
+		t.Errorf("Path = %q, want the cleaned %q", result[0].Path, dotfiles)
+	}
+	// Without a name the folder falls back to the last element of the path,
+	// and the prefix still applies.
+	if result[1].ShortName != "x-home" {
+		t.Errorf("ShortName = %q, want x-home", result[1].ShortName)
 	}
 }

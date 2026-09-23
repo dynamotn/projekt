@@ -11,6 +11,7 @@ projekt folder add [folder path] [flags]
 ```
   -W, --as-workspace      Set folder as a workspace, like a parent folder of your projects
   -h, --help              help for add
+  -n, --name string       Short name of folder, defaults to the last element of its path. Only work with '-W false'
   -p, --prefix string     Prefix of folder when call 'pj' or 'project folder go'
   -P, --priority uint16   Priority number of folder
   -R, --regex string      Go Regex match string to filter folder in workspace. Only work with '-W true'

@@ -370,3 +370,40 @@ func TestRemoveFromConfig_MultipleRemoves(t *testing.T) {
 		t.Error("RemoveFromConfig() did not remove the target folder")
 	}
 }
+
+func TestFolderShortName(t *testing.T) {
+	tests := []struct {
+		name   string
+		folder Folder
+		want   string
+	}{
+		{
+			name:   "configured name wins",
+			folder: Folder{Path: "/home/me/Dotfiles/home/..", Name: "dot"},
+			want:   "dot",
+		},
+		{
+			name:   "path with dot segments is cleaned",
+			folder: Folder{Path: "/home/me/Dotfiles/home/.."},
+			want:   "Dotfiles",
+		},
+		{
+			name:   "trailing slash",
+			folder: Folder{Path: "/home/me/projects/myapp/"},
+			want:   "myapp",
+		},
+		{
+			name:   "plain path",
+			folder: Folder{Path: "/home/me/projects/myapp"},
+			want:   "myapp",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.folder.ShortName(); got != tt.want {
+				t.Errorf("ShortName() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

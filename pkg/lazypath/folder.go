@@ -25,11 +25,26 @@ type GitConfig struct {
 
 type Folder struct {
 	Path        string     `yaml:"path" mapstructure:"path"`
+	Name        string     `yaml:"name,omitempty" mapstructure:"name"`
 	Prefix      string     `yaml:"prefix" mapstructure:"prefix"`
 	IsWorkspace bool       `yaml:"is_workspace" mapstructure:"is_workspace"`
 	RegexMatch  string     `yaml:"regex" mapstructure:"regex"`
 	Priority    uint16     `yaml:"priority" mapstructure:"priority"`
 	Git         *GitConfig `yaml:"git,omitempty" mapstructure:"git,omitempty"`
+}
+
+// ShortName returns the name the folder itself is reachable by, without the
+// prefix. It is the configured name, or the last element of the path.
+//
+// A workspace has no short name of its own; its children are named after their
+// own directory.
+func (f *Folder) ShortName() string {
+	if f.Name != "" {
+		return f.Name
+	}
+	// Clean first: the base of a path such as "/home/me/dotfiles/home/.."
+	// is "..", which is not a usable name.
+	return filepath.Base(cleanPath(f.Path))
 }
 
 func (f *Folder) GetRegexMatch() string {

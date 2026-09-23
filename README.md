@@ -51,6 +51,10 @@ folders:
     prefix: ""
     is_workspace: false
     priority: 0
+  # A single project folder with an explicit short name, reachable as `pj dot`
+  - path: /home/me/Dotfiles
+    name: dot
+    is_workspace: false
   # A workspace: every matching child folder becomes a project,
   # reachable as `pj oss-<child>`
   - path: /home/me/oss
@@ -60,6 +64,9 @@ folders:
     priority: 10
 ```
 
+- `name` is the short name of the folder itself, and defaults to the last
+  element of its path. It does not apply to a workspace, whose child folders are
+  named after their own directory.
 - `prefix` is prepended to the short name, separated by a `-`.
 - `regex` only applies to a workspace and defaults to `^[^.].+` (skip dotfiles).
 - `priority` breaks ties: when two folders resolve to the same short name, the
