@@ -1,6 +1,7 @@
 package folderutil
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,10 +22,14 @@ func getGitServer(hostName string) *lazypath.GitServer {
 	return nil
 }
 
-// SyncGitRepos synchronizes all Git repositories in the configuration
+// SyncGitRepos synchronizes all Git repositories in the configuration.
+//
+// One failing folder does not stop the others: every error is reported and the
+// combined failure is returned at the end.
 func SyncGitRepos(dryRun bool) error {
 	c := lazypath.GetConfig()
 
+	var errs []error
 	for _, folder := range c.Folders {
 		if folder.Git == nil {
 			continue
@@ -32,17 +37,18 @@ func SyncGitRepos(dryRun bool) error {
 
 		if err := syncFolderGitRepos(folder, dryRun); err != nil {
 			cli.Error("Failed to sync folder %s: %v", folder.Path, err)
-			return err
+			errs = append(errs, err)
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 // CheckGitReposStatus checks status of all Git repositories
 func CheckGitReposStatus() error {
 	c := lazypath.GetConfig()
 
+	var errs []error
 	for _, folder := range c.Folders {
 		if folder.Git == nil {
 			continue
@@ -50,11 +56,11 @@ func CheckGitReposStatus() error {
 
 		if err := checkFolderGitRepos(folder); err != nil {
 			cli.Error("Failed to check folder %s: %v", folder.Path, err)
-			return err
+			errs = append(errs, err)
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func syncFolderGitRepos(folder lazypath.Folder, dryRun bool) error {
@@ -72,6 +78,7 @@ func syncFolderGitRepos(folder lazypath.Folder, dryRun bool) error {
 		return fmt.Errorf("git server '%s' not found in configuration", folder.Git.Host)
 	}
 
+	var errs []error
 	for _, repo := range folder.Git.Repos {
 		if repo.Name == "" {
 			cli.Warn("Skipping repo with empty name in folder %s", folder.Path)
@@ -94,6 +101,9 @@ func syncFolderGitRepos(folder lazypath.Folder, dryRun bool) error {
 			cli.Info("Cloning %s to %s", repo.Name, repoPath)
 			if err := cloneRepoWithFallback(gitServer, folder.Git.Group, repo.Name, repoPath); err != nil {
 				cli.Error("Failed to clone %s: %v", repo.Name, err)
+				// Keep going with the other repos, but remember the failure so
+				// the command exits non-zero.
+				errs = append(errs, fmt.Errorf("clone %s: %w", repo.Name, err))
 				continue
 			}
 			cli.Info("Successfully cloned %s", repo.Name)
@@ -108,7 +118,7 @@ func syncFolderGitRepos(folder lazypath.Folder, dryRun bool) error {
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func checkFolderGitRepos(folder lazypath.Folder) error {
