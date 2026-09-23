@@ -30,8 +30,9 @@ projekt folder add [folder path] [flags]
 ### Options inherited from parent commands
 
 ```
-      --config string    config file (default is $XDG_CONFIG_HOME/projekt/config.yaml)
-  -v, --verbose string   Log level, available options are: (trace, debug, info, warn, error, fatal) (default "info")
+      --archive-dir folder archive   Where folder archive moves a project (default is $XDG_DATA_HOME/projekt/archive)
+      --config string                config file (default is $XDG_CONFIG_HOME/projekt/config.yaml)
+  -v, --verbose string               Log level, available options are: (trace, debug, info, warn, error, fatal) (default "info")
 ```
 
 ### SEE ALSO

@@ -5,7 +5,8 @@ Manage your project folder
 ### Options
 
 ```
-  -h, --help   help for folder
+      --archive-dir folder archive   Where folder archive moves a project (default is $XDG_DATA_HOME/projekt/archive)
+  -h, --help                         help for folder
 ```
 
 ### Options inherited from parent commands
@@ -19,6 +20,7 @@ Manage your project folder
 
 * [projekt](projekt.md)	 - A smart command to work with your project folder
 * [projekt folder add](projekt_folder_add.md)	 - Add your project folder to config
+* [projekt folder archive](projekt_folder_archive.md)	 - Move a finished project out of the way
 * [projekt folder check](projekt_folder_check.md)	 - Check status of Git repositories in configuration
 * [projekt folder get](projekt_folder_get.md)	 - Get project folder by short name
 * [projekt folder list](projekt_folder_list.md)	 - List all your project folders

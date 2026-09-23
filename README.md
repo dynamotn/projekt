@@ -18,21 +18,21 @@
 cd ~/work/clients/acme/services/backend-api || exit
 cd ../../../../oss/some-library || exit
 git clone git@github.com:myorg/myteam/frontend.git ~/work/myorg/frontend
-mkdir -p ~/work/myorg/new-service && cd $_   # then copy a Makefile from a
-cp -r ../old-service/{Makefile,.github} .    # sibling and edit every name in it
-git stash && git checkout review/PROJ-123    # just to look at a pull request
+mkdir -p ~/work/myorg/new-service && cd "$_" || exit # then copy a Makefile from a
+cp -r ../old-service/{Makefile,.github} .            # sibling and edit every name in it
+git stash && git checkout review/PROJ-123            # just to look at a pull request
 ```
 
 ## To this
 
 ```bash
-pj backend-api                  # anywhere on your machine, from any shell
-pj oss-some-library             # workspaces get a prefix, so names never collide
-projekt folder sync             # clone every repo your config knows about, you don't
-b new go-cli new-service        # created, filled in, and jumpable straight away
-t new adr doc/adr/0007-db.md    # a file from your own template, not a copy
+pj backend-api               # anywhere on your machine, from any shell
+pj oss-some-library          # workspaces get a prefix, so names never collide
+projekt folder sync          # clone every repo your config knows about, you don't
+b new go-cli new-service     # created, filled in, and jumpable straight away
+t new adr doc/adr/0007-db.md # a file from your own template, not a copy
 projekt worktree add backend-api review/PROJ-123
-pj backend-api@PROJ-123         # the pull request, beside your own work
+pj backend-api@PROJ-123 # the pull request, beside your own work
 ```
 
 Three binaries. The last two are also `projekt template` and `projekt
@@ -53,6 +53,7 @@ A single static Go binary each, no daemon, no index to rebuild — your config f
 - **Workspaces, not just folders** — point at a parent directory once and every child inside it becomes a jumpable project, filtered by your own regex.
 - **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time. Already have them cloned? `--discover` writes that config for you.
 - **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
+- **A jump list that stays short** — `folder archive` moves a finished project out of the way, and refuses while anything in it is uncommitted or unpushed.
 - **Tagged, not just named** — label folders `work`, `oss`, `go`, then point any command at a subset with `--tags`.
 - **What did I leave half-done** — `folder status --dirty` lists every project with changes, unpushed commits or a forgotten stash, in one table.
 - **New projects that are already on the map** — `b new` renders a boilerplate into the right workspace and registers it, so the next thing you type is `pj`.
@@ -236,8 +237,8 @@ deleted, a machine reinstalled — and each leftover costs a wrong suggestion in
 completion and a jump that lands nowhere:
 
 ```bash
-projekt folder prune --dry-run   # what would go
-projekt folder prune             # and go it does
+projekt folder prune --dry-run # what would go
+projekt folder prune           # and go it does
 ```
 
 Only a path that is definitely not there is dropped. A folder on a drive that
@@ -356,7 +357,7 @@ is the part that tells two branches apart. They live in
 created from HEAD when it does not exist yet.
 
 ```bash
-projekt worktree list            # with what git makes of each one
+projekt worktree list # with what git makes of each one
 projekt worktree remove myapp@PROJ-123
 ```
 
@@ -373,12 +374,12 @@ folder of templates you own — `$XDG_DATA_HOME/projekt/templates` by default,
 or wherever `--template-dir` / `PROJEKT_TEMPLATE_DIR` points.
 
 ```bash
-t add ./LICENSE                  # turn a file you already have into a template
-t list                           # what the store holds
+t add ./LICENSE # turn a file you already have into a template
+t list          # what the store holds
 t new license LICENSE --set author='Jane Doe'
 t new go-cli ./myapp --name myapp --set module=example.com/myapp
-t new invoice ./INV-001.md -i    # or let it ask you
-t new dockerfile --dry-run       # render to stdout, write nothing
+t new invoice ./INV-001.md -i # or let it ask you
+t new dockerfile --dry-run    # render to stdout, write nothing
 ```
 
 A template is either one file or a whole folder. In a folder template the
@@ -425,11 +426,11 @@ project. It renders a template, works out where the project belongs, and
 registers it — so starting something new ends with `pj`, not another `cd`.
 
 ```bash
-b list                          # the recipes you have
-b new go-cli myapp              # ~/work/myapp, registered, then pj work-myapp
-b new go-cli myapp -i           # ask for what the recipe needs
-b new go-cli ./scratch/myapp    # a path is created exactly there
-b new go-cli myapp --dry-run    # the whole plan, nothing written
+b list                       # the recipes you have
+b new go-cli myapp           # ~/work/myapp, registered, then pj work-myapp
+b new go-cli myapp -i        # ask for what the recipe needs
+b new go-cli ./scratch/myapp # a path is created exactly there
+b new go-cli myapp --dry-run # the whole plan, nothing written
 ```
 
 A recipe is one YAML file in `$XDG_DATA_HOME/projekt/boilerplates`:
@@ -437,14 +438,14 @@ A recipe is one YAML file in `$XDG_DATA_HOME/projekt/boilerplates`:
 ```yaml
 description: Go CLI with a Makefile, a README and CI-ready layout
 source:
-  template: go-cli        # a folder template of the `t` store
-vars:                     # the same shape as a template's .vars.yaml
+  template: go-cli # a folder template of the `t` store
+vars: # the same shape as a template's .vars.yaml
   - name: module
     default: "example.com/{{ .Name }}"
     required: true
 register:
-  workspace: ~/work       # a plain name is created in here
-  prefix: work            # so it answers to `pj work-myapp`
+  workspace: ~/work # a plain name is created in here
+  prefix: work # so it answers to `pj work-myapp`
   tags: [go, work]
 ```
 
@@ -462,10 +463,10 @@ half their folders. `include` composes the configuration instead of forking it:
 ```yaml
 # ~/.config/projekt/config.yaml
 include:
-  - ~/dotfiles/projekt/shared.yaml   # the folders both machines have
-  - team.yaml                        # relative to the file that names it
+  - ~/dotfiles/projekt/shared.yaml # the folders both machines have
+  - team.yaml # relative to the file that names it
 folders:
-  - path: /home/me/scratch           # and this machine's own
+  - path: /home/me/scratch # and this machine's own
 ```
 
 A file named `config.<hostname>.yaml` beside the main one is merged too,
@@ -499,8 +500,8 @@ or malformed is a warning rather than the end of the configuration.
 ```bash
 pj backend-api
 pj oss-some-library
-pj -                     # back to backend-api
-pj -                     # and back again, the way `cd -` does
+pj - # back to backend-api
+pj - # and back again, the way `cd -` does
 ```
 
 Every jump is remembered, one entry per project, so `pj -` toggles between the
@@ -508,9 +509,9 @@ two you are actually working on rather than walking back through the same one
 twice.
 
 ```bash
-projekt folder recent           # what you have been working on, most recent first
+projekt folder recent # what you have been working on, most recent first
 projekt folder recent --limit 5
-projekt folder recent --clear   # forget all of it
+projekt folder recent --clear # forget all of it
 ```
 
 The history lives in `$XDG_STATE_HOME/projekt/history.tsv` — state, not
@@ -541,6 +542,30 @@ projekt folder status -o json | jq -r '.[] | select(.behind > 0) | .name'
 A folder that is not there says `missing`, one that is not a repository says
 `not a repo`, and `--dirty` keeps both — they want attention as much as an
 unpushed commit does.
+## 📦 When a project is done
+
+A finished project still costs a name in completion, a row in every listing and
+a wrong guess when you meant the other one. Deleting it is a bigger decision
+than you want to make on a Friday:
+
+```bash
+projekt folder archive old-service --dry-run
+projekt folder archive old-service
+projekt folder archive old-service --to ~/archive/2026
+```
+
+The folder is **moved, not deleted**, and the entry is dropped afterwards, so a
+move that fails leaves the project where it was. Bringing one back is `mv` and
+`projekt folder add`.
+
+Archiving is refused while the repository has changes that are not committed,
+commits that are not pushed, no upstream at all, or something on the stash —
+that is the one mistake here that moving the folder back does not undo.
+`--force` says you mean it. A folder that is not a repository is archived
+without an opinion, since there is no way to tell what finished means for it.
+
+The archive folder is `$XDG_DATA_HOME/projekt/archive`, or `--archive-dir`,
+`$PROJEKT_ARCHIVE_DIR` or `--to`.
 
 ## 📚 Commands
 
@@ -553,7 +578,12 @@ unpushed commit does.
 | [`folder get`](doc/projekt_folder_get.md)            | Resolve a short name to a path — what `pj` calls           |
 | [`folder recent`](doc/projekt_folder_recent.md)      | The projects you jumped to, most recent first               |
 | [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |
+<<<<<<< HEAD
 | [`folder prune`](doc/projekt_folder_prune.md)        | Drop every entry whose folder is gone, with `--dry-run`     |
+||||||| parent of a7742cc (feat(folder): archive a project that is done)
+=======
+| [`folder archive`](doc/projekt_folder_archive.md)    | Move a finished project away and drop it from the config    |
+>>>>>>> a7742cc (feat(folder): archive a project that is done)
 | [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos, remotes and worktrees on disk |
 | [`folder status`](doc/projekt_folder_status.md)      | Branch, changes, ahead/behind, stashes, across every folder  |
 | [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories in parallel, with `--dry-run`   |
