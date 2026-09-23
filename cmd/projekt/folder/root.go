@@ -23,6 +23,7 @@ func NewFolderCmd(out io.Writer) *cobra.Command {
 		NewFolderRemoveCmd(out),
 		NewFolderSyncCmd(out),
 		NewFolderCheckCmd(out),
+		NewFolderStatusCmd(out),
 	)
 
 	cli.SetColorAndStyles(cmd)

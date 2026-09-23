@@ -54,6 +54,7 @@ A single static Go binary each, no daemon, no index to rebuild — your config f
 - **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time. Already have them cloned? `--discover` writes that config for you.
 - **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
 - **Tagged, not just named** — label folders `work`, `oss`, `go`, then point any command at a subset with `--tags`.
+- **What did I leave half-done** — `folder status --dirty` lists every project with changes, unpushed commits or a forgotten stash, in one table.
 - **New projects that are already on the map** — `b new` renders a boilerplate into the right workspace and registers it, so the next thing you type is `pj`.
 - **Templates that name their own files** — `t new` renders a Go template, or a whole folder of them, from a store you own; the path segments are templates too, and `-i` asks you for the rest.
 - **Two branches at once** — `worktree add` checks out a branch beside your work and gives it a name, so `pj myapp@PROJ-123` is the whole context switch.
@@ -502,6 +503,30 @@ The history lives in `$XDG_STATE_HOME/projekt/history.tsv` — state, not
 configuration: losing it costs you the order of a listing and nothing else. It
 is capped at 200 projects. `projekt folder get --no-record` looks a project up
 without counting it as a jump, for a script that is not going there.
+## 🩹 What did I leave half-done
+
+`folder check` verifies the repositories your config declares. `folder status`
+looks at every folder it can reach — including the children of a workspace,
+which have no config entry of their own, and your working trees:
+
+```bash
+projekt folder status         # one row per project
+projekt folder status --dirty # only what wants attention
+projekt folder status -t work
+projekt folder status -o json | jq -r '.[] | select(.behind > 0) | .name'
+```
+
+| | |
+| --- | --- |
+| `BRANCH` | what is checked out, or `detached` |
+| `CHANGED` | how many files git would mention, untracked ones included |
+| `AHEAD` / `BEHIND` | how far the branch is from its upstream |
+| `STASH` | how many entries are waiting, which is the easiest thing to forget |
+| `LAST COMMIT` | how long ago, in git's own words |
+
+A folder that is not there says `missing`, one that is not a repository says
+`not a repo`, and `--dirty` keeps both — they want attention as much as an
+unpushed commit does.
 
 ## 📚 Commands
 
@@ -515,6 +540,7 @@ without counting it as a jump, for a script that is not going there.
 | [`folder recent`](doc/projekt_folder_recent.md)      | The projects you jumped to, most recent first               |
 | [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |
 | [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos, remotes and worktrees on disk |
+| [`folder status`](doc/projekt_folder_status.md)      | Branch, changes, ahead/behind, stashes, across every folder  |
 | [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories in parallel, with `--dry-run`   |
 | [`worktree add`](doc/projekt_worktree_add.md)        | Check out a branch beside your work, reachable as `pj p@name` |
 | [`worktree list`](doc/projekt_worktree_list.md)      | List the working trees, and what git makes of them          |

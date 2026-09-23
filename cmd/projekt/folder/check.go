@@ -13,8 +13,11 @@ func NewFolderCheckCmd(out io.Writer) *cobra.Command {
 	var tags []string
 
 	cmd := &cobra.Command{
-		Use:     "check",
-		Aliases: []string{"c", "status"},
+		Use: "check",
+		// "status" used to mean this command. It now means `folder status`,
+		// which reports the git state of every folder rather than verifying
+		// the repositories the configuration declares.
+		Aliases: []string{"c"},
 		Short:   "Check status of Git repositories in configuration",
 		Long: `Check the status of all Git repositories defined in the configuration.
 This command will verify:
