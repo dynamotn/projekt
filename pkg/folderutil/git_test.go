@@ -199,7 +199,7 @@ func TestGetGitURLs(t *testing.T) {
 			group:            "myorg/myteam",
 			repoName:         "project",
 			expectedPrimary:  "https://github.com/myorg/myteam/project.git",
-			expectedFallback: "",
+			expectedFallback: "git@github.com:myorg/myteam/project.git",
 		},
 	}
 

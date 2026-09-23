@@ -157,8 +157,8 @@ The `preferGitSSH` field controls which protocol to use for cloning:
 - Use this if you have SSH keys configured
 
 **When `preferGitSSH: false`:**
-- Primary: HTTPS URL only
-- No fallback
+- Primary: HTTPS URL
+- Fallback: SSH URL (if HTTPS fails)
 - Use this if you prefer token-based authentication or don't have SSH keys
 
 Example configurations:

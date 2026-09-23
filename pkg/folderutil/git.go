@@ -201,7 +201,9 @@ func getGitURLs(server *lazypath.GitServer, group string, repoName string) (prim
 	if server.PreferGitSSH {
 		return sshURL, httpsURL
 	}
-	return httpsURL, ""
+	// Fall back the other way around too, so a server reachable only over SSH
+	// still works when HTTPS cloning fails (private repo, no credential helper).
+	return httpsURL, sshURL
 }
 
 func cloneRepoWithFallback(server *lazypath.GitServer, group string, repoName string, targetPath string) error {
