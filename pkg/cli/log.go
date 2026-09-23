@@ -8,7 +8,13 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var logger *zap.SugaredLogger
+var (
+	logger *zap.SugaredLogger
+	// loggerLevel is the level the current logger was built with, so that a
+	// level set after initialization (e.g. by the --verbose flag, parsed after
+	// main() called InitLogging) rebuilds the logger instead of being ignored.
+	loggerLevel string
+)
 
 // Log levels following log4j hierarchy
 const (
@@ -58,6 +64,15 @@ func InitLogging() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 	logger = builder.Sugar()
+	loggerLevel = level
+}
+
+// getLogger returns a logger matching the currently configured level.
+func getLogger() *zap.SugaredLogger {
+	if logger == nil || loggerLevel != strings.ToLower(GetEnv().LogLevel) {
+		InitLogging()
+	}
+	return logger
 }
 
 // isLevelEnabled checks if the given level should be logged based on current log level
@@ -79,59 +94,41 @@ func isLevelEnabled(level string) bool {
 // Trace logs formatted message at TRACE level
 func Trace(format string, v ...any) {
 	if isLevelEnabled(TRACE) {
-		if logger == nil {
-			InitLogging()
-		}
-		logger.Debugf(format, v...)
+		getLogger().Debugf(format, v...)
 	}
 }
 
 // Debug logs formatted message at DEBUG level
 func Debug(format string, v ...any) {
 	if isLevelEnabled(DEBUG) {
-		if logger == nil {
-			InitLogging()
-		}
-		logger.Debugf(format, v...)
+		getLogger().Debugf(format, v...)
 	}
 }
 
 // Info logs formatted message at INFO level
 func Info(format string, v ...any) {
 	if isLevelEnabled(INFO) {
-		if logger == nil {
-			InitLogging()
-		}
-		logger.Infof(format, v...)
+		getLogger().Infof(format, v...)
 	}
 }
 
 // Warn logs formatted message at WARN level
 func Warn(format string, v ...any) {
 	if isLevelEnabled(WARN) {
-		if logger == nil {
-			InitLogging()
-		}
-		logger.Warnf(format, v...)
+		getLogger().Warnf(format, v...)
 	}
 }
 
 // Error logs formatted message at ERROR level
 func Error(format string, v ...any) {
 	if isLevelEnabled(ERROR) {
-		if logger == nil {
-			InitLogging()
-		}
-		logger.Errorf(format, v...)
+		getLogger().Errorf(format, v...)
 	}
 }
 
 // Fatal logs formatted message at FATAL level and exit
 func Fatal(format string, v ...any) {
 	if isLevelEnabled(FATAL) {
-		if logger == nil {
-			InitLogging()
-		}
-		logger.Fatalf(format, v...)
+		getLogger().Fatalf(format, v...)
 	}
 }

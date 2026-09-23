@@ -41,8 +41,8 @@ func TestEnvSettings_AddFlags(t *testing.T) {
 			if flag.Shorthand != "v" {
 				t.Errorf("verbose flag shorthand = %v, want v", flag.Shorthand)
 			}
-			if flag.DefValue != "info" {
-				t.Errorf("verbose flag default = %v, want info", flag.DefValue)
+			if flag.DefValue != tt.wantDefault {
+				t.Errorf("verbose flag default = %v, want %v", flag.DefValue, tt.wantDefault)
 			}
 		})
 	}

@@ -456,3 +456,34 @@ func TestFatal_Coverage(t *testing.T) {
 		}
 	}
 }
+
+func TestGetLogger_RebuildsOnLevelChange(t *testing.T) {
+	originalLevel := GetEnv().LogLevel
+	originalLogger := logger
+	originalLoggerLevel := loggerLevel
+	defer func() {
+		GetEnv().LogLevel = originalLevel
+		logger = originalLogger
+		loggerLevel = originalLoggerLevel
+	}()
+
+	// Simulate main() initializing the logger before the --verbose flag is parsed.
+	GetEnv().LogLevel = INFO
+	InitLogging()
+	first := logger
+
+	// A level set afterwards (by the flag) must take effect.
+	GetEnv().LogLevel = DEBUG
+	if got := getLogger(); got == first {
+		t.Error("getLogger() reused the logger built for a different level")
+	}
+	if loggerLevel != DEBUG {
+		t.Errorf("loggerLevel = %s, want %s", loggerLevel, DEBUG)
+	}
+
+	// No change means no rebuild.
+	current := logger
+	if got := getLogger(); got != current {
+		t.Error("getLogger() rebuilt the logger although the level did not change")
+	}
+}
