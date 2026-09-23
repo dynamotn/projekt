@@ -151,3 +151,47 @@ func TestShells_EveryOneOfThemGenerates(t *testing.T) {
 		})
 	}
 }
+
+// TestShells_CompletionIsReadWhenCompleting guards the bug where fish listed
+// the projects once, at startup.
+func TestShells_CompletionIsReadWhenCompleting(t *testing.T) {
+	for _, shell := range Shells() {
+		t.Run(shell, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := GenCommands(shell, &buf); err != nil {
+				t.Fatalf("GenCommands(%s) error = %v", shell, err)
+			}
+			script := buf.String()
+
+			// Whatever the shell, the candidates have to come from a `folder
+			// list` that runs at completion time. A script that has no such
+			// call cannot be offering anything but a stale list.
+			if !strings.Contains(script, "folder list") {
+				t.Errorf("%s never lists the folders, so completion cannot be current", shell)
+			}
+		})
+	}
+}
+
+// TestFishCompletionIsDynamic pins the fix: fish used to register one
+// completion per project when the script was sourced, and refresh them from a
+// wrapper around `projekt`. Anything else that changed the configuration —
+// `b new`, `projekt worktree add`, an editor — left the list stale until the
+// next `projekt` command.
+func TestFishCompletionIsDynamic(t *testing.T) {
+	var buf bytes.Buffer
+	if err := GenCommands("fish", &buf); err != nil {
+		t.Fatalf("GenCommands(fish) error = %v", err)
+	}
+	script := buf.String()
+
+	// The candidates come from a command substitution, which fish runs when
+	// the completion is asked for.
+	if !strings.Contains(script, "-a '(__pj_projects)'") {
+		t.Error("fish completion is not a command substitution, so it is computed once")
+	}
+	// And nothing wraps `projekt` to refresh a cache that no longer exists.
+	if strings.Contains(script, "function projekt") {
+		t.Error("fish still wraps projekt, which only existed to refresh the stale completion")
+	}
+}

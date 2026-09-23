@@ -36,19 +36,16 @@ function __pj_needs_command
   return 1
 end
 
-function __pj_completion
-  # --output tsv prints one short name per line, so completion does not have to
-  # strip table borders and cannot be broken by a name containing one.
-  command projekt folder list --output tsv --no-headers --short-only --verbose=error \
-    | while read -l project
-    test -n "$project"; or continue
-    complete -f -c pj -n '__pj_needs_command' -a $project -d "Change to $project folder"
-  end
+function __pj_projects --description "Project short names, with their path as the description"
+  # --output tsv prints one project per line, so completion does not have to
+  # strip table borders and cannot be broken by a name containing one. The
+  # first two columns are the short name and the path, which is what fish
+  # wants: a candidate and its description, separated by a tab.
+  command projekt folder list --output tsv --no-headers --verbose=error 2>/dev/null \
+    | cut -f1,2
 end
 
-function projekt
-  command projekt $argv
-  __pj_completion
-end
-
-__pj_completion
+# The candidates are read when you press tab, not when this file is sourced, so
+# a project created since — by `b`, by `projekt worktree add`, or by editing
+# the config by hand — is offered without reloading anything.
+complete -f -c pj -n '__pj_needs_command' -a '(__pj_projects)'

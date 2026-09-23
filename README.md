@@ -104,6 +104,10 @@ projekt init fish | source
 The zsh line can go anywhere in your `.zshrc`: when it runs before `compinit`,
 the completion registers itself at the first prompt instead of being lost.
 
+Completion reads your projects when you press tab, in all three shells, so a
+project you have just created with `b new` or `worktree add` is offered without
+reloading anything.
+
 **3. Register your first folder**
 
 ```bash
