@@ -1053,13 +1053,18 @@ PO
 @test "a bidirectional mark is a single invisible character" {
   local mark
   mark="$(dybatpho::i18n_bidi_mark rtl)"
-  assert_equal "${#mark}" 1
+  # U+200F, spelled out in octal bytes. `${#mark}` counts characters only in a
+  # UTF-8 locale and bytes otherwise, and a `\u` escape is left as written when
+  # the locale's charset cannot hold the character, so neither one says
+  # anything about the mark under the C locale the suite runs in on CI.
+  assert_equal "${mark}" "$(printf '\342\200\217')"
   assert_equal "$(dybatpho::i18n_bidi_strip "a${mark}b")" "ab"
 }
 
 @test "stripping also removes the older embedding characters" {
   local embedded
-  embedded="$(printf 'a\u202bb\u202cc')"
+  # U+202B and U+202C, in octal bytes for the same reason as above.
+  embedded="$(printf 'a\342\200\253b\342\200\254c')"
   assert_equal "$(dybatpho::i18n_bidi_strip "${embedded}")" "abc"
 }
 

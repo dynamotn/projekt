@@ -19,9 +19,18 @@ jobs:
       - name: "Install dependencies"
         env:
           YQ_VERSION: v4.53.3
+          # Pin ShellCheck: the runner image ships 0.9.0, whose SC2317, SC2119,
+          # and SC2015 findings on this code are false positives that later
+          # versions dropped. A pinned release also keeps a lint failure here
+          # reproducible on a developer machine.
+          SHELLCHECK_VERSION: v0.11.0
         run: |
           sudo apt-get update
-          sudo apt-get install -y --fix-missing shellcheck gawk jq
+          sudo apt-get install -y --fix-missing gawk jq
+          curl -fsSL \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+            | tar -xJf - -C /tmp "shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+          sudo install -m 0755 "/tmp/shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
           sudo curl -fsSL -o /usr/local/bin/yq \
             "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
           sudo chmod +x /usr/local/bin/yq
