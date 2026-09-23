@@ -59,7 +59,9 @@ func InitLogging() {
 
 	var err error
 	var builder *zap.Logger
-	builder, err = config.Build(zap.AddCallerSkip(1))
+	// The development config attaches a stack trace from WARN upwards, which
+	// turns an ordinary user-facing warning into pages of Go frames.
+	builder, err = config.Build(zap.AddCallerSkip(1), zap.AddStacktrace(zapcore.FatalLevel))
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
