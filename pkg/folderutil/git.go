@@ -147,28 +147,51 @@ func checkFolderGitRepos(folder lazypath.Folder) error {
 }
 
 func buildGitURL(server *lazypath.GitServer, group string, repoName string) string {
-	// Parse SSH URL to extract host and port
-	sshURL := server.SSH
+	sshURL := strings.TrimSuffix(strings.TrimSpace(server.SSH), "/")
+	repoPath := fmt.Sprintf("%s/%s.git", group, repoName)
 
-	// Format: ssh://git@host:port or git@host:path
+	// An explicit ssh:// URL must keep its scheme: without it git reads
+	// "host:port/path" as scp syntax and takes the port for a path element.
 	if strings.HasPrefix(sshURL, "ssh://") {
-		// Remove ssh:// prefix
-		sshURL = strings.TrimPrefix(sshURL, "ssh://")
-		// Format: git@host:port/path or git@host:port
-		return fmt.Sprintf("%s/%s/%s.git", sshURL, group, repoName)
+		return fmt.Sprintf("%s/%s", sshURL, repoPath)
 	}
 
-	// If SSH URL is in git@host:path format
-	if strings.Contains(sshURL, "@") {
-		return fmt.Sprintf("%s:%s/%s.git", sshURL, group, repoName)
+	// Format: host or git@host[:port]
+	if !strings.Contains(sshURL, "@") {
+		sshURL = "git@" + sshURL
 	}
 
-	// Fallback: construct from scratch
-	return fmt.Sprintf("git@%s:%s/%s.git", server.SSH, group, repoName)
+	// scp syntax cannot express a port, so switch to a ssh:// URL when there is one.
+	if host, port, ok := splitSSHPort(sshURL); ok {
+		return fmt.Sprintf("ssh://%s:%s/%s", host, port, repoPath)
+	}
+
+	return fmt.Sprintf("%s:%s", sshURL, repoPath)
+}
+
+// splitSSHPort splits "git@host:2222" into "git@host" and "2222".
+// It reports false when the part after the last colon is not a port number.
+func splitSSHPort(sshURL string) (host string, port string, ok bool) {
+	idx := strings.LastIndex(sshURL, ":")
+	if idx < 0 {
+		return "", "", false
+	}
+
+	host, port = sshURL[:idx], sshURL[idx+1:]
+	if port == "" {
+		return "", "", false
+	}
+	for _, r := range port {
+		if r < '0' || r > '9' {
+			return "", "", false
+		}
+	}
+
+	return host, port, true
 }
 
 func buildHTTPSURL(server *lazypath.GitServer, group string, repoName string) string {
-	return fmt.Sprintf("%s/%s/%s.git", server.HTTPS, group, repoName)
+	return fmt.Sprintf("%s/%s/%s.git", strings.TrimSuffix(server.HTTPS, "/"), group, repoName)
 }
 
 func getGitURLs(server *lazypath.GitServer, group string, repoName string) (primary string, fallback string) {

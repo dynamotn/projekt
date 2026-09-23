@@ -138,7 +138,9 @@ The tool supports two SSH URL formats:
 
 2. **SSH with port**: `ssh://git@host.com:port`
    - Example: `ssh://git@test.git.dev:2022`
-   - Generates URLs like: `git@test.git.dev:2022/org/repo.git`
+   - Generates URLs like: `ssh://git@test.git.dev:2022/org/repo.git`
+   - The `ssh://` scheme is kept, because the scp-like syntax
+     (`host:path`) cannot express a port.
 
 ### HTTPS URLs
 

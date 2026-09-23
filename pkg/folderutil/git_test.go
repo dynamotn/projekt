@@ -107,7 +107,7 @@ func TestBuildGitURL(t *testing.T) {
 			},
 			group:    "GROUP/SUBGROUP",
 			repoName: "myrepo",
-			expected: "git@git.test.dev:2022/GROUP/SUBGROUP/myrepo.git",
+			expected: "ssh://git@git.test.dev:2022/GROUP/SUBGROUP/myrepo.git",
 		},
 		{
 			name: "standard git format",
@@ -496,7 +496,7 @@ func TestBuildGitURL_EdgeCases(t *testing.T) {
 			},
 			group:    "group",
 			repoName: "repo",
-			expected: "git@gitlab.com:2222:group/repo.git",
+			expected: "ssh://git@gitlab.com:2222/group/repo.git",
 		},
 	}
 
