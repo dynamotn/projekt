@@ -2,6 +2,7 @@ package folderutil
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,7 +47,7 @@ func TestFindFolderByShortName(t *testing.T) {
 			name:      "non-existing folder",
 			shortName: "nonexistent",
 			wantPath:  "",
-			wantErr:   false, // Returns empty path, not error
+			wantErr:   true, // Unknown short names must be reported as an error
 		},
 	}
 
@@ -77,8 +78,8 @@ func TestFindFolderByShortName_EmptyConfig(t *testing.T) {
 
 	var buf bytes.Buffer
 	err := FindFolderByShortName(&buf, "any-name")
-	if err != nil {
-		t.Errorf("FindFolderByShortName() should not error with empty config, got: %v", err)
+	if !errors.Is(err, ErrFolderNotFound) {
+		t.Errorf("FindFolderByShortName() error = %v, want ErrFolderNotFound", err)
 	}
 
 	output := strings.TrimSpace(buf.String())
