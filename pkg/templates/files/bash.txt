@@ -24,9 +24,9 @@ function pj() {
 
 function _pj_completion() {
   local projects
-  projects=$(command projekt folder list --no-headers --no-color --short-only --verbose=error 2>/dev/null \
-    | command sed '1d;$d' \
-    | command tr -d '| ')
+  # --output tsv prints one short name per line, so completion does not have to
+  # strip table borders and cannot be broken by a name containing one.
+  projects=$(command projekt folder list --output tsv --no-headers --short-only --verbose=error 2>/dev/null)
   mapfile -t COMPREPLY < <(compgen -W "$projects" -- "${COMP_WORDS[COMP_CWORD]}")
 }
 

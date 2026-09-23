@@ -9,11 +9,12 @@ projekt folder list [flags]
 ### Options
 
 ```
-  -h, --help         help for list
-      --no-color     Don't use color
-      --no-headers   Don't print headers
-  -p, --plain        Show only plain folders and their prefix instead of auto parse format
-  -s, --short-only   When show auto parse folders, show only short name of folders
+  -h, --help            help for list
+      --no-color        Don't use color
+      --no-headers      Don't print headers
+  -o, --output string   Output format, one of: table, json, tsv (default "table")
+  -p, --plain           Show only plain folders and their prefix instead of auto parse format
+  -s, --short-only      When show auto parse folders, show only short name of folders
 ```
 
 ### Options inherited from parent commands

@@ -2,9 +2,11 @@ package folderutil
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -259,6 +261,198 @@ func TestListFolders(t *testing.T) {
 			}
 		})
 	}
+}
+
+// setTwoFolderConfig installs a config of two plain folders, which needs no
+// filesystem and keeps the listing order fixed (the priority sort is stable).
+func setTwoFolderConfig(t *testing.T) {
+	t.Helper()
+
+	lazypath.SetTestConfig(lazypath.Config{
+		Folders: []lazypath.Folder{
+			{Path: "/home/user/alpha", Prefix: "work", IsWorkspace: false},
+			{Path: "/home/user/beta", IsWorkspace: false, Priority: 7},
+		},
+	})
+	t.Cleanup(lazypath.ResetTestConfig)
+}
+
+func TestListFolders_JSON(t *testing.T) {
+	setTwoFolderConfig(t)
+
+	var buf bytes.Buffer
+	if err := ListFolders(&buf, &ListOption{Output: OutputJSON}); err != nil {
+		t.Fatalf("ListFolders() error = %v", err)
+	}
+
+	var got []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, buf.String())
+	}
+
+	// beta sorts first: it has the higher priority.
+	want := []map[string]any{
+		{"shortName": "beta", "path": "/home/user/beta", "workspace": "/home/user/beta"},
+		{"shortName": "work-alpha", "path": "/home/user/alpha", "workspace": "/home/user/alpha"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ListFolders(json) =\n%#v\nwant\n%#v", got, want)
+	}
+}
+
+func TestListFolders_JSONShortOnly(t *testing.T) {
+	setTwoFolderConfig(t)
+
+	var buf bytes.Buffer
+	if err := ListFolders(&buf, &ListOption{Output: OutputJSON, ShortOnly: true}); err != nil {
+		t.Fatalf("ListFolders() error = %v", err)
+	}
+
+	var got []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, buf.String())
+	}
+
+	want := []map[string]any{
+		{"shortName": "beta"},
+		{"shortName": "work-alpha"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ListFolders(json, short-only) =\n%#v\nwant\n%#v", got, want)
+	}
+}
+
+func TestListFolders_JSONPlainKeepsTypes(t *testing.T) {
+	// A table stringifies everything; JSON must not, or a consumer has to parse
+	// "true" and "7" back out again.
+	setTwoFolderConfig(t)
+
+	var buf bytes.Buffer
+	if err := ListFolders(&buf, &ListOption{Output: OutputJSON, IsPlain: true}); err != nil {
+		t.Fatalf("ListFolders() error = %v", err)
+	}
+
+	var got []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, buf.String())
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d folders, want 2", len(got))
+	}
+
+	// The plain view lists folders as configured, so alpha stays first.
+	if isWorkspace, ok := got[0]["isWorkspace"].(bool); !ok || isWorkspace {
+		t.Errorf("isWorkspace = %#v, want the bool false", got[0]["isWorkspace"])
+	}
+	if priority, ok := got[1]["priority"].(float64); !ok || priority != 7 {
+		t.Errorf("priority = %#v, want the number 7", got[1]["priority"])
+	}
+}
+
+func TestListFolders_JSONEmptyIsArray(t *testing.T) {
+	// A consumer should never have to handle null in place of an empty list.
+	//
+	// An empty workspace is what produces an empty listing here: an entirely
+	// empty lazypath.Config cannot, because it is indistinguishable from an
+	// unset one and sends the loader back to whatever viper still holds.
+	lazypath.SetTestConfig(lazypath.Config{
+		Folders: []lazypath.Folder{
+			{Path: t.TempDir(), IsWorkspace: true},
+		},
+	})
+	t.Cleanup(lazypath.ResetTestConfig)
+
+	var buf bytes.Buffer
+	if err := ListFolders(&buf, &ListOption{Output: OutputJSON}); err != nil {
+		t.Fatalf("ListFolders() error = %v", err)
+	}
+
+	if got := strings.TrimSpace(buf.String()); got != "[]" {
+		t.Errorf("ListFolders(json) with no folders = %q, want %q", got, "[]")
+	}
+}
+
+func TestListFolders_TSV(t *testing.T) {
+	setTwoFolderConfig(t)
+
+	tests := []struct {
+		name      string
+		option    *ListOption
+		wantLines []string
+	}{
+		{
+			name:   "short names without headers",
+			option: &ListOption{Output: OutputTSV, ShortOnly: true, NoHeaders: true},
+			wantLines: []string{
+				"beta",
+				"work-alpha",
+			},
+		},
+		{
+			name:   "full listing with headers",
+			option: &ListOption{Output: OutputTSV},
+			wantLines: []string{
+				"SHORT NAME\tPATH\tWORKSPACE PATH",
+				"beta\t/home/user/beta\t/home/user/beta",
+				"work-alpha\t/home/user/alpha\t/home/user/alpha",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := ListFolders(&buf, tt.option); err != nil {
+				t.Fatalf("ListFolders() error = %v", err)
+			}
+
+			got := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
+			if !reflect.DeepEqual(got, tt.wantLines) {
+				t.Errorf("ListFolders(tsv) =\n%q\nwant\n%q", got, tt.wantLines)
+			}
+		})
+	}
+}
+
+func TestListFolders_UnknownOutputFormat(t *testing.T) {
+	setTwoFolderConfig(t)
+
+	var buf bytes.Buffer
+	err := ListFolders(&buf, &ListOption{Output: OutputFormat("yaml")})
+	if err == nil {
+		t.Fatal("ListFolders() with an unknown format returned no error")
+	}
+	if !strings.Contains(err.Error(), "yaml") {
+		t.Errorf("error %q does not name the rejected format", err)
+	}
+}
+
+func TestParseOutputFormat(t *testing.T) {
+	for _, name := range OutputFormats {
+		t.Run(name, func(t *testing.T) {
+			got, err := ParseOutputFormat(name)
+			if err != nil {
+				t.Fatalf("ParseOutputFormat(%q) error = %v", name, err)
+			}
+			if string(got) != name {
+				t.Errorf("ParseOutputFormat(%q) = %q", name, got)
+			}
+		})
+	}
+
+	t.Run("rejects an unknown format", func(t *testing.T) {
+		if _, err := ParseOutputFormat("xml"); err == nil {
+			t.Error("ParseOutputFormat(\"xml\") returned no error")
+		}
+	})
+
+	t.Run("rejects the empty string", func(t *testing.T) {
+		// The flag always has a value, so an empty one is a caller mistake
+		// rather than a request for the default.
+		if _, err := ParseOutputFormat(""); err == nil {
+			t.Error("ParseOutputFormat(\"\") returned no error")
+		}
+	})
 }
 
 func TestRemoveFolderFromConfig(t *testing.T) {

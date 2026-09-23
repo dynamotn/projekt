@@ -165,7 +165,7 @@ Full details in [doc/git-integration.md](doc/git-integration.md).
 | Command                                              | What it does                                              |
 | ---------------------------------------------------- | --------------------------------------------------------- |
 | [`folder add`](doc/projekt_folder_add.md)            | Register a folder or workspace, with prefix and priority   |
-| [`folder list`](doc/projekt_folder_list.md)          | List every project folder and the name it resolves to      |
+| [`folder list`](doc/projekt_folder_list.md)          | List every project folder, as a table, JSON or TSV         |
 | [`folder get`](doc/projekt_folder_get.md)            | Resolve a short name to a path — what `pj` calls           |
 | [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |
 | [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos exist, are repos, match remote |
@@ -182,6 +182,22 @@ folder management above is the part that's ready for daily use.
 | ------------------- | --------------------------------------------------------- |
 | [`t`](doc/t.md)     | Create a template file from various sources               |
 | [`b`](doc/b.md)     | Create a boilerplate project folder for a language/framework |
+
+### 📤 Output formats
+
+`folder list` renders as a table for reading, and in two machine-readable
+formats for everything else:
+
+```bash
+projekt folder list                                   # bordered table (default)
+projekt folder list -o json | jq -r '.[].shortName'   # array of objects
+projekt folder list -o tsv --short-only --no-headers  # one short name per line
+```
+
+JSON keeps real types — `priority` is a number, `isWorkspace` a boolean — and
+an empty listing is `[]`, never `null`. TSV is what the shell integration uses
+for `pj` completion: a folder whose name contains a `|` would be mangled by
+anything that tried to read the table instead.
 
 ### 🔊 Logging
 

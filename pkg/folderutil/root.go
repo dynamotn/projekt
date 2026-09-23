@@ -17,7 +17,10 @@
 package folderutil
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
+	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 
@@ -25,12 +28,56 @@ import (
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
 
+// OutputFormat selects how ListFolders renders its result.
+type OutputFormat string
+
+const (
+	// OutputTable is the bordered, optionally coloured table meant for reading.
+	OutputTable OutputFormat = "table"
+	// OutputJSON is an array of objects, one per folder.
+	OutputJSON OutputFormat = "json"
+	// OutputTSV is one folder per line with tab-separated columns, meant for
+	// shell scripts and completion, which should never have to parse a table.
+	OutputTSV OutputFormat = "tsv"
+)
+
+// OutputFormats lists the accepted --output values, for validation and for
+// shell completion.
+var OutputFormats = []string{string(OutputTable), string(OutputJSON), string(OutputTSV)}
+
+// ParseOutputFormat validates a --output value.
+func ParseOutputFormat(s string) (OutputFormat, error) {
+	switch OutputFormat(s) {
+	case OutputTable, OutputJSON, OutputTSV:
+		return OutputFormat(s), nil
+	default:
+		return "", fmt.Errorf("unknown output format %q, want one of: %s", s, strings.Join(OutputFormats, ", "))
+	}
+}
+
 // ListOption contains options for listing folders
 type ListOption struct {
 	IsPlain   bool
 	ShortOnly bool
 	NoHeaders bool
 	NoColor   bool
+	// Output selects the rendering. The empty value means OutputTable, so that
+	// a zero ListOption keeps the original behaviour.
+	Output OutputFormat
+}
+
+// listColumn is one column of a listing, under the label a table shows and the
+// key a JSON object uses.
+type listColumn struct {
+	header string
+	key    string
+}
+
+// listView is a rendered-format-independent listing: the columns, and one slice
+// of values per folder.
+type listView struct {
+	columns []listColumn
+	rows    [][]any
 }
 
 // ImportFolderToConfig adds a folder to the configuration
@@ -38,39 +85,127 @@ func ImportFolderToConfig(f *lazypath.Folder) error {
 	return f.AddToConfig()
 }
 
-// ListFolders displays a list of configured folders in a table format
+// ListFolders displays a list of configured folders in the requested format.
 func ListFolders(out io.Writer, o *ListOption) error {
+	view, err := buildListView(o)
+	if err != nil {
+		return err
+	}
+
+	switch o.Output {
+	case OutputJSON:
+		return view.encodeJSON(out)
+	case OutputTSV:
+		return view.encodeTSV(out, o.NoHeaders)
+	case OutputTable, "":
+		return view.encodeTable(out, o)
+	default:
+		return fmt.Errorf("unknown output format %q, want one of: %s", o.Output, strings.Join(OutputFormats, ", "))
+	}
+}
+
+// buildListView collects what to list, without deciding how to render it.
+func buildListView(o *ListOption) (listView, error) {
+	if o.IsPlain {
+		view := listView{columns: []listColumn{
+			{header: "PATH", key: "path"},
+			{header: "NAME", key: "name"},
+			{header: "PREFIX", key: "prefix"},
+			{header: "REGEX", key: "regex"},
+			{header: "PRIORITY", key: "priority"},
+			{header: "IS WORKSPACE", key: "isWorkspace"},
+		}}
+		for _, folder := range lazypath.GetConfig().Folders {
+			view.rows = append(view.rows, []any{
+				folder.Path, folder.Name, folder.Prefix,
+				folder.GetRegexMatch(), folder.Priority, folder.IsWorkspace,
+			})
+		}
+		return view, nil
+	}
+
+	folders, err := ParseConfig(lazypath.GetConfig())
+	if err != nil {
+		return listView{}, err
+	}
+
+	if o.ShortOnly {
+		view := listView{columns: []listColumn{{header: "SHORT NAME", key: "shortName"}}}
+		for _, folder := range folders {
+			view.rows = append(view.rows, []any{folder.ShortName})
+		}
+		return view, nil
+	}
+
+	view := listView{columns: []listColumn{
+		{header: "SHORT NAME", key: "shortName"},
+		{header: "PATH", key: "path"},
+		{header: "WORKSPACE PATH", key: "workspace"},
+	}}
+	for _, folder := range folders {
+		view.rows = append(view.rows, []any{folder.ShortName, folder.Path, folder.Workspace})
+	}
+	return view, nil
+}
+
+func (v listView) encodeTable(out io.Writer, o *ListOption) error {
 	tw := table.NewWriter()
 
-	if o.IsPlain {
-		if !o.NoHeaders {
-			tw.AppendHeader(table.Row{"PATH", "NAME", "PREFIX", "REGEX", "PRIORITY", "IS WORKSPACE"})
+	if !o.NoHeaders {
+		header := make(table.Row, 0, len(v.columns))
+		for _, col := range v.columns {
+			header = append(header, col.header)
 		}
-		for _, folder := range lazypath.GetConfig().Folders {
-			tw.AppendRow(table.Row{folder.Path, folder.Name, folder.Prefix, folder.GetRegexMatch(), folder.Priority, folder.IsWorkspace})
-		}
-	} else {
-		if !o.NoHeaders {
-			if o.ShortOnly {
-				tw.AppendHeader(table.Row{"SHORT NAME"})
-			} else {
-				tw.AppendHeader(table.Row{"SHORT NAME", "PATH", "WORKSPACE PATH"})
-			}
-		}
-		folders, err := ParseConfig(lazypath.GetConfig())
-		if err != nil {
-			return err
-		}
-		for _, folder := range folders {
-			if o.ShortOnly {
-				tw.AppendRow(table.Row{folder.ShortName})
-			} else {
-				tw.AppendRow(table.Row{folder.ShortName, folder.Path, folder.Workspace})
-			}
-		}
+		tw.AppendHeader(header)
+	}
+	for _, row := range v.rows {
+		tw.AppendRow(table.Row(row))
 	}
 
 	return cli.EncodeTable(out, tw, o.NoColor)
+}
+
+// encodeTSV writes one folder per line, so that a shell script can read the
+// listing with `read` or `cut` instead of stripping table borders.
+func (v listView) encodeTSV(out io.Writer, noHeaders bool) error {
+	var b strings.Builder
+
+	if !noHeaders {
+		headers := make([]string, 0, len(v.columns))
+		for _, col := range v.columns {
+			headers = append(headers, col.header)
+		}
+		b.WriteString(strings.Join(headers, "\t"))
+		b.WriteByte('\n')
+	}
+	for _, row := range v.rows {
+		cells := make([]string, 0, len(row))
+		for _, cell := range row {
+			cells = append(cells, fmt.Sprint(cell))
+		}
+		b.WriteString(strings.Join(cells, "\t"))
+		b.WriteByte('\n')
+	}
+
+	_, err := io.WriteString(out, b.String())
+	return err
+}
+
+// encodeJSON writes an array of objects, one per folder, keyed by column. The
+// array is always present, so a consumer never has to special-case no folders.
+func (v listView) encodeJSON(out io.Writer) error {
+	objects := make([]map[string]any, 0, len(v.rows))
+	for _, row := range v.rows {
+		object := make(map[string]any, len(v.columns))
+		for i, col := range v.columns {
+			object[col.key] = row[i]
+		}
+		objects = append(objects, object)
+	}
+
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(objects)
 }
 
 // RemoveFolderFromConfig removes a folder from the configuration by path
