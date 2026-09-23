@@ -66,6 +66,7 @@ run_example() {
 @test "example/date_ops.sh runs clean" { run_example "date_ops.sh"; }
 @test "example/doctor_ops.sh runs clean" { run_example "doctor_ops.sh"; }
 @test "example/file_ops.sh runs clean" { run_example "file_ops.sh"; }
+@test "example/forge_ops.sh runs clean" { run_example "forge_ops.sh"; }
 @test "example/git_ops.sh runs clean" { run_example "git_ops.sh"; }
 @test "example/helpers_ops.sh runs clean" { run_example "helpers_ops.sh"; }
 @test "example/i18n_ops.sh runs clean" { run_example "i18n_ops.sh"; }

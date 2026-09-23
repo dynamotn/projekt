@@ -197,15 +197,29 @@ function dybatpho::cleanup_file_on_exit {
   done
 
   if [[ "${running_under_bats_test}" == true ]]; then
-    # Deliberately replacing rather than composing. A Bats test shell carries
-    # `bats_teardown_trap` on EXIT, and every command substitution inherits it;
-    # composing would run Bats' teardown — and report a test result — once per
-    # subshell. Bats re-arms its own trap after the test body anyway, so nothing
-    # of Bats' is lost by dropping it here.
+    # `BASHPID` still equals `$$` only in the Bats test shell itself; every
+    # subshell gets its own. The two need opposite treatment.
+    if [[ "${BASHPID}" == "$$" ]]; then
+      # The test shell's EXIT trap is how Bats reports the result. Taking it
+      # over does not merely lose cleanup: a *passing* test still looks normal,
+      # because Bats re-arms its trap after the body, while a *failing* one
+      # disappears from the report entirely — the run ends with "Executed N-1
+      # instead of N tests" and never names the test, so an intermittent
+      # failure reads as a dead worker rather than as a failure. Nothing is
+      # lost by staying out of the way here, because `dybatpho::create_temp`
+      # already places test temporaries inside the directory Bats removes
+      # itself.
+      return 0
+    fi
+    # A subshell is the opposite case: its exit is the only chance to remove
+    # what it registered, and nothing of Bats' is at stake. Replacing rather
+    # than composing is deliberate — `trap -p` reports the inherited text even
+    # though the trap will not fire here, so composing would append Bats'
+    # teardown and report a test result once per subshell.
     trap '__dybatpho_cleanup_run' EXIT HUP INT TERM
-  else
-    dybatpho::trap '__dybatpho_cleanup_run' EXIT HUP INT TERM # kcov(skip) - tests always run under bats
+    return 0
   fi
+  dybatpho::trap '__dybatpho_cleanup_run' EXIT HUP INT TERM # kcov(skip) - tests always run under bats
 }
 
 #######################################

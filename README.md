@@ -215,6 +215,7 @@ scripts/release.sh --version 3.0.0 --sign
 | [git.sh](doc/git.md)          | Repo metadata, branches, tags, commits, remotes, reachability |
 | [semver.sh](doc/semver.md)    | Parse, validate, compare, bump, sort and range-match semantic versions |
 | [release.sh](doc/release.md)  | Version from commits, changelog, per-platform artifacts, checksums, signing |
+| [forge.sh](doc/forge.md)      | Publish to GitHub or GitLab: releases, assets, and issues that comment instead of duplicating |
 | [testing.sh](doc/testing.md)  | File/JSON/YAML assertions, CLI snapshots, mocks, fixtures |
 | [metrics.sh](doc/metrics.md)  | Command timing, counters, retry/HTTP/error stats, Prometheus export |
 | [doctor.sh](doc/doctor.md)    | Report the Bash version, the library version and every external tool the loaded modules need |

@@ -71,7 +71,12 @@ _failing_job() {
   dybatpho::parallel_map 2 _traced_job a b c d > /dev/null
   # A width of two means the third job cannot start until one of the first two
   # has ended, so an end must appear before the third start.
-  assert_equal "$(sed -n '3p' "${LOG}")" "end a"
+  #
+  # Which of the first two ends first is a race — they run concurrently and
+  # sleep for the same time — so the line is matched by kind, not by job name.
+  # Asserting "end a" here made this test fail roughly one run in ten.
+  assert_regex "$(sed -n '3p' "${LOG}")" '^end '
+  assert_equal "$(head -3 "${LOG}" | grep -c '^start ')" "2"
 }
 
 @test "each job keeps its own exit code" {

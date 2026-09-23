@@ -60,7 +60,7 @@ export DYBATPHO_DIR
 # @env DYBATPHO_CORE_MODULES string Modules that call each other and are always loaded
 DYBATPHO_CORE_MODULES="string os logging helpers process file secret"
 # @env DYBATPHO_OPTIONAL_MODULES string Modules that are only loaded when requested
-DYBATPHO_OPTIONAL_MODULES="array math text lock network date json config archive git table cli notification semver testing safety metrics ai agent pkg release parallel doctor i18n"
+DYBATPHO_OPTIONAL_MODULES="array math text lock network date json config archive git table cli notification semver testing safety metrics ai agent pkg release parallel doctor i18n forge"
 # The loaded set describes the current shell, so it is deliberately neither
 # exported nor seeded from the environment. A child shell that sources `init.sh`
 # again has to source the module files itself: only `dybatpho::` functions cross
@@ -92,6 +92,7 @@ declare -A __dybatpho_module_deps=(
   [agent]="cli safety json"
   [pkg]="safety"
   [release]="semver git archive"
+  [forge]="network json git"
   [i18n]="date"
   # A dependency may name a version, and comparing versions is what `semver` is
   # for. The edge is cheap here: a diagnostic is not on anyone's hot path, which

@@ -131,6 +131,7 @@ module calls `command curl` on purpose, which bypasses functions.
 | `date.sh` | Portable date/time parsing, formatting, and calculations | `test/date.bats`, `doc/date.md`, `doc/spec/date.md` |
 | `doctor.sh` | Environment report: Bash version, library version, and the external commands the loaded modules declare | `test/doctor.bats`, `doc/doctor.md`, `doc/spec/doctor.md` |
 | `file.sh` | Path and XDG helpers, upward search, directory creation, temporary files, atomic content rewrites, checksums, and metadata | `test/file.bats`, `doc/file.md`, `doc/spec/file.md` |
+| `forge.sh` | GitHub and GitLab detection from the remote, authenticated requests, issues, and releases | `test/forge.bats`, `doc/forge.md`, `doc/spec/forge.md` |
 | `git.sh` | Safe repository, branch, commit, reachability, and Git operations | `test/git.bats`, `doc/git.md`, `doc/spec/git.md` |
 | `helpers.sh` | Argument validation, command lookup, retry, and common helpers | `test/helpers.bats`, `doc/helpers.md`, `doc/spec/helpers.md` |
 | `i18n.sh` | Message catalogs, plural rules, and locale-aware numbers, money, sizes, dates, and text direction | `test/i18n.bats`, `doc/i18n.md`, `doc/spec/i18n.md` |

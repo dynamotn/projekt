@@ -121,6 +121,34 @@ setup() {
   assert_file_not_exist "${filepath}"
 }
 
+@test 'dybatpho::cleanup_file_on_exit leaves the Bats reporter on EXIT alone' {
+  # Bats reports a test result from its own EXIT trap. Replacing that trap in
+  # the test shell hid every failure in every test that made a temporary file:
+  # the test vanished from the report and the run ended with "Executed N-1
+  # instead of N tests", which reads as a dead worker rather than a failure.
+  local before after
+  before="$(trap -p EXIT)"
+  assert_regex "${before}" 'bats_teardown_trap'
+
+  dybatpho::cleanup_file_on_exit "${BATS_TEST_TMPDIR}/never-created"
+
+  after="$(trap -p EXIT)"
+  assert_equal "${after}" "${before}"
+}
+
+@test 'dybatpho::cleanup_file_on_exit still cleans up when a subshell ends' {
+  # The other half of the rule: a subshell has no reporter to protect, and its
+  # exit is the only chance to remove what it registered.
+  local marker="${BATS_TEST_TMPDIR}/subshell-path"
+  (
+    local scratch
+    dybatpho::create_temp scratch ".txt" "subshell-cleanup"
+    printf '%s' "${scratch}" > "${marker}"
+    [[ -f "${scratch}" ]]
+  )
+  assert_file_not_exist "$(cat "${marker}")"
+}
+
 @test 'dybatpho::cleanup_file_on_exit removes directory on shell exit' {
   local dirpath="${BATS_TEST_TMPDIR}/cleanup-dir"
   _register_cleanup_dir() {

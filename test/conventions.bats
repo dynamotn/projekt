@@ -44,16 +44,21 @@ fail_with() {
 @test "the documentation check inspects every source it is given" {
   # Read as a string, the argument list was its own first element, so only the
   # first source was ever compared. A stale document anywhere after it passed.
-  local doc="${REPO_ROOT}/doc/semver.md"
-  cp "${doc}" "${BATS_TEST_TMPDIR}/semver.md"
-  printf '\nA line no source produces.\n' >> "${doc}"
+  #
+  # The stale source is a copy in this test's own directory, whose `doc/` file
+  # therefore does not exist. Making a committed document stale in place would
+  # dirty the shared repository for as long as the check runs, and the suite
+  # runs its files in parallel: `test/examples.bats` compares the working tree
+  # before and after every example, so it would fail on whichever example
+  # happened to overlap this window.
+  local stale_source="${BATS_TEST_TMPDIR}/zzz_unpublished.sh"
+  cp "${REPO_ROOT}/src/semver.sh" "${stale_source}"
+
   run "${REPO_ROOT}/scripts/doc.sh" --check \
-    "${REPO_ROOT}/src/os.sh" "${REPO_ROOT}/src/semver.sh"
-  # Restored before the assertions, so a failing one cannot leave the
-  # repository holding the deliberately broken document.
-  cp "${BATS_TEST_TMPDIR}/semver.md" "${doc}"
+    "${REPO_ROOT}/src/os.sh" "${stale_source}"
   assert_failure
-  assert_output --partial "doc/semver.md is stale"
+  # Naming the second source proves the first did not end the listing.
+  assert_output --partial "doc/zzz_unpublished.md is stale"
 }
 
 @test "every module has a doc, a spec, a test file and an example" {

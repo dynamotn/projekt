@@ -3,7 +3,7 @@
 # @brief Cut a release of dybatpho: stamp the tree, tag it, and publish it
 # @description
 #   One command takes the repository from "the changelog has an `Unreleased`
-#   section" to "the tag, the GitHub release, and the artifacts exist". The
+#   section" to "the tag, the forge release, and the artifacts exist". The
 #   steps are the ones a release of this library actually needs, in the order
 #   that keeps them consistent:
 #
@@ -19,8 +19,15 @@
 #      changelog entry so `git show v<version>` carries the release notes.
 #   6. Build the artifacts from the tagged tree: the all-modules bundle, a
 #      checksum file, and a detached signature when `--sign` is given.
-#   7. Push the branch and the tag, then create the GitHub release with the
-#      changelog entry as its body and the artifacts attached.
+#   7. Push the branch and the tag, then create the release with the changelog
+#      entry as its body and the artifacts attached.
+#
+#   Publishing goes through `src/forge.sh`, which reads the forge from the Git
+#   remote. That keeps the release step working on GitHub, GitHub Enterprise
+#   and GitLab alike, and replaces the `gh` CLI with a token: set `GITHUB_TOKEN`
+#   (or `GITLAB_TOKEN`), or take one from an authenticated CLI with
+#   `GITHUB_TOKEN=$(gh auth token)`. The token is checked before any local step
+#   runs, so a missing one cannot be discovered after the tree is tagged.
 #
 #   The changelog is the source of the release notes, never a generated commit
 #   list: this project writes entries by hand, and a release that paraphrased
@@ -38,19 +45,22 @@
 #   scripts/release.sh                      # version from the commits
 #   scripts/release.sh --version 3.0.0      # or name it
 #   scripts/release.sh --bump minor --sign  # bump one level and sign the sums
-#   scripts/release.sh --no-github          # tag and push, publish by hand later
+#   scripts/release.sh --no-publish         # tag and push, publish by hand later
 #
 # @env DYBATPHO_FORCE string When true-like, answer every confirmation with yes
 # @env DRY_RUN string When true-like, report every step and change nothing
 # @env DYBATPHO_RELEASE_GPG_KEY string Key `--sign` signs the checksum file with
 #
+# @env GITHUB_TOKEN string Token the release is published with, see `src/forge.sh`
+#
 # @see
 #   - `src/release.sh`
+#   - `src/forge.sh`
 #   - `CHANGELOG.md`
 #   - `scripts/bundle.sh`
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=init.sh
-. "${SCRIPT_DIR}/../init.sh" --modules "cli release safety date"
+. "${SCRIPT_DIR}/../init.sh" --modules "cli release safety date forge"
 
 dybatpho::register_common_handlers
 
@@ -88,19 +98,14 @@ function __dybatpho_release_current_version {
 # @exitcode 1 Stop the script when the remote has no URL
 #######################################
 function __dybatpho_release_repo_url {
-  local _remote _url
+  local _remote
   dybatpho::expect_args _remote -- "$@"
-  _url="$(dybatpho::git_remote_url "${_remote}" "${DYBATPHO_DIR}")" \
-    || dybatpho::die "No URL for remote '${_remote}'"
-  _url="${_url%.git}"
-  case "${_url}" in
-    # Turn the `host:owner/repo` separator into a `/` *before* prefixing the
-    # scheme. Doing it after leaves `https:` as the first colon in the string,
-    # so the substitution mangles the scheme instead of the separator.
-    git@*) _url="${_url#git@}" && _url="https://${_url/://}" ;;
-    ssh://git@*) _url="https://${_url#ssh://git@}" ;;
-  esac
-  printf '%s\n' "${_url}"
+  # `forge` already normalises `git@host:path`, `ssh://git@host/path` and
+  # `https://host/path` to the same host and project, so this is the one place
+  # that knowledge has to live.
+  printf 'https://%s/%s\n' \
+    "$(dybatpho::forge_host "${_remote}" "${DYBATPHO_DIR}")" \
+    "$(dybatpho::forge_repo "${_remote}" "${DYBATPHO_DIR}")"
 }
 
 #######################################
@@ -309,8 +314,14 @@ function __dybatpho_release_run {
   local -a _artifacts=()
 
   dybatpho::require "git"
-  dybatpho::is true "${GITHUB}" && dybatpho::require "gh"
   dybatpho::is true "${DOCS}" && dybatpho::require "gawk"
+  if dybatpho::is true "${PUBLISH}" && dybatpho::is false "${DRY_RUN}"; then
+    # Resolved before any local step runs: a missing token should not be found
+    # out after the tree is stamped, committed and tagged.
+    dybatpho::require "curl"
+    dybatpho::forge_token > /dev/null \
+      || dybatpho::die "No token to publish with. Set GITHUB_TOKEN, or export it from the CLI: GITHUB_TOKEN=\$(gh auth token)"
+  fi
 
   local _current
   _current="$(__dybatpho_release_current_version)"
@@ -372,23 +383,31 @@ function __dybatpho_release_run {
     dybatpho::warn "Not pushing; the release exists locally only"
   fi
 
-  if dybatpho::is true "${GITHUB}"; then
+  if dybatpho::is true "${PUBLISH}"; then
     if dybatpho::is false "${PUSH}"; then
-      dybatpho::die "--github needs the tag pushed; drop --no-push or pass --no-github"
+      dybatpho::die "--publish needs the tag pushed; drop --no-push or pass --no-publish"
     fi
-    dybatpho::progress "Creating the GitHub release"
-    # `gh` resolves the repository from the remote, which a checkout of this
-    # repository always has.
-    local -a _gh=(gh release create "${_tag}" --title "${_tag}" --notes-file "${_notes}")
-    dybatpho::is true "${DRAFT}" && _gh+=(--draft)
-    ((${#_artifacts[@]})) && _gh+=("${_artifacts[@]}")
-    (cd "${DYBATPHO_DIR}" && dybatpho::dry_run "${_gh[@]}")
+    dybatpho::progress "Creating the $(dybatpho::forge_kind) release"
+    if dybatpho::is true "${DRY_RUN}"; then
+      dybatpho::dry_run "forge_release_create ${_tag} with $(wc -l < "${_notes}") lines of notes"
+      local _artifact
+      for _artifact in ${_artifacts[@]+"${_artifacts[@]}"}; do
+        dybatpho::dry_run "forge_release_upload ${_tag} ${_artifact}"
+      done
+    else
+      dybatpho::forge_release_create "${_tag}" "${_tag}" "$(< "${_notes}")" "${DRAFT}" > /dev/null
+      local _artifact
+      for _artifact in ${_artifacts[@]+"${_artifacts[@]}"}; do
+        dybatpho::progress "Attaching $(dybatpho::path_basename "${_artifact}")"
+        dybatpho::info "$(dybatpho::forge_release_upload "${_tag}" "${_artifact}")"
+      done
+    fi
   fi
 
   dybatpho::success "Released ${_tag}"
   ((${#_artifacts[@]})) && dybatpho::info "Artifacts in ${DIST_DIR}"
-  dybatpho::is false "${GITHUB}" \
-    && dybatpho::info "Publish it with: gh release create ${_tag} --notes-file <notes>"
+  dybatpho::is false "${PUBLISH}" \
+    && dybatpho::info "Publish it later with dybatpho::forge_release_create and forge_release_upload"
   return 0
 }
 
@@ -417,7 +436,7 @@ function _spec {
   dybatpho::opts::flag "Push the branch and the tag" PUSH --{no-}push \
     on:true off:false init:="true"
   # shellcheck disable=SC1083
-  dybatpho::opts::flag "Create the GitHub release" GITHUB --{no-}github \
+  dybatpho::opts::flag "Create the release on the forge" PUBLISH --{no-}publish \
     on:true off:false init:="true"
   dybatpho::opts::flag "Report every step and change nothing" DRY_RUN -n --dry-run \
     on:true off:false init:="${DRY_RUN:-false}" export:true

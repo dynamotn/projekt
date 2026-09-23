@@ -40,6 +40,14 @@ fake_versioned_command() {
   assert_output "tar"
 }
 
+@test "dybatpho::doctor_requirements lists what the forge module needs" {
+  # `forge` reaches the API with curl and reads the remote with git, so a
+  # missing one of those is a required failure rather than a partial module.
+  run -0 dybatpho::doctor_requirements forge required
+  assert_line --index 0 "curl"
+  assert_line --index 1 "git"
+}
+
 @test "dybatpho::doctor_requirements lists optional dependencies" {
   run -0 dybatpho::doctor_requirements json optional
   assert_output "jq"

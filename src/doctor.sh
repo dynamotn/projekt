@@ -58,6 +58,7 @@ DYBATPHO_BASH_MINIMUM="4.3"
 declare -gA DYBATPHO_DOCTOR_REQUIRED=(
   [ai]="curl"
   [archive]="tar"
+  [forge]="curl git"
   [git]="git"
   # The YAML helpers call `yq eval`, which is the Go `yq`. The unrelated Python
   # `yq` and the Go one before v4 both take a different expression syntax, so a
