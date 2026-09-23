@@ -57,6 +57,7 @@ A single static Go binary each, no daemon, no index to rebuild — your config f
 - **A jump list that stays short** — `folder archive` moves a finished project out of the way, and refuses while anything in it is uncommitted or unpushed.
 - **Tagged, not just named** — label folders `work`, `oss`, `go`, then point any command at a subset with `--tags`.
 - **What did I leave half-done** — `folder status --dirty` lists every project with changes, unpushed commits or a forgotten stash, in one table.
+- **One command, every project** — `folder exec -- git status --short` answers the question jumping cannot: which of them did I leave in a mess.
 - **New projects that are already on the map** — `b new` renders a boilerplate into the right workspace and registers it, so the next thing you type is `pj`.
 - **Templates that name their own files** — `t new` renders a Go template, or a whole folder of them, from a store you own; the path segments are templates too, and `-i` asks you for the rest.
 - **Two branches at once** — `worktree add` checks out a branch beside your work and gives it a name, so `pj myapp@PROJ-123` is the whole context switch.
@@ -567,6 +568,29 @@ without an opinion, since there is no way to tell what finished means for it.
 
 The archive folder is `$XDG_DATA_HOME/projekt/archive`, or `--archive-dir`,
 `$PROJEKT_ARCHIVE_DIR` or `--to`.
+## 🔁 One command, every project
+
+Jumping answers "where is it". `folder exec` answers the question you cannot
+jump to: *which of them*.
+
+```bash
+projekt folder exec -- git status --short       # what did I leave dirty
+projekt folder exec -t work -- git fetch -q     # only the work ones
+projekt folder exec --quiet -- git diff --quiet # just the names of the dirty ones
+projekt folder exec -- rg -l "old-api"          # who still uses it
+```
+
+Everything after `--` is the command. Folders are worked on several at a time
+(`--forks`, 4 by default) but **reported in configuration order**, so two runs
+can be compared instead of arriving shuffled. A folder that is not on disk is
+reported as missing rather than as a failure of the command, and the exit code
+is non-zero when the command failed anywhere — which makes it a usable check:
+
+```bash
+projekt folder exec -t work --quiet -- git diff --quiet || echo "something is dirty"
+```
+
+Working trees are projects too, so they are included.
 
 ## 📚 Commands
 
@@ -585,6 +609,7 @@ The archive folder is `$XDG_DATA_HOME/projekt/archive`, or `--archive-dir`,
 | [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos, remotes and worktrees on disk |
 | [`folder status`](doc/projekt_folder_status.md)      | Branch, changes, ahead/behind, stashes, across every folder  |
 | [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories in parallel, with `--dry-run`   |
+| [`folder exec`](doc/projekt_folder_exec.md)          | Run one command in every project folder, several at a time  |
 | [`worktree add`](doc/projekt_worktree_add.md)        | Check out a branch beside your work, reachable as `pj p@name` |
 | [`worktree list`](doc/projekt_worktree_list.md)      | List the working trees, and what git makes of them          |
 | [`worktree remove`](doc/projekt_worktree_remove.md)  | Put one away; the branch is left alone                      |

@@ -22,6 +22,7 @@ Manage your project folder
 * [projekt folder add](projekt_folder_add.md)	 - Add your project folder to config
 * [projekt folder archive](projekt_folder_archive.md)	 - Move a finished project out of the way
 * [projekt folder check](projekt_folder_check.md)	 - Check status of Git repositories in configuration
+* [projekt folder exec](projekt_folder_exec.md)	 - Run a command in every project folder
 * [projekt folder get](projekt_folder_get.md)	 - Get project folder by short name
 * [projekt folder list](projekt_folder_list.md)	 - List all your project folders
 * [projekt folder recent](projekt_folder_recent.md)	 - List the projects you jumped to, most recent first
