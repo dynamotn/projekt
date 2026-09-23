@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`scripts/doc.sh` read its arguments as a string, and the documentation
+  guard quietly stopped guarding.** `dybatpho::opts::setup` collects positional
+  arguments into a Bash array, which the positional-argument rework made
+  explicit. This script was not updated with it and still expanded the array as
+  a scalar, which is wrong in both directions: with arguments, `"${DOC_ARGS}"`
+  is element zero, so `scripts/doc.sh src/a.sh src/b.sh` documented only
+  `src/a.sh`; with none, an empty array is unset, so `errexit` ended the source
+  listing inside the process substitution that feeds the loop.
+
+  The second case is the damaging one. The loop simply read nothing, so
+  `scripts/doc.sh --check` compared no documents and reported that everything
+  was up to date — which is what `scripts/lint.sh` and CI were relying on to
+  catch documentation drift. It had been passing without checking anything.
+
+  Both paths now read the array as an array, and generating or checking an
+  empty set of sources fails loudly instead of reporting success, so this
+  cannot go quiet again. `test/conventions.bats` covers both.
+
+  No other script or example was affected: `scripts/test.sh` already read its
+  array correctly, and every other caller declares a positional variable it
+  never reads.
+
 ### Added
 
 - **Version constraints: a dependency check that asks how old the tool is.**

@@ -30,12 +30,16 @@ dybatpho::register_common_handlers
 #   the modules it loads.
 # @stdout Paths of the source files
 function __dybatpho_doc_sources {
-  local -a _named=()
-  # `dybatpho::opts::setup` collects the positional arguments into a single
-  # space-joined string, so they are split back out here.
-  read -r -a _named <<< "${DOC_ARGS}"
-  if ((${#_named[@]})); then
-    printf '%s\n' "${_named[@]}"
+  # `dybatpho::opts::setup` collects the positional arguments into a Bash array,
+  # which `dybatpho::generate_from_spec` always declares, empty or not.
+  #
+  # Reading it as a string instead is silent in both directions and wrong in
+  # both: `"${DOC_ARGS}"` is element zero alone, so only the first source was
+  # ever documented, and on an empty array it is unset, which `errexit` turns
+  # into a failure inside the process substitution below -- where it stops the
+  # loop without stopping the caller.
+  if ((${#DOC_ARGS[@]})); then
+    printf '%s\n' "${DOC_ARGS[@]}"
     return 0
   fi
   printf '%s\n' "${DYBATPHO_DIR}/init.sh" "${DYBATPHO_DIR}/src/"*.sh
@@ -43,28 +47,37 @@ function __dybatpho_doc_sources {
 
 # @description Write `doc/<module>.md` for every source.
 function __dybatpho_doc_generate {
-  local _src _module
+  local _src _module _written=0
   while IFS= read -r _src; do
     _module="$(basename "${_src}" .sh)"
     gawk -f "${SCRIPT_DIR}/genshdoc.awk" "${_src}" \
       > "${DYBATPHO_DIR}/doc/${_module}.md"
+    _written=$((_written + 1))
   done < <(__dybatpho_doc_sources)
+  ((_written > 0)) \
+    || dybatpho::die "${FUNCNAME[0]}: No source file to document"
 }
 
 # @description Compare the committed documents against freshly generated ones.
 # @exitcode 0 Every document matches its source
 # @exitcode 1 At least one document is stale
 function __dybatpho_doc_check {
-  local _generated _src _module _stale=""
+  local _generated _src _module _stale="" _checked=0
   dybatpho::create_temp_dir _generated "doc-check"
 
   while IFS= read -r _src; do
     _module="$(basename "${_src}" .sh)"
     gawk -f "${SCRIPT_DIR}/genshdoc.awk" "${_src}" > "${_generated}/${_module}.md"
+    _checked=$((_checked + 1))
     if ! diff -q "${DYBATPHO_DIR}/doc/${_module}.md" "${_generated}/${_module}.md" > /dev/null 2>&1; then
       _stale+="doc/${_module}.md is stale relative to $(basename "${_src}")"$'\n'
     fi
   done < <(__dybatpho_doc_sources)
+
+  # A guard that compared nothing has not shown the documentation is current,
+  # and reporting success for it is how this check quietly stopped checking.
+  ((_checked > 0)) \
+    || dybatpho::die "${FUNCNAME[0]}: No source file to check"
 
   if [[ -n "${_stale}" ]]; then
     dybatpho::error "Generated documentation is out of date; run scripts/doc.sh"

@@ -27,6 +27,35 @@ fail_with() {
   return 1
 }
 
+# The documentation check is what keeps the committed `doc/` honest, and a
+# guard that stops guarding is worse than no guard: it reports success either
+# way. These two cover the ways it went quiet rather than the drift it reports,
+# which the guard itself already covers when it runs.
+
+@test "the documentation check reads its sources without tripping over an empty argument list" {
+  # The positional arguments arrive as a Bash array. Read as a string, an empty
+  # one is unset, `errexit` ended the source listing inside a process
+  # substitution, and the check then compared nothing and called it clean.
+  run "${REPO_ROOT}/scripts/doc.sh" --check
+  refute_output --partial "unbound variable"
+  refute_output --partial "DOC_ARGS"
+}
+
+@test "the documentation check inspects every source it is given" {
+  # Read as a string, the argument list was its own first element, so only the
+  # first source was ever compared. A stale document anywhere after it passed.
+  local doc="${REPO_ROOT}/doc/semver.md"
+  cp "${doc}" "${BATS_TEST_TMPDIR}/semver.md"
+  printf '\nA line no source produces.\n' >> "${doc}"
+  run "${REPO_ROOT}/scripts/doc.sh" --check \
+    "${REPO_ROOT}/src/os.sh" "${REPO_ROOT}/src/semver.sh"
+  # Restored before the assertions, so a failing one cannot leave the
+  # repository holding the deliberately broken document.
+  cp "${BATS_TEST_TMPDIR}/semver.md" "${doc}"
+  assert_failure
+  assert_output --partial "doc/semver.md is stale"
+}
+
 @test "every module has a doc, a spec, a test file and an example" {
   local violations="" module
   for source in "${REPO_ROOT}"/src/*.sh; do
