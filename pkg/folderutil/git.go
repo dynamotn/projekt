@@ -242,6 +242,12 @@ func cloneRepoWithFallback(server *lazypath.GitServer, group string, repoName st
 
 	// If primary failed and we have fallback, try it
 	if fallbackURL != "" {
+		// A failed clone can leave an empty directory behind, which would make
+		// the retry fail with "destination path already exists".
+		if entries, readErr := os.ReadDir(targetPath); readErr == nil && len(entries) == 0 {
+			_ = os.Remove(targetPath)
+		}
+
 		cli.Warn("Failed to clone via %s, trying fallback %s",
 			getURLType(primaryURL), getURLType(fallbackURL))
 		cli.Debug("Attempting to clone from: %s", fallbackURL)
