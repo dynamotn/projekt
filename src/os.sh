@@ -434,17 +434,39 @@ function dybatpho::is_wsl {
 #######################################
 # @description Return success when the script runs on a continuous integration
 #   service.
+#   `CI` decides whenever it is set, in either direction. Every service sets it,
+#   and it is also the one variable a caller can set themselves, so `CI=false`
+#   turns the detection off even on a runner that advertises itself by name.
+#   The service-specific variables are consulted only when `CI` is unset or
+#   empty, which is the case they are there for.
 # @example
 #   dybatpho::is_ci && export DYBATPHO_FORCE=true
 #
-# @exitcode 0 A known CI environment variable is set to something other than a false value
-# @exitcode 1 The script runs outside CI
+# @example
+#   # Run a CI-aware script as if it were a workstation.
+#   CI=false ./deploy.sh
+#
+# @env CI string Set to a false value to say the script is not on CI, whatever else the environment advertises
+# @exitcode 0 `CI` holds a value other than `false`, `0`, or `no`; or `CI` is unset and a service names itself
+# @exitcode 1 `CI` holds a false value, or nothing in the environment names a CI service
 #######################################
 function dybatpho::is_ci {
+  # `CI` is the convention every service follows, so when it says anything at
+  # all it is the answer. Reading it as just another entry in the list below
+  # meant a false value only skipped to the next name: on a runner that also
+  # sets `GITHUB_ACTIONS`, `CI=false` still detected CI, and the one way a
+  # caller had to turn the detection off did nothing.
+  if [[ -n "${CI:-}" ]]; then
+    case "$(dybatpho::lower "${CI}")" in
+      false | 0 | no) return 1 ;;
+      *) return 0 ;;
+    esac
+  fi
+
+  # The rest of the list exists only for services that set their own name and
+  # never set `CI`, so it is consulted only once `CI` has said nothing.
   local variable value
-  # `CI` is the convention every service follows; the rest catch the ones that
-  # only set their own name, and a service that sets `CI=false` means it.
-  for variable in CI GITHUB_ACTIONS GITLAB_CI JENKINS_URL BUILDKITE CIRCLECI TRAVIS TEAMCITY_VERSION TF_BUILD; do
+  for variable in GITHUB_ACTIONS GITLAB_CI JENKINS_URL BUILDKITE CIRCLECI TRAVIS TEAMCITY_VERSION TF_BUILD; do
     value="${!variable:-}"
     [[ -n "${value}" ]] || continue
     case "$(dybatpho::lower "${value}")" in

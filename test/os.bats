@@ -386,6 +386,30 @@ fake_tool() {
   assert_equal "$(dybatpho::command_version bash)" "${BASH_VERSION%%(*}"
 }
 
+@test "dybatpho::is_ci lets CI overrule a service that names itself" {
+  # The case that turned CI red: a runner sets both `CI` and its own name, so
+  # reading `CI=false` as merely "skip to the next variable" left the detection
+  # on. The environment here is pinned rather than inherited, so this says the
+  # same thing whether the suite runs on a workstation or on a runner.
+  CI=false GITHUB_ACTIONS=true run ! dybatpho::is_ci
+  CI=0 GITHUB_ACTIONS=true run ! dybatpho::is_ci
+  CI=no GITHUB_ACTIONS=true run ! dybatpho::is_ci
+  CI=FALSE GITHUB_ACTIONS=true run ! dybatpho::is_ci
+  CI=true GITHUB_ACTIONS=false run -0 dybatpho::is_ci
+}
+
+@test "dybatpho::is_ci falls back to a service name only when CI says nothing" {
+  # `_child` inherits this shell's environment, and the suite itself may be
+  # running on a service, so every marker is cleared before one is set back.
+  local clean="unset CI GITHUB_ACTIONS GITLAB_CI JENKINS_URL BUILDKITE CIRCLECI TRAVIS TEAMCITY_VERSION TF_BUILD"
+  run ! _child "${clean}" "export GITHUB_ACTIONS=false" "dybatpho::is_ci"
+  run -0 _child "${clean}" "export GITHUB_ACTIONS=true" "dybatpho::is_ci"
+  run -0 _child "${clean}" "export GITLAB_CI=true" "dybatpho::is_ci"
+  # An empty `CI` is not an answer either way, so the fallback still applies.
+  run -0 _child "${clean}" "export CI=''; export GITLAB_CI=true" "dybatpho::is_ci"
+  run ! _child "${clean}" "export CI=''; export GITLAB_CI=false" "dybatpho::is_ci"
+}
+
 @test "dybatpho::is_ci recognizes a service and honors a disabled one" {
   CI=true run -0 dybatpho::is_ci
   GITHUB_ACTIONS=true run -0 dybatpho::is_ci

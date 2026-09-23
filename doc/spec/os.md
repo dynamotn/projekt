@@ -144,6 +144,8 @@ fi
 - **FR-013**: The module MUST report the distribution identifier and version, answering `macos` on Darwin and falling back to the normalized platform name when there is no `os-release` file.
 - **FR-014**: The module MUST report the kernel release of the host.
 - **FR-015**: The module MUST expose predicates for running inside a container, under the Windows Subsystem for Linux, and on a continuous integration service, and the CI predicate MUST treat a false value as not being on CI.
+- **FR-015a**: The CI predicate MUST let `CI` decide whenever it holds a value, in either direction, so that `CI=false` reports not-CI even on a service that also advertises itself by name. Every service sets `CI`, and it is the one variable a caller can set themselves, so anything else overriding it would leave no way to turn the detection off.
+- **FR-015b**: The CI predicate MUST consult the service-specific variables only when `CI` is unset or empty, and MUST treat a false value in one of them as that service saying nothing rather than as an answer for the whole environment.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -176,6 +178,8 @@ fi
 - **IT-010**: Verify the terminal-stream predicate is false for the captured streams of a test and rejects an unknown stream name.
 - **IT-011**: Verify `os-release` fields are read with quoting removed, that a missing field and a missing file both fail, and that the distribution and version helpers answer from the fixture, from `BUILD_ID`, and as `macos` on Darwin.
 - **IT-012**: Verify the container, WSL, and CI predicates from the environment variables each of them defines, including `CI=false`.
+- **IT-012a**: Verify `CI` set to each of its false spellings reports not-CI while a service variable is also set to true, and that `CI=true` reports CI while a service variable is set to false. The environment must be pinned in the test rather than inherited, so the result is the same on a workstation and on a runner.
+- **IT-012b**: Verify that with every marker cleared, a service variable alone decides, and that an empty `CI` leaves the fallback in effect.
 
 ## Acceptance Criteria *(mandatory)*
 

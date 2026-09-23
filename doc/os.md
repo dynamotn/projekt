@@ -41,7 +41,7 @@ This module contains functions to get information of OS/distro, such as platform
 - [`dybatpho::distro_version`](#dybatphodistro_version) — Print the version of the distribution the host runs.
 - [`dybatpho::is_container`](#dybatphois_container) — Return success when the script runs inside a container.
 - [`dybatpho::is_wsl`](#dybatphois_wsl) — Return success when the script runs under the Windows Subsystem for Linux.
-- [`dybatpho::is_ci`](#dybatphois_ci) — Return success when the script runs on a continuous integration service.
+- [`dybatpho::is_ci`](#dybatphois_ci) — Return success when the script runs on a continuous integration service. `CI` decides whenever it is set, in either direction. Every service sets it, and it is also the one variable a caller can set themselves, so `CI=false` turns the detection off even on a runner that advertises itself by name. The service-specific variables are consulted only when `CI` is unset or empty, which is the case they are there for.
 
 <a id="tips"></a>
 ## 💡 Tips
@@ -464,16 +464,33 @@ Return success when the script runs under the Windows Subsystem
 
 Return success when the script runs on a continuous integration
   service.
+  `CI` decides whenever it is set, in either direction. Every service sets it,
+  and it is also the one variable a caller can set themselves, so `CI=false`
+  turns the detection off even on a runner that advertises itself by name.
+  The service-specific variables are consulted only when `CI` is unset or
+  empty, which is the case they are there for.
 
-**🧪 Example**
+**🧪 Examples**
 
 ```bash
 dybatpho::is_ci && export DYBATPHO_FORCE=true
 
 ```
 
+```bash
+# Run a CI-aware script as if it were a workstation.
+CI=false ./deploy.sh
+
+```
+
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`CI`** | string | Set to a false value to say the script is not on CI, whatever else the environment advertises |
+
 **🚦 Exit codes**
 
-- `0`: A known CI environment variable is set to something other than a false value
-- `1`: The script runs outside CI
+- `0`: `CI` holds a value other than `false`, `0`, or `no`; or `CI` is unset and a service names itself
+- `1`: `CI` holds a false value, or nothing in the environment names a CI service
 

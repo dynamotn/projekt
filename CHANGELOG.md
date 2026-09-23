@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`dybatpho::is_ci` ignored `CI=false` on a runner that also names itself.**
+  The variables were read as a flat list, so a false value only meant "skip to
+  the next name". On GitHub Actions, which sets both `CI` and `GITHUB_ACTIONS`,
+  `CI=false` fell through to `GITHUB_ACTIONS=true` and the script was still
+  told it was on CI — leaving no way to turn the detection off, which is the
+  one thing that variable is for.
+
+  `CI` now decides whenever it holds a value, in either direction. The
+  service-specific variables are consulted only when `CI` is unset or empty,
+  which is the case they exist for: a service that names itself and never sets
+  `CI`.
+
+  The suite did not catch this because the existing test set `CI=false` and
+  inherited everything else, so it only failed where a second marker happened
+  to be present — a workstation passed, CI did not. The new test pins both
+  variables instead of inheriting them.
+
 - **`scripts/doc.sh` read its arguments as a string, and the documentation
   guard quietly stopped guarding.** `dybatpho::opts::setup` collects positional
   arguments into a Bash array, which the positional-argument rework made
