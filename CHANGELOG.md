@@ -33,6 +33,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     ubuntu | debian) dybatpho::info "Using apt on $(dybatpho::hostname)" ;;
   esac
   dybatpho::is_ci && export DYBATPHO_FORCE=true
+- **`math` module — decimal arithmetic that is exact, and needs nothing but
+  Bash.** `$(( ))` is integer-only and 64 bits wide, so any script that divides,
+  averages, or adds two prices had to reach for `bc`, which a minimal container
+  does not have, or for `awk`, which computes in binary floating point where
+  `0.1 + 0.2` is not `0.3` and a money total drifts by a cent.
+
+  The module does the arithmetic itself, on digit strings, the way it is done on
+  paper: `dybatpho::math_add`, `dybatpho::math_sub`, `dybatpho::math_mul`,
+  `dybatpho::math_div`, `dybatpho::math_mod` and `dybatpho::math_pow`. Values
+  are exact decimals of any length, so `dybatpho::math_mul 99999999999
+  99999999999` answers with all twenty-two digits instead of wrapping.
+
+  Comparison reads the numbers rather than the strings, where `1.10` sorts below
+  `1.9`: `dybatpho::math_compare` prints `-1`, `0` or `1`, and
+  `dybatpho::math_gt`, `dybatpho::math_lt` and `dybatpho::math_eq` answer
+  through the exit code.
+
+  Rounding states its rule instead of inheriting one:
+  `dybatpho::math_round` rounds halves away from zero at a width you choose,
+  with `dybatpho::math_floor`, `dybatpho::math_ceil` and `dybatpho::math_trunc`
+  beside it. `printf '%.2f'` rounds binary floats to even and follows
+  `LC_NUMERIC`, so it answers `2.66` on one machine and `2,67` on another;
+  `dybatpho::math_round 2.665 2` is `2.67` everywhere.
+
+  Aggregates take their values from arguments or from a pipe:
+  `dybatpho::math_sum`, `dybatpho::math_avg`, `dybatpho::math_min` and
+  `dybatpho::math_max`. `dybatpho::math_clamp` holds a value inside bounds and
+  `dybatpho::math_percent` turns a part and a whole into a share.
+
+  For whole numbers there are `dybatpho::math_gcd`, `dybatpho::math_lcm`, and
+  `dybatpho::math_random`, which draws uniformly from an inclusive range rather
+  than with the bias `$((RANDOM % n))` carries. `dybatpho::math_is_number` and
+  `dybatpho::math_is_integer` check input before any of it runs; everything else
+  stops the script with the value and the function named.
+
+  Division and averaging are the only operations that round, at
+  `DYBATPHO_MATH_SCALE` fraction digits by default. Formatting for a reader —
+  grouping, a fixed number of decimals, a locale's decimal mark — stays with
+  `i18n`.
+
+  ```sh
+  . dybatpho/init.sh --modules math
+  dybatpho::math_add 0.1 0.2  # 0.3
+  dybatpho::math_div 2 3 5    # 0.66667
+  dybatpho::math_avg 10 20 25 # 18.3333333333
   ```
 
 - **`scripts/lint.sh` — the repository now checks its own shape.** One command
@@ -139,7 +184,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   printf '%s\n' "$(dybatpho::i18n_tn deploy.files 1240)"
   printf '%s\n' "$(dybatpho::i18n_currency 1234.5 VND vi_VN)"
   dybatpho::i18n_lint --reference en vi_VN || exit 1
-
 ### Changed
 
 - **`os` is a core module.** It is loaded with `string`, `logging`, `helpers`,

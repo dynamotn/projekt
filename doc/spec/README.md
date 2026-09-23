@@ -25,6 +25,7 @@ The goal is to capture the current product behavior of the library in a form tha
 - `project.md`
 - `init.md`
 - `array.md`
+- `math.md`
 - `string.md`
 - `logging.md`
 - `helpers.md`
@@ -59,6 +60,7 @@ The goal is to capture the current product behavior of the library in a form tha
 
 - `init.sh` -> `init.md`
 - `src/array.sh` -> `array.md`
+- `src/math.sh` -> `math.md`
 - `src/string.sh` -> `string.md`
 - `src/logging.sh` -> `logging.md`
 - `src/helpers.sh` -> `helpers.md`

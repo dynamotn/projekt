@@ -73,6 +73,7 @@ run_example() {
 @test "example/json_ops.sh runs clean" { run_example "json_ops.sh"; }
 @test "example/lock_ops.sh runs clean" { run_example "lock_ops.sh"; }
 @test "example/logging_demo.sh runs clean" { run_example "logging_demo.sh"; }
+@test "example/math_ops.sh runs clean" { run_example "math_ops.sh"; }
 @test "example/metrics_ops.sh runs clean" { run_example "metrics_ops.sh"; }
 @test "example/network_ops.sh runs clean" { run_example "network_ops.sh"; }
 @test "example/notification_ops.sh runs clean" { run_example "notification_ops.sh"; }

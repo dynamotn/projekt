@@ -163,6 +163,7 @@ scripts/release.sh --version 3.0.0 --sign
 | Module                        | What you get                                       |
 | ----------------------------- | -------------------------------------------------- |
 | [array.sh](doc/array.md)      | Array manipulation                                  |
+| [math.sh](doc/math.md)        | Exact decimal arithmetic, rounding, aggregates — no `bc`, no float drift |
 | [string.sh](doc/string.md)    | String operations                                   |
 | [text.sh](doc/text.md)        | Multi-line text blocks and formatting               |
 | [json.sh](doc/json.md)        | JSON and YAML reading/writing                       |

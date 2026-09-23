@@ -60,7 +60,7 @@ export DYBATPHO_DIR
 # @env DYBATPHO_CORE_MODULES string Modules that call each other and are always loaded
 DYBATPHO_CORE_MODULES="string os logging helpers process file secret"
 # @env DYBATPHO_OPTIONAL_MODULES string Modules that are only loaded when requested
-DYBATPHO_OPTIONAL_MODULES="array text lock network date json config archive git table cli notification semver testing safety metrics ai agent pkg release parallel doctor i18n"
+DYBATPHO_OPTIONAL_MODULES="array math text lock network date json config archive git table cli notification semver testing safety metrics ai agent pkg release parallel doctor i18n"
 # The loaded set describes the current shell, so it is deliberately neither
 # exported nor seeded from the environment. A child shell that sources `init.sh`
 # again has to source the module files itself: only `dybatpho::` functions cross
