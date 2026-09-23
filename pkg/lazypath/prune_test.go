@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 // prunableConfig writes a configuration with two folders and a worktree that
@@ -31,6 +33,10 @@ func prunableConfig(t *testing.T) (configFile, here string) {
 		CfgFile = previous
 		c = Config{}
 		loadErr = nil
+		// Writing the configuration goes through viper.Set, which overrides
+		// the file for the rest of the process. Left behind, it would be read
+		// by the next test in this package as if it were its own.
+		viper.Reset()
 	})
 
 	c = Config{
