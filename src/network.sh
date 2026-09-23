@@ -377,16 +377,13 @@ function dybatpho::verify_checksum {
   [[ "${checksum}" =~ ^(sha256|sha1|md5):([0-9a-fA-F]+)$ ]] \
     || dybatpho::die "Invalid checksum spec: ${checksum}" 8
   local algorithm="${BASH_REMATCH[1]}" expected="${BASH_REMATCH[2],,}"
-  local tool
-  case "${algorithm}" in
-    sha256) tool="sha256sum" ;;
-    sha1) tool="sha1sum" ;;
-    md5) tool="md5sum" ;;
-  esac
-  dybatpho::is command "${tool}" || dybatpho::die "${tool} isn't installed" 8
-
+  # `dybatpho::file_hash` already knows every spelling of this: `*sum` where it
+  # exists, then `shasum`, `md5`, or `openssl`. Naming `sha256sum` directly here
+  # meant this function died on a system that ships only `shasum` — macOS — while
+  # the rest of the library coped.
   local actual
-  actual=$("${tool}" "${file}" | awk '{print $1}') || dybatpho::die "Unable to compute ${algorithm} checksum for ${file}" 8
+  actual=$(dybatpho::file_hash "${file}" "${algorithm}") \
+    || dybatpho::die "Unable to compute ${algorithm} checksum for ${file}" 8
   if [[ "${actual,,}" != "${expected}" ]]; then
     dybatpho::error "Checksum mismatch for ${file}: expected ${expected}, got ${actual}"
     return 7

@@ -109,6 +109,14 @@ dybatpho::info "Run started at $(dybatpho::date_format "${started_at}" "%F %T")"
 - **FR-006**: The module MUST provide a helper that formats a Unix timestamp into a date string.
 - **FR-007**: The module MUST provide a helper that adds or subtracts whole days from a date string.
 - **FR-008**: The module MUST provide a helper that prints the signed whole-day difference between two date strings.
+- **FR-008a**: The module MUST work on GNU, BSD and BusyBox `date`. It MUST
+  detect which is present rather than assuming that anything without
+  `--version` is BSD: BusyBox parses with `-D` instead of `-j -f`, and reads
+  `-r` as a reference file rather than a timestamp, so a two-way guess made
+  every helper in the module fail there.
+- **FR-008b**: Parsing MUST reject a date that the platform would roll over
+  (`2024-02-30` becoming `2024-03-01`) on every platform that rolls it over,
+  which is both BSD and BusyBox.
 - **FR-009**: The module MUST respect the timezone configured through
   `DYBATPHO_DATE_TIMEZONE` across every parsing and formatting helper.
 
@@ -148,6 +156,8 @@ dybatpho::info "Run started at $(dybatpho::date_format "${started_at}" "%F %T")"
 - **IT-010**: Verify a calendar-dependent unit and a non-numeric amount are refused, and that the refusal still stops a caller that has switched `errexit` off.
 - **IT-011**: Measure a distance in each unit, verify truncation toward zero in both directions, and verify the day-offset and day-difference helpers answer as they did before delegating.
 - **IT-012**: Verify the clock helper for a span under an hour, over a day, and negative, and that a fractional value stops the script.
+- **IT-013**: Parse, format and shift dates on a BusyBox userland, where `-D`
+  replaces `-j -f` and `-r` means something else entirely.
 
 ## Acceptance Criteria *(mandatory)*
 

@@ -291,7 +291,12 @@ affect editor navigation.
 - **Data primitives** (`array`, `string`, `text`, `table`): keep functions
   predictable and free of unexpected file writes or logging.
 - **System primitives** (`date`, `file`, `os`, `process`, `helpers`): prioritize
-  GNU/BSD/BusyBox portability and return clear errors for invalid input.
+  GNU/BSD/BusyBox portability and return clear errors for invalid input. CI
+  checks this rather than trusting it: the `portable` job runs the suite on
+  macOS and the `busybox` job runs it on Alpine with no `coreutils`. Detect the
+  platform by asking for a flag only one of them accepts, not by matching a
+  name — `date --version` failing does not make a system BSD, and assuming it
+  did left `date` broken end to end on BusyBox.
 - **Dependency modules** (`pkg`): detect before acting, resolve package names
   per manager rather than assuming one distribution, and never change system
   state without `--force`/`DYBATPHO_FORCE` or an answered confirmation; honor
@@ -576,7 +581,7 @@ to the module convention.
 | --- | --- |
 | String/array/text/table | Empty input, whitespace, special characters, and module tests |
 | Path/file/archive | `BATS_TEST_TMPDIR`, paths with spaces, cleanup, and permission errors |
-| Date/OS/network | GNU/BSD/BusyBox fallback or the relevant command mock |
+| Date/OS/network | GNU/BSD/BusyBox fallback or the relevant command mock. Run it for real before claiming it: `docker run --rm -v "$PWD:/src:ro" alpine:3.22.1` with `bash git gawk jq` and no `coreutils` is the shape the `busybox` CI job uses |
 | Git/process/config | Temporary repository/config, failure paths, traps, and cleanup |
 | Logging/CLI | Separate stdout/stderr, filtering, strict mode, and machine-readable output |
 | JSON/YAML/notification | Escaping, malformed input, and unavailable dependencies |

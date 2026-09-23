@@ -94,23 +94,28 @@ function __dybatpho_archive_output_name {
 function __dybatpho_archive_move_stripped {
   local source_root destination strip_components
   dybatpho::expect_args source_root destination strip_components -- "$@"
-  local rel stripped dir_path
+  local path rel stripped dir_path
 
-  while IFS= read -r rel; do
-    [[ -z "${rel}" ]] && continue
+  # `find -printf '%P'` would say this in one flag, but it is GNU-only: neither
+  # BusyBox nor BSD has it, and this is the zip path of an extractor the library
+  # documents as portable. The prefix comes off here instead.
+  while IFS= read -r path; do
+    rel="${path#"${source_root}/"}"
+    [[ -z "${rel}" || "${rel}" == "${path}" ]] && continue
     stripped=$(printf '%s\n' "${rel}" | awk -F/ -v n="${strip_components}" 'NF>n{for(i=n+1;i<=NF;i++) printf "%s%s", $i, (i<NF?"/":"")}')
     [[ -z "${stripped}" ]] && continue
     mkdir -p "${destination}/${stripped}"
-  done < <(find "${source_root}" -mindepth 1 -type d -printf '%P\n' | sort) # kcov(skip)
+  done < <(find "${source_root}" -mindepth 1 -type d | sort) # kcov(skip)
 
-  while IFS= read -r rel; do
-    [[ -z "${rel}" ]] && continue
+  while IFS= read -r path; do
+    rel="${path#"${source_root}/"}"
+    [[ -z "${rel}" || "${rel}" == "${path}" ]] && continue
     stripped=$(printf '%s\n' "${rel}" | awk -F/ -v n="${strip_components}" 'NF>n{for(i=n+1;i<=NF;i++) printf "%s%s", $i, (i<NF?"/":"")}')
     [[ -z "${stripped}" ]] && continue
     dir_path=$(dybatpho::path_dirname "${destination}/${stripped}")
     mkdir -p "${dir_path}"
     mv "${source_root}/${rel}" "${destination}/${stripped}"
-  done < <(find "${source_root}" -mindepth 1 ! -type d -printf '%P\n' | sort) # kcov(skip)
+  done < <(find "${source_root}" -mindepth 1 ! -type d | sort) # kcov(skip)
 }
 
 #######################################

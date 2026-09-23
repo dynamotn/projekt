@@ -112,6 +112,46 @@ jobs:
           format: "cobertura"
           files: "coverage/bats/cobertura.xml"
 
+  busybox:
+    name: "BusyBox userland (Alpine)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    container:
+      image: alpine:3.22.1
+    steps:
+      - name: "Install dependencies"
+        env:
+          YQ_VERSION: v4.53.3
+        # Deliberately no `coreutils`. `AGENT.md` claims BusyBox portability,
+        # and installing GNU coreutils here would quietly test GNU tools on
+        # musl instead — which is what the repository's own Dockerfile does,
+        # so building that image would not have checked the claim either.
+        run: |
+          apk add --no-cache bash git curl gawk jq parallel tar xz zip unzip gzip bzip2 zstd openssl ca-certificates tzdata python3 shadow
+          curl -fsSL -o /usr/local/bin/yq \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          chmod +x /usr/local/bin/yq
+          # tzdata is not optional here: without it every named timezone
+          # silently resolves to UTC, and the date and i18n helpers quietly
+          # give the wrong answer rather than failing.
+          date --version > /dev/null 2>&1 && echo "date is GNU, the job is not testing what it claims" && exit 1
+          echo "date, sed, find and stat are BusyBox applets"
+
+      - name: "Checkout"
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: "Run the suite"
+        # As a user permissions apply to: several tests assert that a write is
+        # refused, and root is refused nothing.
+        run: |
+          git config --global --add safe.directory "$(pwd)"
+          adduser -D runner
+          chown -R runner .
+          su runner -s /bin/bash -c "test/lib/core/bin/bats --jobs 4 test/*.bats"
+
   portable:
     name: "Portable smoke tests (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
@@ -131,8 +171,14 @@ jobs:
         run: |
           brew list bash > /dev/null 2>&1 || brew install bash
           echo "$(brew --prefix)/bin" >> "${GITHUB_PATH}"
-      - name: "Run portable module tests"
+      - name: "Install GNU parallel so Bats can use more than one worker"
+        if: runner.os == 'macOS'
+        run: brew list parallel > /dev/null 2>&1 || brew install parallel
+      - name: "Run the suite"
+        # Three files used to run here, which left everything that touches
+        # `stat`, `sed` or `find` unchecked on a BSD userland — `stat -c` in
+        # `testing.sh` is GNU-only and no macOS job ever reached it.
         run: |
           command -v bash
           bash --version | head -n 1
-          test/lib/core/bin/bats test/os.bats test/date.bats test/file.bats
+          test/lib/core/bin/bats --jobs 4 test/*.bats

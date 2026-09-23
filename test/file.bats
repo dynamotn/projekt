@@ -457,7 +457,11 @@ EOF
 @test "dybatpho::file_age_seconds reports zero for a file modified in the future" {
   local target="${BATS_TEST_TMPDIR}/future"
   printf 'x' > "${target}"
-  touch -d '+1 hour' "${target}" 2> /dev/null || touch -A 010000 "${target}"
+  # `touch -d '+1 hour'` is GNU and `touch -A` is BSD; BusyBox has neither.
+  # `-t CCYYMMDDhhmm` is the one spelling all three accept. Two days ahead, so
+  # the file stays in the future whatever the offset between the timestamp's
+  # timezone and the one `touch` reads it in.
+  touch -t "$(dybatpho::date_format "$(($(dybatpho::date_now) + 172800))" '%Y%m%d%H%M')" "${target}"
   assert_equal "$(dybatpho::file_age_seconds "${target}")" "0"
 }
 

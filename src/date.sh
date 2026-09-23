@@ -18,30 +18,82 @@
 # @env DYBATPHO_DATE_TIMEZONE string Timezone used by date helpers, default is `UTC`
 DYBATPHO_DATE_TIMEZONE="${DYBATPHO_DATE_TIMEZONE:-UTC}"
 
+# Which `date` this system has, filled in on first use by
+# `__dybatpho_date_flavor`. Per shell, so a test that stubs `date` gets its own
+# answer: each Bats test runs in its own process and starts with this empty.
+__dybatpho_date_flavor_cache=""
+
+# @description Print which `date` this system has: `gnu`, `bsd` or `busybox`.
+#   Detected by asking for something only one of them accepts, rather than by
+#   matching a name. BSD stays the default it always was; the new question is
+#   whether this is BusyBox, which answers to neither `--version` nor `-j`. A
+#   two-way GNU-or-BSD guess sent every BusyBox system down the BSD path, where
+#   `-r` means "read the time off this file" and the whole module failed.
+#
+#   The answer is cached: probing twice per call is a lot for a helper that
+#   formats a date.
+# @stdout `gnu`, `bsd` or `busybox`
+function __dybatpho_date_flavor {
+  if [[ -n "${__dybatpho_date_flavor_cache}" ]]; then
+    printf '%s\n' "${__dybatpho_date_flavor_cache}"
+    return 0
+  fi
+
+  if date --version > /dev/null 2>&1; then
+    __dybatpho_date_flavor_cache="gnu"
+  elif date -D "%Y" -d "2024" +%s > /dev/null 2>&1; then
+    # Only BusyBox takes the input format through `-D`.
+    __dybatpho_date_flavor_cache="busybox"
+  else
+    __dybatpho_date_flavor_cache="bsd"
+  fi
+  printf '%s\n' "${__dybatpho_date_flavor_cache}"
+}
+
 function __dybatpho_date_is_gnu {
-  date --version > /dev/null 2>&1
+  [[ "$(__dybatpho_date_flavor)" == "gnu" ]]
 }
 
 function __dybatpho_date_parse {
   local input
   dybatpho::expect_args input -- "$@"
-  if __dybatpho_date_is_gnu; then
+  local flavor
+  flavor="$(__dybatpho_date_flavor)"
+  if [[ "${flavor}" == "gnu" ]]; then
     TZ="${DYBATPHO_DATE_TIMEZONE}" date -d "${input}" +%s
     return
   fi
-  # BSD `date -j -f` silently rolls invalid dates over (`2024-02-30` becomes
-  # `2024-03-01`), so the parsed timestamp is formatted back and compared with
-  # the input before it is accepted.
+  # Neither BSD `date -j -f` nor BusyBox `date -D` rejects an impossible date:
+  # both roll `2024-02-30` over into `2024-03-01`. The parsed timestamp is
+  # therefore formatted back and compared with the input before it is accepted.
   local input_format timestamp
   for input_format in "%Y-%m-%d %H:%M:%S" "%Y-%m-%d"; do
-    timestamp=$(TZ="${DYBATPHO_DATE_TIMEZONE}" date -j -f "${input_format}" "${input}" +%s 2> /dev/null) || continue
-    if [[ "$(TZ="${DYBATPHO_DATE_TIMEZONE}" date -r "${timestamp}" +"${input_format}" 2> /dev/null)" == "${input}" ]]; then
+    timestamp="$(__dybatpho_date_parse_with "${flavor}" "${input_format}" "${input}")" || continue
+    if [[ "$(dybatpho::date_format "${timestamp}" "${input_format}" 2> /dev/null)" == "${input}" ]]; then
       printf '%s\n' "${timestamp}"
       return 0
     fi
   done
   # Offset-aware timestamps cannot round-trip literally, so a plain parse wins.
-  TZ="${DYBATPHO_DATE_TIMEZONE}" date -j -f "%Y-%m-%dT%H:%M:%S%z" "${input}" +%s 2> /dev/null
+  __dybatpho_date_parse_with "${flavor}" "%Y-%m-%dT%H:%M:%S%z" "${input}"
+}
+
+#######################################
+# @description Parse a date string with an explicit input format.
+# @arg $1 string Date flavor, `bsd` or `busybox`
+# @arg $2 string Input format
+# @arg $3 string Date string
+# @stdout Unix timestamp
+# @exitcode 1 The string does not match the format
+#######################################
+function __dybatpho_date_parse_with {
+  local flavor input_format input
+  dybatpho::expect_args flavor input_format input -- "$@"
+  if [[ "${flavor}" == "busybox" ]]; then
+    TZ="${DYBATPHO_DATE_TIMEZONE}" date -D "${input_format}" -d "${input}" +%s 2> /dev/null
+    return
+  fi
+  TZ="${DYBATPHO_DATE_TIMEZONE}" date -j -f "${input_format}" "${input}" +%s 2> /dev/null
 }
 
 #######################################
@@ -104,11 +156,12 @@ function dybatpho::date_format {
   local timestamp
   dybatpho::expect_args timestamp -- "$@"
   local format="${2:-%F %T}"
-  if __dybatpho_date_is_gnu; then
-    TZ="${DYBATPHO_DATE_TIMEZONE}" date -d "@${timestamp}" +"${format}"
-  else
-    TZ="${DYBATPHO_DATE_TIMEZONE}" date -r "${timestamp}" +"${format}"
-  fi
+  case "$(__dybatpho_date_flavor)" in
+    # BusyBox spells this the way GNU does. Only BSD takes the seconds through
+    # `-r`, which on the other two means "read the time off this file".
+    gnu | busybox) TZ="${DYBATPHO_DATE_TIMEZONE}" date -d "@${timestamp}" +"${format}" ;;
+    *) TZ="${DYBATPHO_DATE_TIMEZONE}" date -r "${timestamp}" +"${format}" ;;
+  esac
 }
 
 #######################################
@@ -306,10 +359,12 @@ function dybatpho::date_add {
     TZ="${DYBATPHO_DATE_TIMEZONE}" date -d "${input} ${amount} ${unit}" +"${format}"
     return
   fi
+  # No other `date` understands a relative offset, so the shift is arithmetic
+  # and the result goes back through the one function that knows how each
+  # system formats a timestamp — BusyBox reads `-r` as a file, not a time.
   local timestamp
   timestamp=$(__dybatpho_date_parse "${input}") || return $?
-  TZ="${DYBATPHO_DATE_TIMEZONE}" \
-    date -r "$((timestamp + amount * unit_seconds))" +"${format}"
+  dybatpho::date_format "$((timestamp + amount * unit_seconds))" "${format}"
 }
 
 #######################################

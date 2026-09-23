@@ -133,7 +133,11 @@ teardown() {
 }
 
 @test "__dybatpho_log_timestamp falls back to portable date flags" {
-  # Neither busybox nor GNU date is available in this environment.
+  # This branch is only reachable where neither busybox nor GNU date exists.
+  # On a BusyBox system the first branch is the right one and wins, so the
+  # premise of this test cannot hold there — it used to read the real clock and
+  # fail rather than say so.
+  hash busybox 2> /dev/null && skip "busybox is installed, so this branch is unreachable"
   stub_repeated date ": case \"\$1\" in --version) exit 1 ;; *) echo '2024-02-29T12:34:56+0700' ;; esac"
   assert_equal "$(__dybatpho_log_timestamp)" "2024-02-29T12:34:56+0700"
 }

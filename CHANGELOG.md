@@ -83,6 +83,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **CI now runs the whole suite on macOS, and a new job runs it on BusyBox.**
+  The portable job ran three of thirty-seven files, so everything that touches
+  `stat`, `sed` or `find` went unchecked on a BSD userland. `AGENT.md` claims
+  BusyBox portability in two places and nothing had ever run there: the Alpine
+  image the repository ships installs GNU `coreutils`, so even building it
+  would have tested GNU tools on musl rather than BusyBox.
+
+  The BusyBox job installs no `coreutils` and fails if `date` turns out to be
+  GNU, so it cannot quietly stop testing what it claims. It does install
+  `tzdata`, which is not optional: without it every named timezone resolves to
+  UTC and the date and i18n helpers return a wrong answer instead of failing.
+  It also runs as an unprivileged user, because several tests assert that a
+  write is refused and root is refused nothing.
+
 - **`dybatpho::retry` now backs off the way the HTTP retries already did.**
   The library answered the same question two ways: `network.sh` grew its delay
   exponentially, capped it at `DYBATPHO_CURL_RETRY_MAX_DELAY` and could add
@@ -104,6 +118,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nothing.
 
 ### Fixed
+
+- **A logging test read the real clock on a BusyBox host.** It asserted the
+  fallback branch of `__dybatpho_log_timestamp` while stating that neither
+  busybox nor GNU `date` was available — which is false on Alpine, where the
+  busybox branch correctly wins and the stub was never consulted. It now skips
+  where the branch it covers cannot run.
+
+- **`date` was broken end to end on BusyBox.** The module asked `date --version`
+  and treated everything that said no as BSD. BusyBox is neither: it has no
+  `-j -f` for parsing, and `-r` means "read the time off this file" rather than
+  "this is a timestamp", so `date_format` reported `can't stat '1709210096'`
+  and every helper built on it failed. Detection is now three-way, by asking
+  for the one flag only BusyBox accepts, and `dybatpho::date_add` — which
+  `date_add_days` and the new unit helpers all go through — reuses
+  `date_format` instead of spelling the platform difference a second time.
+
+- **`archive` could not extract a zip with `--strip-components` outside GNU.**
+  It listed entries with `find -printf '%P'`, which neither BusyBox nor BSD
+  has. The prefix is stripped in the loop instead.
+
+- **`dybatpho::verify_checksum` needed a tool macOS does not ship.** It called
+  `sha256sum` by name and died when it was absent, while `file_hash` next door
+  already knew to try `shasum`, `md5` and `openssl` in turn. It now goes
+  through `file_hash`, which removes the duplicate as well as the gap.
+
+- **A test fixture used `touch` flags no BusyBox has.** `test/file.bats` shifted
+  a file into the future with GNU `-d '+1 hour'` or BSD `-A`; it now uses
+  `-t CCYYMMDDhhmm`, which all three accept.
 
 - **`example/math_ops.sh` was not executable.** Every other example is, and a
   commit had just set the bit across all of them, so this one drifted straight

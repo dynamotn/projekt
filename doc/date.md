@@ -28,8 +28,10 @@ implementations this module supports shift by them differently.
 
 ### 🚀 Highlights
 
+- [`__dybatpho_date_flavor`](#__dybatpho_date_flavor) — Print which `date` this system has: `gnu`, `bsd` or `busybox`. Detected by asking for something only one of them accepts, rather than by matching a name. BSD stays the default it always was; the new question is whether this is BusyBox, which answers to neither `--version` nor `-j`. A two-way GNU-or-BSD guess sent every BusyBox system down the BSD path, where `-r` means "read the time off this file" and the whole module failed. The answer is cached: probing twice per call is a lot for a helper that formats a date.
 - [`__dybatpho_date_is_gnu`](#__dybatpho_date_is_gnu) — 
 - [`__dybatpho_date_parse`](#__dybatpho_date_parse) — 
+- [`__dybatpho_date_parse_with`](#__dybatpho_date_parse_with) — Parse a date string with an explicit input format.
 - [`dybatpho::date_now`](#dybatphodate_now) — Print the current time using a `date` format string.
 - [`dybatpho::date_today`](#dybatphodate_today) — Print today's date using a `date` format string.
 - [`dybatpho::date_is_valid`](#dybatphodate_is_valid) — Return success when a date string can be parsed by `date`.
@@ -54,6 +56,26 @@ implementations this module supports shift by them differently.
 <a id="reference"></a>
 ## 📚 Reference
 
+### `__dybatpho_date_flavor`
+
+Print which `date` this system has: `gnu`, `bsd` or `busybox`.
+  Detected by asking for something only one of them accepts, rather than by
+  matching a name. BSD stays the default it always was; the new question is
+  whether this is BusyBox, which answers to neither `--version` nor `-j`. A
+  two-way GNU-or-BSD guess sent every BusyBox system down the BSD path, where
+  `-r` means "read the time off this file" and the whole module failed.
+
+
+  The answer is cached: probing twice per call is a lot for a helper that
+  formats a date.
+
+**📤 Output on stdout**
+
+- `gnu`, `bsd` or `busybox`
+
+
+---
+
 ### `__dybatpho_date_is_gnu`
 
 
@@ -62,6 +84,29 @@ implementations this module supports shift by them differently.
 
 ### `__dybatpho_date_parse`
 
+
+
+---
+
+### `__dybatpho_date_parse_with`
+
+Parse a date string with an explicit input format.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Date flavor, `bsd` or `busybox` |
+| `$2` | string | Input format |
+| `$3` | string | Date string |
+
+**📤 Output on stdout**
+
+- Unix timestamp
+
+**🚦 Exit codes**
+
+- `1`: The string does not match the format
 
 
 ---
