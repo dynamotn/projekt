@@ -32,7 +32,7 @@ A single static Go binary, no daemon, no index to rebuild — your config file *
 
 - **Jump, don't navigate** — `pj <short-name>` resolves a project folder and takes you there. Deep trees stop mattering.
 - **Workspaces, not just folders** — point at a parent directory once and every child inside it becomes a jumpable project, filtered by your own regex.
-- **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time.
+- **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time. Already have them cloned? `--discover` writes that config for you.
 - **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
 - **Tagged, not just named** — label folders `work`, `oss`, `go`, then point any command at a subset with `--tags`.
 - **Your config is safe** — an unreadable or malformed config file is never silently overwritten.
@@ -179,13 +179,33 @@ SSH and HTTPS are both supported, including `ssh://host:port` URLs, and
 `preferGitSSH` decides which one is tried first — the other stays as a fallback.
 Full details in [doc/git-integration.md](doc/git-integration.md).
 
+### 🔍 Don't type that list — discover it
+
+If the repositories are already on disk, `--discover` writes the `git` section
+for you instead of making you transcribe it:
+
+```bash
+projekt folder add ~/work/myorg -W -p myorg --discover
+```
+
+Every child folder holding a `.git` is read, its `origin` remote decides which
+configured server it belongs to, and the group and repository name are peeled
+off the URL. A checkout whose directory name differs from the repository gets
+its `path` recorded. A folder names one host and one group, so when the
+workspace mixes several, the one most repositories share wins and the rest are
+reported and skipped rather than quietly misfiled.
+
+Configure your `gitServers` first — that is what a remote URL is matched
+against. `--discover` needs `--as-workspace`, since it scans a workspace's
+children.
+
 ## 📚 Commands
 
 ### 📁 `projekt` — project folders
 
 | Command                                              | What it does                                              |
 | ---------------------------------------------------- | --------------------------------------------------------- |
-| [`folder add`](doc/projekt_folder_add.md)            | Register a folder or workspace, with prefix, priority, tags |
+| [`folder add`](doc/projekt_folder_add.md)            | Register a folder or workspace; `--discover` reads its repos off disk |
 | [`folder list`](doc/projekt_folder_list.md)          | List every project folder, as a table, JSON or TSV         |
 | [`folder get`](doc/projekt_folder_get.md)            | Resolve a short name to a path — what `pj` calls           |
 | [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |

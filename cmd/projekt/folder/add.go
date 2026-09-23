@@ -14,12 +14,18 @@ import (
 
 func NewFolderAddCmd(out io.Writer) *cobra.Command {
 	o := &lazypath.Folder{}
+	discover := false
 
 	cmd := &cobra.Command{
 		Use:     "add [folder path]",
 		Short:   "Add your project folder to config",
 		Args:    cobra.ExactArgs(1),
 		Aliases: []string{"a"},
+		Long: `Add your project folder to config.
+
+With --discover, the repositories already cloned inside a workspace are read
+off disk and written into its git section, instead of being typed out by hand.
+Each one's origin remote decides which configured git server it belongs to.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path, err := lazypath.NormalizePath(args[0])
 			if err != nil {
@@ -37,6 +43,11 @@ func NewFolderAddCmd(out io.Writer) *cobra.Command {
 			if !o.IsWorkspace && o.RegexMatch != "" {
 				return fmt.Errorf("--regex only works together with --as-workspace")
 			}
+			if !o.IsWorkspace && discover {
+				// Discovery looks at the folders inside a workspace; a plain
+				// folder has no children to scan.
+				return fmt.Errorf("--discover only works together with --as-workspace")
+			}
 			if o.IsWorkspace && o.Name != "" {
 				// A workspace is never reached by a name of its own; only the
 				// folders inside it are.
@@ -47,6 +58,14 @@ func NewFolderAddCmd(out io.Writer) *cobra.Command {
 			// Store the tags cleaned up, so that the config never carries a
 			// blank or duplicated tag that could never be matched.
 			o.Tags = lazypath.NormalizeTags(o.Tags)
+
+			if discover {
+				git, err := folderutil.DiscoverRepos(*o, lazypath.GetConfig().GitServers)
+				if err != nil {
+					return fmt.Errorf("cannot discover repositories: %w", err)
+				}
+				o.Git = git
+			}
 
 			return folderutil.ImportFolderToConfig(o)
 		},
@@ -59,6 +78,7 @@ func NewFolderAddCmd(out io.Writer) *cobra.Command {
 	f.StringVarP(&o.RegexMatch, "regex", "R", "", "Go Regex match string to filter folder in workspace. Only work with '-W true'")
 	f.Uint16VarP(&o.Priority, "priority", "P", 0, "Priority number of folder")
 	f.StringSliceVarP(&o.Tags, "tags", "t", nil, "Tags to group this folder under, for filtering later")
+	f.BoolVarP(&discover, "discover", "D", false, "Read the repositories already cloned inside the workspace into its git config. Only works with '-W true'")
 
 	if err := cmd.RegisterFlagCompletionFunc("tags",
 		func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {

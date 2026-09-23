@@ -2,6 +2,14 @@
 
 Add your project folder to config
 
+### Synopsis
+
+Add your project folder to config.
+
+With --discover, the repositories already cloned inside a workspace are read
+off disk and written into its git section, instead of being typed out by hand.
+Each one's origin remote decides which configured git server it belongs to.
+
 ```
 projekt folder add [folder path] [flags]
 ```
@@ -10,6 +18,7 @@ projekt folder add [folder path] [flags]
 
 ```
   -W, --as-workspace      Set folder as a workspace, like a parent folder of your projects
+  -D, --discover          Read the repositories already cloned inside the workspace into its git config. Only works with '-W true'
   -h, --help              help for add
   -n, --name string       Short name of folder, defaults to the last element of its path. Only work with '-W false'
   -p, --prefix string     Prefix of folder when call 'pj' or 'project folder go'
