@@ -1,18 +1,21 @@
 # vim:filetype=fish
 function pj --description "Jump to a project"
-  set -l argc (count $argv)
-  if test $argc -le 0 -o $argc -gt 1
+  if test (count $argv) -ne 1
+    echo "usage: pj <project>" >&2
     return 1
   end
-  set -l target (projekt folder get --verbose=error $argv[1])
-  if test -d "$target"
-    cd $target
-    test -n "$ZELLIJ"; and zellij action rename-tab $argv[1]
-    test -n "$TMUX"; and tmux rename-window $argv[1]
-  else
-    echo "No such project: $argv[1]"
+  # `projekt folder get` exits non-zero when the short name is unknown, so the
+  # error it already printed is the only message the user needs.
+  set -l target (command projekt folder get --verbose=error $argv[1])
+  or return 1
+  if not test -d "$target"
+    echo "Project folder does not exist: $target" >&2
     return 1
   end
+  cd $target
+  or return 1
+  test -n "$ZELLIJ"; and zellij action rename-tab $argv[1]
+  test -n "$TMUX"; and tmux rename-window $argv[1]
 end
 
 function __pj_needs_command
@@ -39,8 +42,8 @@ function __pj_completion
     | string trim -c '|' \
     | string trim \
     | while read -l project
-    set -l name (basename $project)
-    complete -f -c pj -n '__pj_needs_command' -a $name -d "Change to $project folder"
+    test -n "$project"; or continue
+    complete -f -c pj -n '__pj_needs_command' -a $project -d "Change to $project folder"
   end
 end
 

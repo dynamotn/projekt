@@ -2,17 +2,32 @@
 # vim:filetype=sh
 function pj() {
   if [ $# -ne 1 ]; then
+    echo "usage: pj <project>" >&2
     return 1
   fi
 
   local target
-  target=$(projekt folder get --verbose=error "$1")
-  if [ -d "$target" ]; then
-    cd "$target" || return 1
-    [ "$ZELLIJ" != "" ] && zellij action rename-tab "$1"
-    [ "$TMUX" != "" ] && tmux rename-window "$1"
-  else
-    echo "No such project: $1"
+  # `projekt folder get` exits non-zero when the short name is unknown, so the
+  # error it already printed is the only message the user needs.
+  target=$(command projekt folder get --verbose=error "$1") || return 1
+
+  if [ ! -d "$target" ]; then
+    echo "Project folder does not exist: $target" >&2
     return 1
   fi
+
+  cd "$target" || return 1
+  [ -n "$ZELLIJ" ] && zellij action rename-tab "$1"
+  [ -n "$TMUX" ] && tmux rename-window "$1"
+  return 0
 }
+
+function _pj_completion() {
+  local projects
+  projects=$(command projekt folder list --no-headers --no-color --short-only --verbose=error 2>/dev/null \
+    | command sed '1d;$d' \
+    | command tr -d '| ')
+  mapfile -t COMPREPLY < <(compgen -W "$projects" -- "${COMP_WORDS[COMP_CWORD]}")
+}
+
+complete -F _pj_completion pj
