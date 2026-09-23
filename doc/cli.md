@@ -41,6 +41,9 @@ Utilities for building CLI parsers from shell specs.
 - [`__dybatpho_cli_parse_opt`](#__dybatpho_cli_parse_opt) — Parse options with a spec from `dybatpho::opts::flag`, `dybatpho::opts::param`
 - [`__dybatpho_cli_print_indent`](#__dybatpho_cli_print_indent) — Write script with indentation to stdout
 - [`__dybatpho_cli_require_shell_name`](#__dybatpho_cli_require_shell_name) — Validate a shell variable name used by generated parser code.
+- [`__dybatpho_cli_collect_long_switches`](#__dybatpho_cli_collect_long_switches) — Collect every long switch a spec accepts, for abbreviation matching. The metadata walk is reused because it already expands `--{no-}x`, aliases, and negatable forms.
+- [`__dybatpho_cli_expand_abbr`](#__dybatpho_cli_expand_abbr) — Resolve an abbreviated long option against the switches a command accepts, the way `--vers` stands for `--version`. An exact match wins outright, so a switch that is also the prefix of a longer one stays reachable.
+- [`__dybatpho_cli_require_case_pattern`](#__dybatpho_cli_require_case_pattern) — Validate a `case` glob supplied by `pattern:<glob>`. Unlike every other spec value, a pattern cannot be quoted on its way into the generated script — quoting it would make `case` compare it literally and defeat the point. This restricts it to characters that cannot end the `case` branch or start a substitution, so a spec still cannot inject code into the parser it generates.
 - [`__dybatpho_cli_assign_quoted`](#__dybatpho_cli_assign_quoted) — Assign the quoted string to a variable
 - [`__dybatpho_cli_prepend_export`](#__dybatpho_cli_prepend_export) — Prepend export of before string of command, based on `export:<bool>` switch
 - [`__dybatpho_cli_define_var`](#__dybatpho_cli_define_var) — Define variable from spec from `dybatpho::opts::flag`, `dybatpho::opts::param`
@@ -79,6 +82,7 @@ Utilities for building CLI parsers from shell specs.
 - [`__dybatpho_cli_print_known_candidates`](#__dybatpho_cli_print_known_candidates) — Emit generated code declaring the switches and command names the current command accepts, used to suggest a close match when the user mistypes one.
 - [`__dybatpho_cli_print_deprecated_warning`](#__dybatpho_cli_print_deprecated_warning) — Emit generated code that warns when a deprecated CLI item is used.
 - [`__dybatpho_cli_generate_child_logic`](#__dybatpho_cli_generate_child_logic) — Generate parser logic for a child command with inherited persistent option definitions.
+- [`__dybatpho_cli_print_arg_bindings`](#__dybatpho_cli_print_arg_bindings) — Emit generated code that copies the collected positional arguments into the variables declared with `dybatpho::opts::arg`, in declaration order. A `variadic:true` argument is the last one and receives every remaining value as an array, so the values it holds keep their boundaries.
 - [`__dybatpho_cli_print_args_check`](#__dybatpho_cli_print_args_check) — Emit generated code that validates the positional argument count configured by `args:<rule>` in `dybatpho::opts::setup`.
 - [`__dybatpho_cli_collect_switches`](#__dybatpho_cli_collect_switches) — Expand option switches and aliases into a caller-provided array.
 - [`__dybatpho_cli_json_quote`](#__dybatpho_cli_json_quote) — Escape a value for JSON and store it in a caller variable.
@@ -87,8 +91,9 @@ Utilities for building CLI parsers from shell specs.
 - [`dybatpho::opts::flag`](#dybatphooptsflag) — Define an option that take no argument
 - [`dybatpho::opts::param`](#dybatphooptsparam) — Define an option that take an argument
 - [`dybatpho::opts::disp`](#dybatphooptsdisp) — Define an option that display only
+- [`dybatpho::opts::msg`](#dybatphooptsmsg) — Place a line of free text in the generated help, so a long option list can be broken into labelled groups. It declares no switch and affects nothing but help output.
 - [`dybatpho::opts::cmd`](#dybatphooptscmd) — Define a sub-command in spec
-- [`dybatpho::opts::arg`](#dybatphooptsarg) — Document a positional argument. The values themselves still land in the rest variable named by `dybatpho::opts::setup`; declaring them here is what gives the usage line real placeholders and the generated help, schema, and man page an `Arguments` section.
+- [`dybatpho::opts::arg`](#dybatphooptsarg) — Declare a positional argument. Its value is assigned to the named variable once parsing succeeds, and it also gives the usage line a real placeholder and the generated help, schema, and man page an `Arguments` section. Every value still lands in the rest array named by `dybatpho::opts::setup` as well.
 - [`__dybatpho_cli_arg_placeholder`](#__dybatpho_cli_arg_placeholder) — Render a positional argument the way usage lines conventionally do: angle brackets when it is required, square brackets when it is optional, and a trailing ellipsis when it is variadic.
 - [`__dybatpho_cli_derive_args_rule`](#__dybatpho_cli_derive_args_rule) — Derive the `args:<rule>` a command would need to accept exactly the positional arguments it declared with `dybatpho::opts::arg`.
 - [`dybatpho::generate_from_spec`](#dybatphogenerate_from_spec) — Functions to parse spec and put value of options to variable with corresponding name Define spec of parent function or script, spec contains below commands
@@ -163,6 +168,7 @@ These attributes are parsed by `dybatpho::opts::flag` and/or `dybatpho::opts::pa
 | `prerun:<code>` | `setup` | Code to run after validation and before `action:<code>` |
 | `postrun:<code>` | `setup` | Code to run after `action:<code>` |
 | `args:<rule>` | `setup` | Positional argument rule: `none`, `exact:N`, `min:N`, `max:N`, or `range:M:N` |
+| `abbr:<bool>` | `setup` | Accept an unambiguous prefix of a long switch, such as `--vers` for `--version` |
 | `alias:<name>` | `flag`, `param`, `disp`, `cmd` | Add one alias switch or command name |
 | `aliases:<a,b>` | `flag`, `param`, `disp`, `cmd` | Add multiple aliases separated by commas |
 | `init:<value>` | `flag`, `param` | Initial variable value |
@@ -179,6 +185,7 @@ These attributes are parsed by `dybatpho::opts::flag` and/or `dybatpho::opts::pa
 | `prompt:<text>` | `param` | Prompt for a missing value with the supplied text |
 | `choices:<a,b>` | `param` | Restrict values to a comma-separated list of choices |
 | `multiple:<bool>` | `param` | Append repeated or multi-selected values instead of replacing the value; interactive selection accepts comma-separated values and ranges such as `1-3` |
+| `pattern:<glob>` | `flag`, `param` | Restrict values to a `case` glob such as `fast|slow` |
 | `validate:<code>` | `flag`, `param` | Validation logic using `\$OPTARG` |
 | `deprecated:<text>` | `flag`, `param`, `disp`, `cmd` | Warn when the item is used and annotate it in help |
 | `error:<code>` | `flag`, `param`, `setup` | Custom error handler |
@@ -230,6 +237,36 @@ the same way Cobra-style commands often do.
 - runs the `action:` from `dybatpho::opts::setup`
 
 
+### Positional arguments
+
+
+The second argument to `dybatpho::opts::setup` names a **Bash array** that
+collects everything which is not a switch:
+
+
+```bash
+function _spec {
+  dybatpho::opts::setup "Copy files" FILES action:"_run"
+}
+
+
+function _run {
+  dybatpho::print "Got ${#FILES[@]} file(s)"
+  for file in "${FILES[@]}"; do dybatpho::print "- ${file}"; done
+}
+```
+
+
+An array is what keeps `tool "my report.pdf" notes.txt` two arguments rather
+than three, and keeps quotes, glob characters, and newlines inside a value
+untouched. Read it with `"${FILES[@]}"`; `"${#FILES[@]}"` is the count.
+
+
+Bash cannot export an array, so `export:` has nothing to say about the rest
+variable. Note that under `set -u` a scalar read such as `${FILES}` fails on
+an empty array rather than expanding to the empty string.
+
+
 ### Help generation
 
 
@@ -276,7 +313,7 @@ It automatically handles:
 - the `-h, --help` row every command gets for free
 - current subcommand path
 - automatic `(required)` suffix for `required:true` params
-- `[env: ...]`, `[config: ...]`, `[choices: ...]`, `[default: ...]`,
+- `[env: ...]`, `[config: ...]`, `[choices: ...]`, `[pattern: ...]`, `[default: ...]`,
   `[repeatable]`, and `[repeat to increase]` annotations, each on its own
   line under the description
 
@@ -439,7 +476,7 @@ that is absent, or a CLI that never loaded any configuration at all, simply
 falls through to `init:`.
 
 
-#### Documented positional arguments
+#### Named positional arguments
 
 
 ```bash
@@ -447,13 +484,96 @@ function _spec {
   dybatpho::opts::setup "Copy a file" ARGS action:"_run"
   dybatpho::opts::arg "File to read" SOURCE
   dybatpho::opts::arg "Where to write it" TARGET required:false
+  dybatpho::opts::arg "Anything else" EXTRA required:false variadic:true
 }
-# Usage: tool [OPTIONS] <SOURCE> [TARGET]
+# Usage: tool [OPTIONS] <SOURCE> [TARGET] [EXTRA]...
+
+
+function _run {
+  dybatpho::print "${SOURCE} -> ${TARGET}"
+  dybatpho::print "plus ${#EXTRA[@]} more"
+}
 ```
+
+
+Each argument is assigned to its variable in declaration order once the
+count check passes, so an action reads `${SOURCE}` rather than picking the
+value out of the rest array by index. A `variadic:true` argument comes last
+and is an array of everything remaining; an omitted optional argument is the
+empty string. Use `-` as the variable name to document an argument without
+binding it.
 
 
 Declaring arguments also derives the `args:<rule>` count check, so the two
 never disagree. State `args:` explicitly to override the derived rule.
+
+
+#### Abbreviating long options
+
+
+`abbr:true` on `dybatpho::opts::setup` lets a long switch be typed as any
+prefix that identifies it uniquely. It is off by default, because turning it
+on means every new option can make a previously working abbreviation
+ambiguous.
+
+
+```bash
+dybatpho::opts::setup "Tool" ARGS abbr:true action:"_run"
+dybatpho::opts::flag "Colorize output" COLOR --color
+dybatpho::opts::param "Configuration file" CONFIG --config
+# --colo works, --config works, --co is ambiguous
+```
+
+
+An exact match always wins, so declaring both `--log` and `--log-level`
+keeps `--log` usable. A prefix matching more than one switch fails with
+`Ambiguous option: --co (matches --color, --config)`, translated under the
+key `cli.ambiguous_option`; the `error:` handler sees the error name
+`ambiguous` with the candidates in `$OPTARG`. A prefix matching nothing is
+reported as an unrecognized option, suggestion included.
+
+
+#### Restricting values to a pattern
+
+
+`pattern:` takes a `case` glob, which covers the common checks without a
+helper function. `choices:` is still the better fit for a fixed list, since
+it also feeds completion and the `[choices: ...]` help annotation.
+
+
+```bash
+dybatpho::opts::param "Mode" MODE --mode pattern:'fast|slow'
+dybatpho::opts::param "Port" PORT --port pattern:'[0-9]*'
+```
+
+
+A value that does not match fails with
+`Does not match the pattern (fast|slow): medium`, translated under the key
+`cli.pattern_mismatch`, and the `error:` handler sees the error name
+`pattern:<glob>`.
+
+
+A pattern reaches the generated parser unquoted, because quoting it would
+make `case` compare it literally. It is therefore restricted to characters
+that cannot end a `case` branch or start a substitution, and a pattern
+outside that set is rejected when the parser is generated.
+
+
+#### Grouping options in help
+
+
+`dybatpho::opts::msg` puts a line of free text in the help output, which is
+what a long option list needs to stay readable. It declares no switch, and
+completion, schema, and man output ignore it.
+
+
+```bash
+dybatpho::opts::msg "Connection options:"
+dybatpho::opts::param "Host to reach" HOST --host
+dybatpho::opts::msg ""
+dybatpho::opts::msg "Output options:"
+dybatpho::opts::flag "Colorize output" COLOR --color
+```
 
 
 #### Validation
@@ -635,6 +755,10 @@ declared somewhere with no readable source file is never cached.
 
 - Use a display option for help, schema, man-page, completion, or other actions that should exit after running.
 - Define a custom help display option only when the default `--help` / `-h` behavior is not sufficient.
+
+### `dybatpho::opts::msg`
+
+- Pass an empty string for a blank separator line.
 
 ### `dybatpho::opts::cmd`
 
@@ -925,6 +1049,75 @@ Validate a shell variable name used by generated parser code.
 **🚦 Exit codes**
 
 - `0`: The name is valid, or the sentinel `-` was used
+
+
+---
+
+### `__dybatpho_cli_collect_long_switches`
+
+Collect every long switch a spec accepts, for abbreviation
+             matching. The metadata walk is reused because it already expands
+             `--{no-}x`, aliases, and negatable forms.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the array variable receiving the switches |
+| `$2` | string | Name of the spec function |
+
+**🚦 Exit codes**
+
+- `0`: The array is left empty when the spec declares no long switch
+
+
+---
+
+### `__dybatpho_cli_expand_abbr`
+
+Resolve an abbreviated long option against the switches a command
+             accepts, the way `--vers` stands for `--version`. An exact match
+             wins outright, so a switch that is also the prefix of a longer one
+             stays reachable.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Switch as typed |
+| `$@` | string | Long switches the command accepts |
+
+**📤 Output on stdout**
+
+- The resolved switch, or the candidate list when the input is ambiguous
+
+**🚦 Exit codes**
+
+- `0`: Resolved to exactly one switch
+- `1`: Matched nothing, so the caller reports it as unrecognized
+- `2`: Matched more than one switch; the candidates are on stdout
+
+
+---
+
+### `__dybatpho_cli_require_case_pattern`
+
+Validate a `case` glob supplied by `pattern:<glob>`. Unlike every
+             other spec value, a pattern cannot be quoted on its way into the
+             generated script — quoting it would make `case` compare it
+             literally and defeat the point. This restricts it to characters
+             that cannot end the `case` branch or start a substitution, so a
+             spec still cannot inject code into the parser it generates.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Pattern to validate |
+
+**🚦 Exit codes**
+
+- `0`: The pattern is safe to interpolate
 
 
 ---
@@ -1539,6 +1732,32 @@ Generate parser logic for a child command with inherited persistent option defin
 
 ---
 
+### `__dybatpho_cli_print_arg_bindings`
+
+Emit generated code that copies the collected positional
+             arguments into the variables declared with `dybatpho::opts::arg`,
+             in declaration order. A `variadic:true` argument is the last one
+             and receives every remaining value as an array, so the values it
+             holds keep their boundaries.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the rest array holding the collected arguments |
+| `$@` | string | Declared argument records of `required<TAB>variadic<TAB>varname` |
+
+**📤 Output on stdout**
+
+- Generated parser code
+
+**🚦 Exit codes**
+
+- `0`: Nothing is emitted when no argument was declared
+
+
+---
+
 ### `__dybatpho_cli_print_args_check`
 
 Emit generated code that validates the positional argument count configured by `args:<rule>` in `dybatpho::opts::setup`.
@@ -1600,10 +1819,12 @@ of script or function
 | Name | Type | Description |
 | --- | --- | --- |
 | `$1` | string | Description of sub-command/root command |
+| `$2` | string | Name of the array variable receiving positional arguments, or `-` to discard them |
 | `$@` | key:value | Settings `key:value` for sub-command/root command such as `action:<code>`, `prerun:<code>`, `postrun:<code>`, and `args:<rule>` |
 
 **📝 Notes**
 
+- The rest variable is a Bash array. Read it as `"${REST[@]}"` to iterate and `"${#REST[@]}"` to count. An argument containing spaces, quotes, or newlines therefore survives parsing as one element.
 - `args:<rule>` supports raw rules plus Cobra-like names such as `NoArgs`, `ExactArgs:N`, and `RangeArgs:M:N`
 - `prerun:<code>` runs before `action:<code>`, and `postrun:<code>` runs after it
 
@@ -1682,6 +1903,39 @@ Define an option that display only
 
 ---
 
+### `dybatpho::opts::msg`
+
+Place a line of free text in the generated help, so a long option
+             list can be broken into labelled groups. It declares no switch and
+             affects nothing but help output.
+
+**🧪 Example**
+
+```bash
+dybatpho::opts::msg "Connection options:"
+dybatpho::opts::param "Host to reach" HOST --host
+dybatpho::opts::msg ""
+dybatpho::opts::msg "Output options:"
+dybatpho::opts::flag "Colorize output" COLOR --color
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$@` | string | Message text, and optionally `hidden:<bool>` |
+
+**📝 Notes**
+
+- Completion, schema, and man output ignore messages, because none of them has a place for text that describes no option.
+
+**🚦 Exit codes**
+
+- `0`: exit code
+
+
+---
+
 ### `dybatpho::opts::cmd`
 
 Define a sub-command in spec
@@ -1699,10 +1953,11 @@ Define a sub-command in spec
 
 ### `dybatpho::opts::arg`
 
-Document a positional argument. The values themselves still land
-             in the rest variable named by `dybatpho::opts::setup`; declaring
-             them here is what gives the usage line real placeholders and the
-             generated help, schema, and man page an `Arguments` section.
+Declare a positional argument. Its value is assigned to the named
+             variable once parsing succeeds, and it also gives the usage line a
+             real placeholder and the generated help, schema, and man page an
+             `Arguments` section. Every value still lands in the rest array
+             named by `dybatpho::opts::setup` as well.
 
 **🧪 Example**
 
@@ -1723,6 +1978,7 @@ dybatpho::opts::arg "Extra files" EXTRA required:false variadic:true
 
 **📝 Notes**
 
+- Arguments bind in declaration order. A `variadic:true` argument is an array holding every remaining value; the others are strings, and an omitted optional argument is the empty string. Pass `-` as the variable name to document an argument without binding it.
 - When `dybatpho::opts::setup` declares no `args:<rule>`, the rule is derived from the declared arguments, so the count is validated without stating it twice.
 
 **🚦 Exit codes**

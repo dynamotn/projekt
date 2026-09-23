@@ -167,11 +167,10 @@ function __dybatpho_test_run {
   local _red="${__DYBATPHO_TEST_RED}" _green="${__DYBATPHO_TEST_GREEN}"
   local _bold="${__DYBATPHO_TEST_BOLD}"
 
-  # `dybatpho::opts::setup` collects the positional arguments into a single
-  # space-joined string, so they are split back out here.
-  local -a _targets _files
-  read -r -a _targets <<< "${TEST_ARGS}"
-  mapfile -t _files < <(__dybatpho_test_collect "${_targets[@]}")
+  # `dybatpho::opts::setup` collects the positional arguments into an array, so
+  # a path containing a space reaches the collector as one target.
+  local -a _files
+  mapfile -t _files < <(__dybatpho_test_collect ${TEST_ARGS[@]+"${TEST_ARGS[@]}"})
   ((${#_files[@]})) || dybatpho::die "No test files found"
 
   local -A _expected_in

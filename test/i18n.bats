@@ -1502,3 +1502,46 @@ _i18n_spec() {
   run --separate-stderr -1 dybatpho::generate_from_spec _i18n_spec --dst x
   assert_regex "${stderr}" "Unrecognized option: --dst"
 }
+
+_i18n_spec_pattern() {
+  dybatpho::opts::setup "A tool" PAT_I18N_ARGS action:"true"
+  dybatpho::opts::param "Mode" PAT_I18N_MODE --mode pattern:'fast|slow'
+}
+
+_i18n_spec_abbr() {
+  dybatpho::opts::setup "A tool" AMB_I18N_ARGS abbr:true action:"true"
+  dybatpho::opts::flag "Colorize" AMB_I18N_COLOR --color
+  dybatpho::opts::param "Config" AMB_I18N_CFG --config
+}
+
+@test "a value rejected by pattern: names the pattern through its key" {
+  # Both the pattern and the offending value are baked into the sentence, so
+  # neither the English nor the pattern alone can serve as the message id.
+  local file
+  file="$(_catalog vi.msg 'cli.pattern_mismatch = Không khớp mẫu ({pattern}): {value}')"
+  dybatpho::i18n_load vi "${file}"
+  dybatpho::i18n_set_locale vi
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run --separate-stderr -1 \
+    dybatpho::generate_from_spec _i18n_spec_pattern --mode bogus
+  assert_regex "${stderr}" "Không khớp mẫu \(fast\|slow\): bogus"
+}
+
+@test "a value rejected by pattern: stays in English by default" {
+  run --separate-stderr -1 dybatpho::generate_from_spec _i18n_spec_pattern --mode bogus
+  assert_regex "${stderr}" "Does not match the pattern"
+}
+
+@test "an ambiguous abbreviation lists its candidates through its key" {
+  local file
+  file="$(_catalog vi.msg 'cli.ambiguous_option = Nhập nhằng: {option} khớp {candidates}')"
+  dybatpho::i18n_load vi "${file}"
+  dybatpho::i18n_set_locale vi
+  DYBATPHO_I18N_TRANSLATE_LIBRARY=true run --separate-stderr -1 \
+    dybatpho::generate_from_spec _i18n_spec_abbr --co
+  assert_regex "${stderr}" "Nhập nhằng: --co khớp --color, --config"
+}
+
+@test "an ambiguous abbreviation stays in English by default" {
+  run --separate-stderr -1 dybatpho::generate_from_spec _i18n_spec_abbr --co
+  assert_regex "${stderr}" "Ambiguous option: --co"
+}

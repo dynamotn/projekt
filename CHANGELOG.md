@@ -139,7 +139,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   printf '%s\n' "$(dybatpho::i18n_tn deploy.files 1240)"
   printf '%s\n' "$(dybatpho::i18n_currency 1234.5 VND vi_VN)"
   dybatpho::i18n_lint --reference en vi_VN || exit 1
-  ```
 
 ### Changed
 
@@ -175,6 +174,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `require-variable-braces` rule the file enables: one asks for `${index}`
   everywhere, the other rejects it inside `$(( ))`. Braces everywhere is the
   more useful of the two.
+
+- **BREAKING: `cli` gets its positional arguments right, and gains three
+  options for shaping a command line.** The rest
+  variable named by `dybatpho::opts::setup` used to be a string built by
+  joining each argument with a space. That lost information no caller could
+  recover: `tool "a b" c` and `tool "a b c"` produced the same value, every
+  value carried a leading space, and a quote, glob character, or newline inside
+  an argument could not survive at all. The count check was right while the
+  values were wrong, so the failure was silent. It is now a Bash array:
+
+  ```bash
+  dybatpho::opts::setup "Copy files" FILES action:"_run"
+  # _run reads "${FILES[@]}" and counts with "${#FILES[@]}"
+  ```
+
+  A POSIX shell would have to store positional *references* into the original
+  `$@` and restore them with `eval "set -- $REST"`, because it has no arrays.
+  dybatpho requires Bash 4.3, so it appends to a real array and skips the eval
+  entirely.
+
+  `dybatpho::opts::arg` follows from that. Declaring an argument used to shape
+  only the usage line, the `Arguments` help section, and the derived `args:`
+  rule, leaving its variable unset — `example/cli_ux.sh` declared `SERVICE` and
+  then read `${DEPLOY_ARGS}`, which is exactly the confusion the declaration
+  invites. Arguments now bind in declaration order, a `variadic:true` argument
+  takes the remainder as an array, an omitted optional argument is the empty
+  string, and `-` documents an argument without binding it:
+
+  ```bash
+  dybatpho::opts::arg "File to read" SOURCE
+  dybatpho::opts::arg "Where to write it" TARGET required:false
+  dybatpho::opts::arg "Anything else" EXTRA required:false variadic:true
+  ```
+
+  Three additions round it out:
+
+  - `pattern:<glob>` restricts an option to a `case` glob without writing a
+    validator function, reporting `Does not match the pattern (fast|slow):
+    medium` under the key `cli.pattern_mismatch` and the error name
+    `pattern:<glob>` for a custom `error:` handler. A pattern cannot be quoted
+    on its way into the generated parser without `case` comparing it literally,
+    so it is restricted to characters that cannot end a branch or start a
+    substitution; anything else is rejected under `cli.invalid_pattern` when the
+    parser is generated.
+  - `dybatpho::opts::msg` puts free text in the help output, which is what a
+    long option list needs to stay readable. It declares no switch, does not
+    affect column alignment, and completion, schema, and man output ignore it.
+  - `abbr:true` on `dybatpho::opts::setup` accepts any prefix that identifies a
+    long switch uniquely, so `--vers` reaches `--version`. It is off by default,
+    because enabling it means a newly added option can make a previously working
+    abbreviation ambiguous. An exact match always wins, so declaring both
+    `--log` and `--log-level` keeps `--log` usable; an ambiguous prefix fails
+    under `cli.ambiguous_option` and reaches a custom `error:` handler as the
+    error name `ambiguous` with the candidates in `$OPTARG`.
+
+  Update any action that read the rest variable as a string: `${ARGS}` becomes
+  `"${ARGS[@]}"` to iterate, or `"${ARGS[*]}"` for the old space-joined form
+  minus the leading space. Bash cannot export an array, so `export:` no longer
+  applies to it, and under `set -u` a scalar read of an empty rest array fails
+  instead of yielding the empty string.
 
 ### Fixed
 

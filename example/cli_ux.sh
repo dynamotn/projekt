@@ -48,10 +48,11 @@ function _run_deploy {
   dybatpho::cli_apply_verbosity "${VERBOSITY}"
 
   dybatpho::header "DEPLOY ${DEPLOY_ENV}"
-  dybatpho::info "Service: ${DEPLOY_ARGS}"
+  dybatpho::info "Service: ${SERVICE}"
   dybatpho::info "Selected components: ${COMPONENTS}"
   dybatpho::info "Colorized output: ${COLOR}"
   dybatpho::info "Dry run: ${DRY_RUN}"
+  dybatpho::info "Replicas: ${REPLICAS}"
   dybatpho::debug "Verbosity requested ${VERBOSITY} time(s), log level is ${LOG_LEVEL}"
   dybatpho::success "Deployment plan is ready"
   exit 0
@@ -84,6 +85,14 @@ function _spec_deploy {
     choices:staging,production prompt:"Choose the target environment"
   dybatpho::opts::param "Components to deploy" COMPONENTS --component \
     choices:api,worker,frontend multiple:true prompt:"Choose components"
+  # `pattern:` is the lighter alternative to `validate:` when the rule is a
+  # shape rather than a fixed list of values.
+  dybatpho::opts::param "Number of replicas" REPLICAS --replicas \
+    pattern:'[0-9]*' init:="1"
+  # `msg` heads a group of options; it declares no switch and only shows up in
+  # help, so completion, schema, and man output are unaffected.
+  dybatpho::opts::msg ""
+  dybatpho::opts::msg "Output options:"
   # `negatable:true` generates `--no-color` alongside `--color`, so the toggle
   # does not have to be spelled out as `--{no-}color`.
   dybatpho::opts::flag "Colorize the deployment report" COLOR --color \

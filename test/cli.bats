@@ -181,7 +181,7 @@ setup() {
 @test "dybatpho::generate_from_spec handling rest arguments" {
   # shellcheck disable=2329
   _spec() {
-    dybatpho::opts::setup "" ARGS action:"echo \$ARGS"
+    dybatpho::opts::setup "" ARGS action:"echo \${ARGS[*]}"
   }
 
   assert_equal "$(dybatpho::generate_from_spec _spec -a 1 -a 2 -a "3\"" -- -a)" "-a 1 -a 2 -a 3\" -- -a"
@@ -190,18 +190,18 @@ setup() {
 @test "dybatpho::generate_from_spec handling arguments with doesn't have sub commands" {
   # shellcheck disable=2329
   _spec() {
-    dybatpho::opts::setup "" ARGS action:"echo -e \"\$ARGS\n\$FLAG_A\""
+    dybatpho::opts::setup "" ARGS action:"echo -e \"\${ARGS[*]}\n\$FLAG_A\""
     dybatpho::opts::flag "" FLAG_A -a
   }
 
   run_traced dybatpho::generate_from_spec _spec -a 1 -a 2 -a "3\"" -- -a
   assert_success
-  assert_line --index 0 " 1 -a 2 -a 3\" -- -a"
+  assert_line --index 0 "1 -a 2 -a 3\" -- -a"
   assert_line --index 1 "true"
 
   run_traced dybatpho::generate_from_spec _spec -a -- -a
   assert_success
-  assert_line --index 0 " -a"
+  assert_line --index 0 "-a"
   assert_line --index 1 "true"
 }
 
@@ -419,7 +419,7 @@ setup() {
 @test "dybatpho::opts::param optional:true with separated value" {
   # shellcheck disable=2329
   _spec() {
-    dybatpho::opts::setup "" PREST action:"printf '%s|%s\n' \"\$POPT3\" \"\$PREST\""
+    dybatpho::opts::setup "" PREST action:"printf '%s|%s\n' \"\$POPT3\" \"\${PREST[*]}\""
     dybatpho::opts::param "Optional" POPT3 --opt3 optional:true
   }
 
@@ -454,7 +454,7 @@ setup() {
   # Regression: __init from flag's off:value must not leak into setup's __dybatpho_cli_define_var
   # shellcheck disable=2329
   _spec() {
-    dybatpho::opts::setup "" PREST action:"echo \$PREST"
+    dybatpho::opts::setup "" PREST action:"echo \${PREST[*]}"
     dybatpho::opts::flag "Dry" PDRY --dry-run on:true off:false init:="false"
   }
 
@@ -513,10 +513,10 @@ setup() {
 @test "dybatpho::opts::setup args:exact:N validates positional args" {
   # shellcheck disable=2329
   _spec() {
-    dybatpho::opts::setup "" REST args:exact:2 action:"printf '[%s]\n' \"\$REST\""
+    dybatpho::opts::setup "" REST args:exact:2 action:"printf '[%s]\n' \"\${REST[*]}\""
   }
 
-  assert_equal "$(dybatpho::generate_from_spec _spec one two)" "[ one two]"
+  assert_equal "$(dybatpho::generate_from_spec _spec one two)" "[one two]"
 
   run --separate-stderr dybatpho::generate_from_spec _spec one
   assert_failure
@@ -526,20 +526,20 @@ setup() {
 @test "dybatpho::opts::setup args:min/max validate positional args" {
   # shellcheck disable=2329
   _spec_min() {
-    dybatpho::opts::setup "" REST args:min:1 action:"printf '[%s]\n' \"\$REST\""
+    dybatpho::opts::setup "" REST args:min:1 action:"printf '[%s]\n' \"\${REST[*]}\""
   }
   # shellcheck disable=2329
   _spec_max() {
-    dybatpho::opts::setup "" REST args:max:1 action:"printf '[%s]\n' \"\$REST\""
+    dybatpho::opts::setup "" REST args:max:1 action:"printf '[%s]\n' \"\${REST[*]}\""
   }
 
-  assert_equal "$(dybatpho::generate_from_spec _spec_min one)" "[ one]"
+  assert_equal "$(dybatpho::generate_from_spec _spec_min one)" "[one]"
 
   run --separate-stderr dybatpho::generate_from_spec _spec_min
   assert_failure
   assert_stderr --partial "Expected at least 1 argument, got 0"
 
-  assert_equal "$(dybatpho::generate_from_spec _spec_max one)" "[ one]"
+  assert_equal "$(dybatpho::generate_from_spec _spec_max one)" "[one]"
 
   run --separate-stderr dybatpho::generate_from_spec _spec_max one two
   assert_failure
@@ -549,7 +549,7 @@ setup() {
 @test "dybatpho::opts::setup args:range validates subcommand positional args" {
   # shellcheck disable=2329
   _spec_leaf() {
-    dybatpho::opts::setup "" LEAF_ARGS args:range:1:2 action:"printf '[%s]\n' \"\$LEAF_ARGS\""
+    dybatpho::opts::setup "" LEAF_ARGS args:range:1:2 action:"printf '[%s]\n' \"\${LEAF_ARGS[*]}\""
   }
   # shellcheck disable=2329
   _spec_root() {
@@ -557,7 +557,7 @@ setup() {
     dybatpho::opts::cmd leaf _spec_leaf
   }
 
-  assert_equal "$(dybatpho::generate_from_spec _spec_root leaf one two)" "[ one two]"
+  assert_equal "$(dybatpho::generate_from_spec _spec_root leaf one two)" "[one two]"
 
   run --separate-stderr dybatpho::generate_from_spec _spec_root leaf
   assert_failure
@@ -634,7 +634,7 @@ setup() {
 @test "dybatpho::opts::cmd dispatches to subcommand" {
   # shellcheck disable=2329
   _spec_child() {
-    dybatpho::opts::setup "Child" CHILD_ARGS action:"echo \$CHILD_ARGS"
+    dybatpho::opts::setup "Child" CHILD_ARGS action:"echo \${CHILD_ARGS[*]}"
   }
   # shellcheck disable=2329
   _spec_parent() {
@@ -663,7 +663,7 @@ setup() {
 @test "dybatpho::opts::cmd nested subcommand dispatch" {
   # shellcheck disable=2329
   _spec_leaf() {
-    dybatpho::opts::setup "Leaf" LEAF_ARGS action:"echo leaf:\$LEAF_ARGS"
+    dybatpho::opts::setup "Leaf" LEAF_ARGS action:"echo leaf:\${LEAF_ARGS[*]}"
   }
   # shellcheck disable=2329
   _spec_mid() {
@@ -676,7 +676,7 @@ setup() {
     dybatpho::opts::cmd mid _spec_mid
   }
 
-  assert_equal "$(dybatpho::generate_from_spec _spec_root mid leaf world)" "leaf: world"
+  assert_equal "$(dybatpho::generate_from_spec _spec_root mid leaf world)" "leaf:world"
 }
 
 @test "dybatpho::opts::cmd global options before subcommand" {
@@ -771,7 +771,7 @@ setup() {
 @test "dybatpho::opts::cmd alias metadata dispatches to subcommand" {
   # shellcheck disable=2329
   _spec_alias_child() {
-    dybatpho::opts::setup "" CHILD_ARGS action:"echo alias:\$CHILD_ARGS"
+    dybatpho::opts::setup "" CHILD_ARGS action:"echo alias:\${CHILD_ARGS[*]}"
   }
   # shellcheck disable=2329
   _spec_alias_parent() {
@@ -779,9 +779,9 @@ setup() {
     dybatpho::opts::cmd config _spec_alias_child alias:cfg aliases:conf,settings
   }
 
-  assert_equal "$(dybatpho::generate_from_spec _spec_alias_parent cfg hello)" "alias: hello"
+  assert_equal "$(dybatpho::generate_from_spec _spec_alias_parent cfg hello)" "alias:hello"
 
-  assert_equal "$(dybatpho::generate_from_spec _spec_alias_parent settings world)" "alias: world"
+  assert_equal "$(dybatpho::generate_from_spec _spec_alias_parent settings world)" "alias:world"
 }
 
 # =============================================================================
@@ -1672,6 +1672,278 @@ setup() {
   assert_equal "$(dybatpho::generate_from_spec _spec_args_explicit a)" "ran"
 }
 
+@test "the rest array keeps argument boundaries and special characters" {
+  # shellcheck disable=2329
+  _spec_rest_array() {
+    dybatpho::opts::setup "Rest" REST_ARR action:"_run_rest_array"
+    dybatpho::opts::flag "Verbose" REST_V -v
+  }
+  # shellcheck disable=2329
+  _run_rest_array() {
+    printf 'n=%s\n' "${#REST_ARR[@]}"
+    printf '<%s>\n' "${REST_ARR[@]}"
+  }
+
+  # Two arguments, the first containing a space, must not collapse into three.
+  run_traced dybatpho::generate_from_spec _spec_rest_array "a b" c
+  assert_success
+  assert_line --index 0 "n=2"
+  assert_line --index 1 "<a b>"
+  assert_line --index 2 "<c>"
+
+  # One argument with the same characters stays one argument.
+  run_traced dybatpho::generate_from_spec _spec_rest_array "a b c"
+  assert_success
+  assert_line --index 0 "n=1"
+  assert_line --index 1 "<a b c>"
+
+  # A glob must not be expanded and quotes must survive verbatim.
+  run_traced dybatpho::generate_from_spec _spec_rest_array '*' "it's" 'x"y'
+  assert_success
+  assert_line --index 0 "n=3"
+  assert_line --index 1 "<*>"
+  assert_line --index 2 "<it's>"
+  assert_line --index 3 '<x"y>'
+}
+
+@test "the rest array collects dashed values passed after --" {
+  # shellcheck disable=2329
+  _spec_rest_dash() {
+    dybatpho::opts::setup "Rest" DASH_ARR action:"_run_rest_dash"
+    dybatpho::opts::flag "Verbose" DASH_V -v
+  }
+  # shellcheck disable=2329
+  _run_rest_dash() {
+    printf 'n=%s\n' "${#DASH_ARR[@]}"
+    printf '<%s>\n' "${DASH_ARR[@]}"
+  }
+
+  run_traced dybatpho::generate_from_spec _spec_rest_dash -v -- --not-an-option "two words"
+  assert_success
+  assert_line --index 0 "n=2"
+  assert_line --index 1 "<--not-an-option>"
+  assert_line --index 2 "<two words>"
+}
+
+@test "dybatpho::opts::arg assigns each positional argument to its variable" {
+  # shellcheck disable=2329
+  _spec_arg_bind() {
+    dybatpho::opts::setup "Copy" BIND_ARGS action:"_run_arg_bind"
+    dybatpho::opts::arg "Source" BIND_SOURCE
+    dybatpho::opts::arg "Target" BIND_TARGET required:false
+  }
+  # shellcheck disable=2329
+  _run_arg_bind() {
+    printf 'source=<%s>\n' "${BIND_SOURCE}"
+    printf 'target=<%s>\n' "${BIND_TARGET}"
+  }
+
+  run_traced dybatpho::generate_from_spec _spec_arg_bind "in file" "out file"
+  assert_success
+  assert_line --index 0 "source=<in file>"
+  assert_line --index 1 "target=<out file>"
+
+  # An omitted optional argument is the empty string, not an unbound variable.
+  run_traced dybatpho::generate_from_spec _spec_arg_bind only
+  assert_success
+  assert_line --index 0 "source=<only>"
+  assert_line --index 1 "target=<>"
+}
+
+@test "a variadic argument binds the remaining values as an array" {
+  # shellcheck disable=2329
+  _spec_arg_variadic_bind() {
+    dybatpho::opts::setup "Copy" VAR_ARGS action:"_run_arg_variadic_bind"
+    dybatpho::opts::arg "Source" VAR_SOURCE
+    dybatpho::opts::arg "Rest" VAR_EXTRA required:false variadic:true
+  }
+  # shellcheck disable=2329
+  _run_arg_variadic_bind() {
+    printf 'source=<%s>\n' "${VAR_SOURCE}"
+    printf 'n=%s\n' "${#VAR_EXTRA[@]}"
+    printf '<%s>\n' ${VAR_EXTRA[@]+"${VAR_EXTRA[@]}"}
+  }
+
+  run_traced dybatpho::generate_from_spec _spec_arg_variadic_bind one "two three" four
+  assert_success
+  assert_line --index 0 "source=<one>"
+  assert_line --index 1 "n=2"
+  assert_line --index 2 "<two three>"
+  assert_line --index 3 "<four>"
+
+  # The variadic argument is an empty array when nothing is left over.
+  run_traced dybatpho::generate_from_spec _spec_arg_variadic_bind one
+  assert_success
+  assert_line --index 0 "source=<one>"
+  assert_line --index 1 "n=0"
+}
+
+@test "dybatpho::opts::arg documents an argument without binding it when given -" {
+  # shellcheck disable=2329
+  _spec_arg_unbound() {
+    dybatpho::opts::setup "Run" UNBOUND_ARGS action:"_run_arg_unbound"
+    dybatpho::opts::arg "Ignored" -
+  }
+  # shellcheck disable=2329
+  _run_arg_unbound() {
+    printf 'rest=<%s>\n' "${UNBOUND_ARGS[0]}"
+  }
+
+  run_traced dybatpho::generate_from_spec _spec_arg_unbound value
+  assert_success
+  assert_line --index 0 "rest=<value>"
+}
+
+
+@test "pattern: accepts a matching value and rejects anything else" {
+  # shellcheck disable=2329
+  _spec_pattern() {
+    dybatpho::opts::setup "Pattern" PAT_ARGS action:"echo \$PAT_MODE"
+    dybatpho::opts::param "Mode" PAT_MODE --mode pattern:'fast|slow'
+  }
+
+  assert_equal "$(dybatpho::generate_from_spec _spec_pattern --mode fast)" "fast"
+  assert_equal "$(dybatpho::generate_from_spec _spec_pattern --mode slow)" "slow"
+
+  run --separate-stderr dybatpho::generate_from_spec _spec_pattern --mode medium
+  assert_failure
+  assert_stderr --partial "Does not match the pattern (fast|slow): medium"
+}
+
+@test "pattern: refuses a glob that could inject code into the parser" {
+  # shellcheck disable=2329
+  _spec_pattern_injected() {
+    dybatpho::opts::setup "Pattern" INJ_ARGS action:"echo ran"
+    dybatpho::opts::param "Mode" INJ_MODE --mode pattern:'x) ;; *) echo PWNED ;; esac #'
+  }
+
+  run --separate-stderr dybatpho::generate_from_spec _spec_pattern_injected --mode x
+  assert_failure
+  assert_stderr --partial "Invalid pattern:"
+  refute_output --partial "PWNED"
+}
+
+@test "pattern: is annotated in help and carried into the schema" {
+  # shellcheck disable=2329
+  _spec_pattern_help() {
+    dybatpho::opts::setup "Pattern" PATH_ARGS action:"echo ran"
+    dybatpho::opts::param "Mode" PATH_MODE --mode pattern:'fast|slow'
+  }
+
+  run dybatpho::generate_help _spec_pattern_help
+  assert_success
+  assert_output --partial "[pattern: fast|slow]"
+
+  run dybatpho::generate_schema _spec_pattern_help patterntool
+  assert_success
+  assert_output --partial '"pattern":"fast|slow"'
+}
+
+@test "dybatpho::opts::msg places free text in help without declaring an option" {
+  # shellcheck disable=2329
+  _spec_msg() {
+    dybatpho::opts::setup "Grouped" MSG_ARGS action:"echo ran"
+    dybatpho::opts::msg "Connection options:"
+    dybatpho::opts::param "Host" MSG_HOST --host
+    dybatpho::opts::msg ""
+    dybatpho::opts::msg "Output options:"
+    dybatpho::opts::flag "Color" MSG_COLOR --color
+    dybatpho::opts::msg "Never shown" hidden:true
+  }
+
+  run dybatpho::generate_help _spec_msg
+  assert_success
+  assert_output --partial "Connection options:"
+  assert_output --partial "Output options:"
+  refute_output --partial "Never shown"
+
+  # Each message keeps its own line rather than being deduped down to the first,
+  # and a message never becomes a switch.
+  run dybatpho::generate_schema _spec_msg msgtool
+  assert_success
+  refute_output --partial "Connection options"
+
+  run dybatpho::generate_completion _spec_msg bash msgtool
+  assert_success
+  refute_output --partial "Connection options"
+}
+
+@test "dybatpho::opts::msg leaves option alignment untouched" {
+  # shellcheck disable=2329
+  _spec_msg_align() {
+    dybatpho::opts::setup "Aligned" ALIGN_ARGS action:"echo ran"
+    dybatpho::opts::msg "A very long heading that must not widen the label column"
+    dybatpho::opts::flag "Color" ALIGN_COLOR --color
+  }
+
+  run dybatpho::generate_help _spec_msg_align
+  assert_success
+  assert_line --partial "      --color  Color"
+}
+
+@test "abbr:true accepts an unambiguous prefix of a long switch" {
+  # shellcheck disable=2329
+  _spec_abbr() {
+    dybatpho::opts::setup "Abbr" ABBR_ARGS abbr:true action:"printf '%s|%s\\n' \"\${ABBR_VERBOSE}\" \"\${ABBR_CONFIG}\""
+    dybatpho::opts::flag "Verbose" ABBR_VERBOSE --verbose
+    dybatpho::opts::param "Config" ABBR_CONFIG --config
+  }
+
+  assert_equal "$(dybatpho::generate_from_spec _spec_abbr --verb)" "true|"
+  # An abbreviated param still takes its value, separated or attached.
+  assert_equal "$(dybatpho::generate_from_spec _spec_abbr --conf a.yml)" "|a.yml"
+  assert_equal "$(dybatpho::generate_from_spec _spec_abbr --conf=b.yml)" "|b.yml"
+}
+
+@test "abbr:true reports an ambiguous prefix with its candidates" {
+  # shellcheck disable=2329
+  _spec_abbr_ambiguous() {
+    dybatpho::opts::setup "Abbr" AMB_ARGS abbr:true action:"echo ran"
+    dybatpho::opts::flag "Color" AMB_COLOR --color
+    dybatpho::opts::param "Config" AMB_CONFIG --config
+  }
+
+  run --separate-stderr dybatpho::generate_from_spec _spec_abbr_ambiguous --co
+  assert_failure
+  assert_stderr --partial "Ambiguous option: --co (matches --color, --config)"
+}
+
+@test "abbr:true prefers an exact switch over the longer one it prefixes" {
+  # shellcheck disable=2329
+  _spec_abbr_exact() {
+    dybatpho::opts::setup "Abbr" EXACT_ARGS abbr:true action:"printf '%s|%s\\n' \"\${EXACT_LOG}\" \"\${EXACT_LOGLEVEL}\""
+    dybatpho::opts::flag "Log" EXACT_LOG --log
+    dybatpho::opts::param "Level" EXACT_LOGLEVEL --log-level
+  }
+
+  # `--log` is a prefix of `--log-level`, but an exact match is not ambiguous.
+  assert_equal "$(dybatpho::generate_from_spec _spec_abbr_exact --log)" "true|"
+}
+
+@test "abbr:true leaves an unmatched switch to the unrecognized-option path" {
+  # shellcheck disable=2329
+  _spec_abbr_unknown() {
+    dybatpho::opts::setup "Abbr" UNK_ARGS abbr:true action:"echo ran"
+    dybatpho::opts::flag "Verbose" UNK_VERBOSE --verbose
+  }
+
+  run --separate-stderr dybatpho::generate_from_spec _spec_abbr_unknown --zzz
+  assert_failure
+  assert_stderr --partial "Unrecognized option: --zzz"
+}
+
+@test "abbreviation is off unless the spec asks for it" {
+  # shellcheck disable=2329
+  _spec_abbr_off() {
+    dybatpho::opts::setup "Abbr" OFF_ARGS action:"echo ran"
+    dybatpho::opts::flag "Verbose" OFF_VERBOSE --verbose
+  }
+
+  run --separate-stderr dybatpho::generate_from_spec _spec_abbr_off --verb
+  assert_failure
+  assert_stderr --partial "Unrecognized option: --verb"
+  assert_stderr --partial "Did you mean '--verbose'?"
+}
 @test "declared arguments appear in the schema and the man page" {
   # shellcheck disable=2329
   _spec_args_doc() {
