@@ -2,6 +2,7 @@ package templates
 
 import (
 	"bytes"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -24,6 +25,14 @@ func TestGenCommands(t *testing.T) {
 		{
 			name:    "fish shell",
 			shell:   "fish",
+			wantErr: false,
+			check: func(output string) bool {
+				return len(output) > 0
+			},
+		},
+		{
+			name:    "zsh shell",
+			shell:   "zsh",
 			wantErr: false,
 			check: func(output string) bool {
 				return len(output) > 0
@@ -57,7 +66,7 @@ func TestGenCommands(t *testing.T) {
 }
 
 func TestGenCommands_TemplateExecution(t *testing.T) {
-	shells := []string{"bash", "fish"}
+	shells := Shells()
 
 	for _, shell := range shells {
 		t.Run("test_"+shell, func(t *testing.T) {
@@ -101,5 +110,44 @@ func TestGenCommands_OutputWriter(t *testing.T) {
 
 	if buf.Len() == 0 {
 		t.Error("GenCommands() did not write to output writer")
+	}
+}
+
+func TestShells(t *testing.T) {
+	shells := Shells()
+
+	want := map[string]bool{"bash": false, "fish": false, "zsh": false}
+	for _, shell := range shells {
+		if _, known := want[shell]; !known {
+			t.Errorf("Shells() = %v, which has an unexpected %q", shells, shell)
+			continue
+		}
+		want[shell] = true
+	}
+	for shell, found := range want {
+		if !found {
+			t.Errorf("Shells() = %v, missing %q", shells, shell)
+		}
+	}
+
+	// Sorted, because it is what the command offers for completion.
+	if !sort.StringsAreSorted(shells) {
+		t.Errorf("Shells() = %v, want it sorted", shells)
+	}
+}
+
+func TestShells_EveryOneOfThemGenerates(t *testing.T) {
+	for _, shell := range Shells() {
+		t.Run(shell, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := GenCommands(shell, &buf); err != nil {
+				t.Fatalf("GenCommands(%s) error = %v", shell, err)
+			}
+			// Every script defines the jump function; that is the whole point
+			// of the integration.
+			if !strings.Contains(buf.String(), "pj") {
+				t.Errorf("GenCommands(%s) does not define pj: %q", shell, buf.String())
+			}
+		})
 	}
 }

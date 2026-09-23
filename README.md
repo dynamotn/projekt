@@ -38,7 +38,7 @@ A single static Go binary, no daemon, no index to rebuild — your config file *
 - **Your config is safe** — an unreadable or malformed config file is never silently overwritten, and `config check` tells you what is wrong with it.
 - **Templates that name their own files** — `t new` renders a Go template, or a whole folder of them, from a store you own; the path segments are templates too.
 - **New projects that are already on the map** — `b new` renders a boilerplate into the right workspace and registers it, so the next thing you type is `pj`.
-- **Shell-native** — a one-line `eval` for bash or fish. No plugin manager required.
+- **Shell-native** — a one-line `eval` for bash, zsh or fish, with completion. No plugin manager required.
 - **Boring to install** — `make all`, or grab a release binary. Linux and macOS, amd64 and arm64.
 
 ## 📖 What does the name mean?
@@ -71,10 +71,18 @@ sudo make all INSTALL_PATH=/usr/local/bin
 eval "$(projekt init bash)"
 ```
 
+```zsh
+# ~/.zshrc
+eval "$(projekt init zsh)"
+```
+
 ```fish
 # ~/.config/fish/config.fish
 projekt init fish | source
 ```
+
+The zsh line can go anywhere in your `.zshrc`: when it runs before `compinit`,
+the completion registers itself at the first prompt instead of being lost.
 
 **3. Register your first folder**
 
@@ -370,7 +378,7 @@ ships in [examples/boilerplates](examples/boilerplates); see
 | [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories in parallel, with `--dry-run`   |
 | [`config check`](doc/projekt_config_check.md)        | Validate the config file; exits non-zero, for CI           |
 | [`config edit`](doc/projekt_config_edit.md)          | Open the config in `$EDITOR`, re-validate on exit          |
-| [`init`](doc/projekt_init.md)                        | Emit the shell integration for bash or fish           |
+| [`init`](doc/projekt_init.md)                        | Emit the shell integration for bash, zsh or fish      |
 | [`version`](doc/projekt_version.md)                  | Version, commit, tree state and build time                 |
 
 ### 🧩 `t` — templates

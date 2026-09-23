@@ -1,0 +1,50 @@
+# vim:filetype=zsh
+pj() {
+  if (( $# != 1 )); then
+    print -u2 "usage: pj <project>"
+    return 1
+  fi
+
+  local target
+  # `projekt folder get` exits non-zero when the short name is unknown, so the
+  # error it already printed is the only message the user needs.
+  target=$(command projekt folder get --verbose=error "$1") || return 1
+
+  if [[ ! -d $target ]]; then
+    print -u2 "Project folder does not exist: $target"
+    return 1
+  fi
+
+  cd -- "$target" || return 1
+  [[ -n ${ZELLIJ:-} ]] && zellij action rename-tab "$1"
+  [[ -n ${TMUX:-} ]] && tmux rename-window "$1"
+  return 0
+}
+
+_pj() {
+  # A project is the only argument, so there is nothing to offer after it.
+  (( CURRENT > 2 )) && return 1
+
+  local -a projects
+  # --output tsv prints one short name per line, so completion does not have to
+  # strip table borders and cannot be broken by a name containing one.
+  projects=(${(f)"$(command projekt folder list --output tsv --no-headers --short-only --verbose=error 2>/dev/null)"})
+  (( ${#projects} )) || return 1
+
+  compadd -a projects
+}
+
+if (( $+functions[compdef] )); then
+  compdef _pj pj
+else
+  # compinit has not run yet. Sourcing this near the top of a .zshrc is a
+  # normal thing to do, so register the completion at the first prompt instead
+  # of losing it.
+  autoload -Uz add-zsh-hook
+  __pj_register_completion() {
+    (( $+functions[compdef] )) && compdef _pj pj
+    add-zsh-hook -d precmd __pj_register_completion
+    unfunction __pj_register_completion
+  }
+  add-zsh-hook precmd __pj_register_completion
+fi

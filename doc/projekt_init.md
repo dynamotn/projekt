@@ -2,6 +2,13 @@
 
 Initialize to install other needed commands
 
+### Synopsis
+
+Print the shell integration to source, which installs `pj`
+and its completion.
+
+Available shells: bash, fish, zsh
+
 ```
 projekt init [shell] [flags]
 ```

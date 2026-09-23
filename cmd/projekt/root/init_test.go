@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"gitlab.com/dynamo.foss/projekt/pkg/templates"
 )
 
 func TestNewInitCmd(t *testing.T) {
@@ -37,6 +39,11 @@ func TestNewInitCmd_ValidArgs(t *testing.T) {
 		{
 			name:    "fish shell",
 			args:    []string{"fish"},
+			wantErr: false,
+		},
+		{
+			name:    "zsh shell",
+			args:    []string{"zsh"},
 			wantErr: false,
 		},
 		{
@@ -174,8 +181,11 @@ func TestNewInitCmd_ValidArgsCheck(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := NewInitCmd(&buf)
 
-	if len(cmd.ValidArgs) != 2 {
-		t.Errorf("NewInitCmd() ValidArgs length = %d, want 2", len(cmd.ValidArgs))
+	// What the command accepts is what a script is shipped for, so the two
+	// cannot drift apart.
+	want := templates.Shells()
+	if len(cmd.ValidArgs) != len(want) {
+		t.Errorf("NewInitCmd() ValidArgs = %v, want %v", cmd.ValidArgs, want)
 	}
 
 	validArgs := make(map[string]bool)
@@ -183,12 +193,29 @@ func TestNewInitCmd_ValidArgsCheck(t *testing.T) {
 		validArgs[arg] = true
 	}
 
-	if !validArgs["bash"] {
-		t.Error("NewInitCmd() ValidArgs missing 'bash'")
+	for _, shell := range append([]string{"bash", "fish", "zsh"}, want...) {
+		if !validArgs[shell] {
+			t.Errorf("NewInitCmd() ValidArgs missing %q", shell)
+		}
 	}
+}
 
-	if !validArgs["fish"] {
-		t.Error("NewInitCmd() ValidArgs missing 'fish'")
+func TestNewInitCmd_EveryShellPrintsItsScript(t *testing.T) {
+	for _, shell := range templates.Shells() {
+		t.Run(shell, func(t *testing.T) {
+			var buf bytes.Buffer
+			cmd := NewInitCmd(&buf)
+			cmd.SetArgs([]string{shell})
+			cmd.SetOut(&buf)
+			cmd.SetErr(&buf)
+
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute(%s) error = %v", shell, err)
+			}
+			if !strings.Contains(buf.String(), "pj") {
+				t.Errorf("init %s did not print the script, got: %q", shell, buf.String())
+			}
+		})
 	}
 }
 
