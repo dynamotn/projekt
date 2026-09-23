@@ -2,7 +2,6 @@ package root
 
 import (
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -12,12 +11,14 @@ import (
 
 func NewInitCmd(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:       "init",
-		Short:     "Initialize to install other needed commands",
-		Args:      cobra.ExactArgs(1),
+		Use:   "init [shell]",
+		Short: "Initialize to install other needed commands",
+		// OnlyValidArgs is required for ValidArgs to actually reject a shell we
+		// don't ship a template for.
+		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 		ValidArgs: []string{"bash", "fish"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return templates.GenCommands(args[0], os.Stdout)
+			return templates.GenCommands(args[0], out)
 		},
 	}
 

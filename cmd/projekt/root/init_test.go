@@ -14,8 +14,8 @@ func TestNewInitCmd(t *testing.T) {
 		t.Fatal("NewInitCmd() returned nil")
 	}
 
-	if cmd.Use != "init" {
-		t.Errorf("NewInitCmd() Use = %v, want init", cmd.Use)
+	if cmd.Use != "init [shell]" {
+		t.Errorf("NewInitCmd() Use = %v, want init [shell]", cmd.Use)
 	}
 
 	if cmd.Short == "" {
@@ -73,8 +73,6 @@ func TestNewInitCmd_ValidArgs(t *testing.T) {
 }
 
 func TestNewInitCmd_BashOutput(t *testing.T) {
-	// Note: init command writes to os.Stdout, not to the provided writer
-	// So we just test that it doesn't error
 	var buf bytes.Buffer
 	cmd := NewInitCmd(&buf)
 	cmd.SetArgs([]string{"bash"})
@@ -85,11 +83,13 @@ func TestNewInitCmd_BashOutput(t *testing.T) {
 	if err != nil {
 		t.Errorf("NewInitCmd().Execute() error = %v", err)
 	}
+
+	if !strings.Contains(buf.String(), "pj") {
+		t.Errorf("NewInitCmd() did not write the bash script to the provided writer, got: %q", buf.String())
+	}
 }
 
 func TestNewInitCmd_FishOutput(t *testing.T) {
-	// Note: init command writes to os.Stdout, not to the provided writer
-	// So we just test that it doesn't error
 	var buf bytes.Buffer
 	cmd := NewInitCmd(&buf)
 	cmd.SetArgs([]string{"fish"})
@@ -99,6 +99,10 @@ func TestNewInitCmd_FishOutput(t *testing.T) {
 	err := cmd.Execute()
 	if err != nil {
 		t.Errorf("NewInitCmd().Execute() error = %v", err)
+	}
+
+	if !strings.Contains(buf.String(), "pj") {
+		t.Errorf("NewInitCmd() did not write the fish script to the provided writer, got: %q", buf.String())
 	}
 }
 
