@@ -5,17 +5,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
-
-// fallbackEditor is used when neither VISUAL nor EDITOR is set. It is the one
-// editor POSIX requires to be present.
-const fallbackEditor = "vi"
 
 func NewConfigEditCmd(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
@@ -39,24 +34,13 @@ away rather than on the next command.`,
 	return cmd
 }
 
-// editorCommand resolves the editor to run, honouring the usual environment
-// variables. The value may carry arguments, as in `code --wait`.
-func editorCommand(env func(string) string) []string {
-	for _, name := range []string{"VISUAL", "EDITOR"} {
-		if value := strings.TrimSpace(env(name)); value != "" {
-			return strings.Fields(value)
-		}
-	}
-	return []string{fallbackEditor}
-}
-
 func runConfigEdit(out io.Writer, in io.Reader, errOut io.Writer) error {
 	path := lazypath.ConfigFile()
 	if path == "" {
 		return fmt.Errorf("no configuration file to edit")
 	}
 
-	editor := editorCommand(os.Getenv)
+	editor := cli.EditorCommand(os.Getenv)
 	cli.Debug("Opening %s with %v", path, editor)
 
 	args := append(editor[1:], path)

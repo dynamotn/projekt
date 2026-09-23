@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -12,49 +11,6 @@ import (
 
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
-
-func TestEditorCommand(t *testing.T) {
-	tests := []struct {
-		name string
-		env  map[string]string
-		want []string
-	}{
-		{
-			name: "falls back to vi when nothing is set",
-			env:  map[string]string{},
-			want: []string{"vi"},
-		},
-		{
-			name: "EDITOR is used",
-			env:  map[string]string{"EDITOR": "nano"},
-			want: []string{"nano"},
-		},
-		{
-			name: "VISUAL wins over EDITOR",
-			env:  map[string]string{"VISUAL": "gvim", "EDITOR": "nano"},
-			want: []string{"gvim"},
-		},
-		{
-			name: "arguments are kept, so 'code --wait' works",
-			env:  map[string]string{"EDITOR": "code --wait"},
-			want: []string{"code", "--wait"},
-		},
-		{
-			name: "a blank value is treated as unset",
-			env:  map[string]string{"VISUAL": "   ", "EDITOR": "nano"},
-			want: []string{"nano"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := editorCommand(func(key string) string { return tt.env[key] })
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("editorCommand() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
 
 // fakeEditor writes a script that replaces the edited file with content, and
 // returns a command line for it.

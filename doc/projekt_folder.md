@@ -26,6 +26,7 @@ Manage your project folder
 * [projekt folder list](projekt_folder_list.md)	 - List all your project folders
 * [projekt folder recent](projekt_folder_recent.md)	 - List the projects you jumped to, most recent first
 * [projekt folder prune](projekt_folder_prune.md)	 - Drop the configuration entries whose folder is gone
+* [projekt folder open](projekt_folder_open.md)	 - Open a project in your editor
 * [projekt folder remove](projekt_folder_remove.md)	 - Remove your project folder to config
 * [projekt folder status](projekt_folder_status.md)	 - Show the git state of every project folder
 * [projekt folder sync](projekt_folder_sync.md)	 - Synchronize Git repositories defined in configuration

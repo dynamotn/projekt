@@ -50,6 +50,7 @@ A single static Go binary each, no daemon, no index to rebuild — your config f
 
 - **Jump, don't navigate** — `pj <short-name>` resolves a project folder and takes you there. Deep trees stop mattering.
 - **And back again** — `pj -` returns to the project you came from, and toggles, the way `cd -` does.
+- **Or skip the jump** — `folder open backend-api` opens it in your editor from wherever you are.
 - **Workspaces, not just folders** — point at a parent directory once and every child inside it becomes a jumpable project, filtered by your own regex.
 - **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time. Already have them cloned? `--discover` writes that config for you.
 - **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
@@ -577,13 +578,10 @@ The archive folder is `$XDG_DATA_HOME/projekt/archive`, or `--archive-dir`,
 | [`folder list`](doc/projekt_folder_list.md)          | List every project folder, as a table, JSON or TSV         |
 | [`folder get`](doc/projekt_folder_get.md)            | Resolve a short name to a path — what `pj` calls           |
 | [`folder recent`](doc/projekt_folder_recent.md)      | The projects you jumped to, most recent first               |
+| [`folder open`](doc/projekt_folder_open.md)          | Open a project in `$VISUAL`, `$EDITOR` or vi                |
 | [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |
-<<<<<<< HEAD
 | [`folder prune`](doc/projekt_folder_prune.md)        | Drop every entry whose folder is gone, with `--dry-run`     |
-||||||| parent of a7742cc (feat(folder): archive a project that is done)
-=======
 | [`folder archive`](doc/projekt_folder_archive.md)    | Move a finished project away and drop it from the config    |
->>>>>>> a7742cc (feat(folder): archive a project that is done)
 | [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos, remotes and worktrees on disk |
 | [`folder status`](doc/projekt_folder_status.md)      | Branch, changes, ahead/behind, stashes, across every folder  |
 | [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories in parallel, with `--dry-run`   |
