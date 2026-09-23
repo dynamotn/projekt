@@ -509,3 +509,32 @@ func TestBuildGitURL_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+func TestRepoTargetPath(t *testing.T) {
+	folder := lazypath.Folder{Path: "/tmp/workspace"}
+
+	tests := []struct {
+		name string
+		repo lazypath.GitRepo
+		want string
+	}{
+		{
+			name: "explicit path",
+			repo: lazypath.GitRepo{Name: "backend", Path: "api"},
+			want: "/tmp/workspace/api",
+		},
+		{
+			name: "path defaults to repo name",
+			repo: lazypath.GitRepo{Name: "backend"},
+			want: "/tmp/workspace/backend",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := repoTargetPath(folder, tt.repo); got != tt.want {
+				t.Errorf("repoTargetPath() = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}

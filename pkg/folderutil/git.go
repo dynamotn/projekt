@@ -73,7 +73,11 @@ func syncFolderGitRepos(folder lazypath.Folder, dryRun bool) error {
 	}
 
 	for _, repo := range folder.Git.Repos {
-		repoPath := filepath.Join(folder.Path, repo.Path)
+		if repo.Name == "" {
+			cli.Warn("Skipping repo with empty name in folder %s", folder.Path)
+			continue
+		}
+		repoPath := repoTargetPath(folder, repo)
 
 		if _, err := os.Stat(repoPath); os.IsNotExist(err) {
 			// Repository doesn't exist, clone it
@@ -123,7 +127,7 @@ func checkFolderGitRepos(folder lazypath.Folder) error {
 	}
 
 	for _, repo := range folder.Git.Repos {
-		repoPath := filepath.Join(folder.Path, repo.Path)
+		repoPath := repoTargetPath(folder, repo)
 
 		if _, err := os.Stat(repoPath); os.IsNotExist(err) {
 			cli.Warn("  [MISSING] %s (%s)", repo.Name, repoPath)
@@ -192,6 +196,16 @@ func splitSSHPort(sshURL string) (host string, port string, ok bool) {
 
 func buildHTTPSURL(server *lazypath.GitServer, group string, repoName string) string {
 	return fmt.Sprintf("%s/%s/%s.git", strings.TrimSuffix(server.HTTPS, "/"), group, repoName)
+}
+
+// repoTargetPath returns where a repo is checked out inside its folder.
+// An unset path defaults to the repo name instead of the folder itself.
+func repoTargetPath(folder lazypath.Folder, repo lazypath.GitRepo) string {
+	relPath := repo.Path
+	if relPath == "" {
+		relPath = repo.Name
+	}
+	return filepath.Join(folder.Path, relPath)
 }
 
 func getGitURLs(server *lazypath.GitServer, group string, repoName string) (primary string, fallback string) {

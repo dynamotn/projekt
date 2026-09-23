@@ -41,7 +41,7 @@ folders:
       group: GROUP/SUBGROUP # Git group/namespace
       repos:
         - name: backend # Repository name
-          path: api # Local folder name
+          path: api # Local folder name, defaults to the repository name
         - name: frontend
           path: web
 ```
