@@ -424,6 +424,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of yielding the empty string.
 
 ### Fixed
+
+- **A failing test could vanish from the report instead of failing.**
+  `dybatpho::cleanup_file_on_exit` took over the EXIT trap of the shell it ran
+  in. Under Bats that trap is how a test result is reported, so any test that
+  created a temporary file — directly, or through `parallel`, `forge`, `ai`,
+  `file` and everything else that makes one — lost its failure: a passing test
+  looked normal, because Bats re-arms its trap after the body, while a failing
+  one disappeared and the run ended with `Executed N-1 instead of N tests`.
+  Every intermittent "a worker died" this suite has shown traced back here, and
+  the message sent every investigation after a crash that never happened.
+
+  The trap is now left alone in the test shell, where Bats owns it and
+  `dybatpho::create_temp` already writes into the directory Bats removes
+  itself, and still installed in a subshell, where nothing of Bats' is at stake
+  and the subshell's exit is the only chance to clean up what it registered.
+  `test/process.bats` pins both halves.
+
+- **`test/parallel.bats` asserted which of two concurrent jobs finished first.**
+  The pool-width test expected `end a` on the third line of the trace, but with
+  a width of two, `a` and `b` run at the same time and sleep for the same
+  interval, so either can finish first — it failed about one run in ten. It now
+  asserts the invariant it describes: the third line is an end, whichever job
+  produced it.
+
+- **`test/conventions.bats` made a committed document stale in place.** It
+  appended a line to `doc/semver.md` to prove the documentation check inspects
+  every source it is given, and restored it afterwards. The suite runs its
+  files in parallel and `test/examples.bats` compares the working tree before
+  and after every example, so whichever example overlapped that window failed.
+  The check is now pointed at a copy in the test's own directory.
+
 - **`dybatpho::is_ci` ignored `CI=false` on a runner that also names itself.**
   The variables were read as a flat list, so a false value only meant "skip to
   the next name". On GitHub Actions, which sets both `CI` and `GITHUB_ACTIONS`,
@@ -889,36 +920,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   down.
 
 ### Fixed
-
-- **A failing test could vanish from the report instead of failing.**
-  `dybatpho::cleanup_file_on_exit` took over the EXIT trap of the shell it ran
-  in. Under Bats that trap is how a test result is reported, so any test that
-  created a temporary file — directly, or through `parallel`, `forge`, `ai`,
-  `file` and everything else that makes one — lost its failure: a passing test
-  looked normal, because Bats re-arms its trap after the body, while a failing
-  one disappeared and the run ended with `Executed N-1 instead of N tests`.
-  Every intermittent "a worker died" this suite has shown traced back here, and
-  the message sent every investigation after a crash that never happened.
-
-  The trap is now left alone in the test shell, where Bats owns it and
-  `dybatpho::create_temp` already writes into the directory Bats removes
-  itself, and still installed in a subshell, where nothing of Bats' is at stake
-  and the subshell's exit is the only chance to clean up what it registered.
-  `test/process.bats` pins both halves.
-
-- **`test/parallel.bats` asserted which of two concurrent jobs finished first.**
-  The pool-width test expected `end a` on the third line of the trace, but with
-  a width of two, `a` and `b` run at the same time and sleep for the same
-  interval, so either can finish first — it failed about one run in ten. It now
-  asserts the invariant it describes: the third line is an end, whichever job
-  produced it.
-
-- **`test/conventions.bats` made a committed document stale in place.** It
-  appended a line to `doc/semver.md` to prove the documentation check inspects
-  every source it is given, and restored it afterwards. The suite runs its
-  files in parallel and `test/examples.bats` compares the working tree before
-  and after every example, so whichever example overlapped that window failed.
-  The check is now pointed at a copy in the test's own directory.
 
 - **Six public functions had no direct test.** `dybatpho::ai_stream`,
   `dybatpho::opts::validate_choice`, `dybatpho::lock_field`,
