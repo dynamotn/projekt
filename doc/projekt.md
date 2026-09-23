@@ -14,6 +14,7 @@ A smart command to work with your project folder
 
 * [projekt boilerplate](projekt_boilerplate.md)	 - Create boilerplate project folder of a language/framework/tool...
 * [projekt config](projekt_config.md)	 - Inspect and edit your configuration file
+* [projekt doctor](projekt_doctor.md)	 - Check that this machine is set up to use projekt
 * [projekt folder](projekt_folder.md)	 - Manage your project folder
 * [projekt init](projekt_init.md)	 - Initialize to install other needed commands
 * [projekt template](projekt_template.md)	 - Create a template file from various sources

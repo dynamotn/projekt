@@ -109,7 +109,22 @@ Completion reads your projects when you press tab, in all three shells, so a
 project you have just created with `b new` or `worktree add` is offered without
 reloading anything.
 
-**3. Register your first folder**
+**3. Check it took**
+
+```console
+$ projekt doctor
+[ok] git: git version 2.55.0
+[ok] binaries: projekt, t and b are on PATH
+[ok] shell integration: sourced for fish
+[warn] configuration: ~/.config/projekt/config.yaml: 0 folder(s), 0 worktree(s), 0 git server(s); nothing to jump to yet, start with `projekt folder add`
+```
+
+It checks git, the binaries, whether the integration is really sourced, the
+configuration and its diagnostics, whether the configured folders are still on
+disk, and the template and boilerplate stores. It changes nothing, and exits
+non-zero when something will not work, so a setup script can gate on it.
+
+**4. Register your first folder**
 
 ```bash
 projekt folder add ~/work/projekt        # one project
@@ -482,6 +497,7 @@ or malformed is a warning rather than the end of the configuration.
 | [`config check`](doc/projekt_config_check.md)        | Validate the config file; exits non-zero, for CI           |
 | [`config edit`](doc/projekt_config_edit.md)          | Open the config in `$EDITOR`, re-validate on exit          |
 | [`init`](doc/projekt_init.md)                        | Emit the shell integration for bash, zsh or fish      |
+| [`doctor`](doc/projekt_doctor.md)                    | Check this machine is set up; exits non-zero, for a script |
 | [`version`](doc/projekt_version.md)                  | Version, commit, tree state and build time                 |
 
 ### 🧩 `t` — templates
