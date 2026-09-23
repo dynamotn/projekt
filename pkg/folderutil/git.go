@@ -259,7 +259,7 @@ func checkGitRemote(repoPath string, server *lazypath.GitServer, gitConfig *lazy
 	cmd := exec.Command("git", "-C", repoPath, "remote", "get-url", "origin")
 	output, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("failed to get remote URL")
+		return fmt.Errorf("failed to get remote URL: %w", err)
 	}
 
 	remoteURL := strings.TrimSpace(string(output))
