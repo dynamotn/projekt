@@ -24,6 +24,9 @@ type ParsedFolder struct {
 // higher priority folder wins when two folders resolve to the same short name.
 func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 	var result []ParsedFolder
+	// shortNames tracks the short names already taken, so that detecting a
+	// duplicate stays constant time instead of scanning the whole result.
+	shortNames := make(map[string]struct{})
 
 	for _, folder := range sortFoldersByPriority(c.Folders) {
 		prefix := ""
@@ -32,7 +35,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 		}
 
 		if !folder.IsWorkspace {
-			result = appendToParsedFolder(result, prefix, folder.Path, "")
+			result = appendToParsedFolder(result, shortNames, prefix, folder.Path, "")
 			continue
 		}
 		re, err := regexp.Compile(folder.GetRegexMatch())
@@ -56,7 +59,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 				continue
 			}
 			cli.Debug("Match: %s", entry.Name())
-			result = appendToParsedFolder(result, prefix, folder.Path, entry.Name())
+			result = appendToParsedFolder(result, shortNames, prefix, folder.Path, entry.Name())
 		}
 	}
 
@@ -87,22 +90,30 @@ func isDirOrLinkToDir(parent string, entry os.DirEntry) bool {
 	return err == nil && info.IsDir()
 }
 
-func appendToParsedFolder(list []ParsedFolder, prefix string, folderPath string, childFolderName string) []ParsedFolder {
+// shortNameSet indexes the short names already present in a list.
+func shortNameSet(list []ParsedFolder) map[string]struct{} {
+	set := make(map[string]struct{}, len(list))
+	for _, pFolder := range list {
+		set[pFolder.ShortName] = struct{}{}
+	}
+	return set
+}
+
+func appendToParsedFolder(list []ParsedFolder, shortNames map[string]struct{}, prefix string, folderPath string, childFolderName string) []ParsedFolder {
 	shortName := prefix + childFolderName
 	if childFolderName == "" {
 		shortName = prefix + filepath.Base(folderPath)
 	}
 
-	// Check for duplicate short names
-	for _, pFolder := range list {
-		if pFolder.ShortName == shortName {
-			childFolderPath := strings.TrimRight(filepath.Join(folderPath, childFolderName), "/")
-			cli.Debug("Not Valid: " + childFolderPath + " with existed short name " + shortName)
-			return list
-		}
-	}
-
 	childFolderPath := strings.TrimRight(filepath.Join(folderPath, childFolderName), "/")
+
+	// Check for duplicate short names
+	if _, exists := shortNames[shortName]; exists {
+		cli.Debug("Not Valid: " + childFolderPath + " with existed short name " + shortName)
+		return list
+	}
+	shortNames[shortName] = struct{}{}
+
 	return append(list, ParsedFolder{
 		ShortName: shortName,
 		Path:      childFolderPath,

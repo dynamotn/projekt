@@ -48,7 +48,7 @@ func BenchmarkAppendToParsedFolder(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = appendToParsedFolder(list, "test-", "/tmp/workspace", "newproject")
+		_ = appendToParsedFolder(list, shortNameSet(list), "test-", "/tmp/workspace", "newproject")
 	}
 }
 
