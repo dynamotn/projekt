@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 
 	"github.com/OpenPeeDeeP/xdg"
 	"github.com/spf13/viper"
@@ -56,19 +57,62 @@ func unmarshalConfig() {
 	}
 }
 
-// Validate checks if the configuration is valid
+// Validate checks if the configuration is valid.
+//
+// Problems that make a folder unusable are returned as an error; problems that
+// only affect one entry (a missing directory, an unknown git server) are logged
+// so the rest of the configuration keeps working.
 func (c *Config) Validate() error {
+	var errs []error
+
+	servers := make(map[string]struct{}, len(c.GitServers))
+	for i, server := range c.GitServers {
+		if server.Name == "" {
+			errs = append(errs, fmt.Errorf("git server at index %d has empty name", i))
+			continue
+		}
+		if _, dup := servers[server.Name]; dup {
+			errs = append(errs, fmt.Errorf("git server %q is defined more than once", server.Name))
+		}
+		servers[server.Name] = struct{}{}
+	}
+
+	paths := make(map[string]struct{}, len(c.Folders))
 	for i, folder := range c.Folders {
 		if folder.Path == "" {
-			return fmt.Errorf("folder at index %d has empty path", i)
+			errs = append(errs, fmt.Errorf("folder at index %d has empty path", i))
+			continue
+		}
+
+		key := cleanPath(folder.Path)
+		if _, dup := paths[key]; dup {
+			errs = append(errs, fmt.Errorf("folder %s is configured more than once", folder.Path))
+		}
+		paths[key] = struct{}{}
+
+		if !filepath.IsAbs(folder.Path) {
+			cli.Warn("Folder path is not absolute, it will resolve against the current directory: %s", folder.Path)
 		}
 		if _, err := os.Stat(folder.Path); err != nil {
 			if os.IsNotExist(err) {
-				cli.Debug(fmt.Sprintf("Folder path does not exist: %s", folder.Path))
+				cli.Debug("Folder path does not exist: %s", folder.Path)
+			} else {
+				cli.Warn("Cannot access folder %s: %v", folder.Path, err)
+			}
+		}
+		if folder.IsWorkspace {
+			if _, err := regexp.Compile(folder.GetRegexMatch()); err != nil {
+				errs = append(errs, fmt.Errorf("folder %s has an invalid regex %q: %w", folder.Path, folder.GetRegexMatch(), err))
+			}
+		}
+		if folder.Git != nil {
+			if _, ok := servers[folder.Git.Host]; !ok {
+				cli.Warn("Folder %s references unknown git server %q", folder.Path, folder.Git.Host)
 			}
 		}
 	}
-	return nil
+
+	return errors.Join(errs...)
 }
 
 // GetConfig returns the current configuration

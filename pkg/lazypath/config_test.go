@@ -234,3 +234,27 @@ func TestInitConfig_KeepsMalformedFile(t *testing.T) {
 	}
 }
 
+func TestConfigValidate_Duplicates(t *testing.T) {
+	config := Config{
+		Folders: []Folder{
+			{Path: "/tmp/dup"},
+			{Path: "/tmp/dup/"},
+		},
+	}
+
+	if err := config.Validate(); err == nil {
+		t.Error("Config.Validate() = nil, want a duplicate folder error")
+	}
+}
+
+func TestConfigValidate_InvalidRegex(t *testing.T) {
+	config := Config{
+		Folders: []Folder{
+			{Path: "/tmp/ws", IsWorkspace: true, RegexMatch: "([a-z"},
+		},
+	}
+
+	if err := config.Validate(); err == nil {
+		t.Error("Config.Validate() = nil, want an invalid regex error")
+	}
+}
