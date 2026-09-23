@@ -131,6 +131,10 @@ fi
 - **FR-004**: Unknown architecture strings MUST remain available to callers instead of being silently discarded.
 - **FR-005**: The module MUST expose normalized platform predicates for common host systems, covering Linux, macOS, and Windows-compatible environments.
 - **FR-006**: The module MUST provide command capability lookup without requiring platform-specific paths.
+- **FR-006a**: The module MUST report the version a command states about itself, probing `--version`, `-version`, `version`, and `-V` in that order until one reveals a version.
+- **FR-006b**: The probe MUST read both output streams, because a good number of tools answer on standard error, and MUST close standard input so that a command which would otherwise wait for input cannot hang the caller.
+- **FR-006c**: The probe MUST fail without output when the command is not installed or when no probe reveals a version, so that the caller can tell "no version" apart from a version.
+- **FR-006d**: The module MUST expose the pattern used to find a version inside arbitrary text, so that the optional `semver` module can reuse it rather than carry a second copy.
 - **FR-007**: The module MUST resolve the host name through `hostname`, `uname -n`, the kernel, and the environment, in that order, MUST let a caller override the answer, and MUST resolve it only once per shell.
 - **FR-008**: The module MUST report the effective user name and MUST expose a predicate for the superuser that works whether or not `EUID` is set.
 - **FR-009**: The module MUST report the number of online processors, and MUST fail rather than substitute a number when no probe answers.
@@ -163,6 +167,8 @@ fi
 - **IT-003**: Pass through an unknown architecture string and verify the helper preserves it.
 - **IT-004**: Verify `platform`, `is_macos`, and `is_linux` use the normalized OS value.
 - **IT-005**: Verify command lookup returns the first available command.
+- **IT-005a**: Verify the version probe reads a version from a flag, from a `version` subcommand, from standard error, and from the surrounding text of a real command.
+- **IT-005b**: Verify the probe fails without output for a command that is not installed and for one that reveals no version, and returns rather than hanging on a command that reads standard input.
 - **IT-006**: Verify the host name is answered from an override, is cached afterwards, and falls back to `uname -n` in a shell whose PATH has no `hostname`.
 - **IT-007**: Verify the user helper matches `id -un` and that the root predicate agrees with the effective user id.
 - **IT-008**: Verify the processor count is a positive integer, comes from `nproc` when it is installed, and fails when no probe can be found.

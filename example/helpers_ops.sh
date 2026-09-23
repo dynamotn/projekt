@@ -5,6 +5,11 @@ SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
 . "${SCRIPTDIR}/../init.sh"
 
 dybatpho::require bash
+# A version range turns "is it installed" into "is it usable". Ranges need the
+# optional `semver` module, and `require` says so rather than letting the range
+# pass unchecked.
+dybatpho::load semver
+dybatpho::require bash '>=4.3'
 dybatpho::default_env EXAMPLE_NAME "dybatpho"
 
 if dybatpho::is command curl; then

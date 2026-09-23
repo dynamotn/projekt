@@ -30,6 +30,7 @@ A leading `v` prefix (e.g. `v1.2.3`) is accepted and stripped automatically.
 - [`dybatpho::semver_satisfies`](#dybatphosemver_satisfies) — Return success when a version satisfies a range. Ranges are written the way npm and Cargo write them: `^1.2.3` for anything compatible, `~1.2.3` for patch updates, plain comparisons such as `>=1.2.0`, partial versions and wildcards such as `1.2.x`, several comparators separated by spaces meaning all of them, and `||` meaning either.
 - [`dybatpho::semver_sort`](#dybatphosemver_sort) — Print versions in order, lowest first. Ordering follows the specification rather than string order, so `1.10.0` comes after `1.9.0` and a pre-release comes before the release it precedes.
 - [`dybatpho::semver_max`](#dybatphosemver_max) — Print the highest of a list of versions.
+- [`dybatpho::semver_coerce`](#dybatphosemver_coerce) — Normalize a version, as a real command reports it, into a semver string the rest of this module accepts. `dybatpho::semver_satisfies` insists on a complete version, and this is what turns what a command actually printed into one. `dybatpho::semver_compare` only looks at `major.minor.patch`, and almost nothing in the wild says its version that way: `tar` answers `1.35`, `yq` answers `v4.53.3` buried in a sentence, and `unzip` answers `6.00`. This fills the missing fields with zero, drops a leading `v`, and strips the leading zeros semver forbids. A version with more than three fields, as several Windows tools report, is cut down to the first three. A trailing `-something` is only kept as a pre-release when it opens with a word that names one. Distributions patch tools and say so in that same place: this host's `grep` answers `3.12-modified`, and Debian builds answer things like `1.2.3-1ubuntu2`. Read as semver, those rank *below* the plain release, so `>=3.12` would reject the very grep that satisfies it. A build marker is dropped; `1.7.1-rc1` keeps its pre-release and still ranks below `1.7.1`, which is what a pre-release is supposed to do.
 
 <a id="see-also"></a>
 ## 🔗 See also
@@ -365,4 +366,60 @@ latest="$(git tag --list 'v*' | dybatpho::semver_max)"
 **🚦 Exit codes**
 
 - `1`: No version was given, or one of them is not valid
+
+
+---
+
+### `dybatpho::semver_coerce`
+
+Normalize a version, as a real command reports it, into a semver
+  string the rest of this module accepts.
+  `dybatpho::semver_satisfies` insists on a complete version, and this is what
+  turns what a command actually printed into one.
+  `dybatpho::semver_compare` only looks at `major.minor.patch`, and almost
+  nothing in the wild says its version that way: `tar` answers `1.35`, `yq`
+  answers `v4.53.3` buried in a sentence, and `unzip` answers `6.00`. This
+  fills the missing fields with zero, drops a leading `v`, and strips the
+  leading zeros semver forbids.
+
+
+  A version with more than three fields, as several Windows tools report, is
+  cut down to the first three.
+
+
+  A trailing `-something` is only kept as a pre-release when it opens with a
+  word that names one. Distributions patch tools and say so in that same
+  place: this host's `grep` answers `3.12-modified`, and Debian builds answer
+  things like `1.2.3-1ubuntu2`. Read as semver, those rank *below* the plain
+  release, so `>=3.12` would reject the very grep that satisfies it. A build
+  marker is dropped; `1.7.1-rc1` keeps its pre-release and still ranks below
+  `1.7.1`, which is what a pre-release is supposed to do.
+
+**🧪 Example**
+
+```bash
+dybatpho::semver_coerce 1.35                   # 1.35.0
+dybatpho::semver_coerce "git version 2.43.0"   # 2.43.0
+dybatpho::semver_coerce v4                     # 4.0.0
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | A version, or any text with one in it |
+
+**📤 Output on stdout**
+
+- The version as `major.minor.patch`, with the pre-release kept
+
+**🚦 Exit codes**
+
+- `0`: A version was found
+- `1`: Stop the script when the text holds no version
+
+**🔗 See also**
+
+- [- `dybatpho::command_version](#dybatphocommand_version)
 

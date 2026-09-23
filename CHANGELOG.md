@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Version constraints: a dependency check that asks how old the tool is.**
+  Until now a dependency was either installed or not, which is the wrong
+  question for a tool whose name is shared by an unrelated program. The YAML
+  helpers call `yq eval`, the Go `yq`; the Python `yq` and the Go one before v4
+  take a different expression syntax, so a presence check passed on a host where
+  every YAML call then failed.
+
+  `dybatpho::require` now takes a version range after the command name, written
+  the way `dybatpho::semver_satisfies` already documents it:
+
+  ```sh
+  dybatpho::load semver
+  dybatpho::require jq '>=1.6'
+  dybatpho::require yq '^4' 3      # 3 is the exit code, as before
+  ```
+
+  A range is recognised only by its leading `>`, `<`, `=`, `^`, or `~`, so the
+  older two-argument form still names an exit code and `require jq 3` keeps
+  meaning what it always did. Ranges need the optional `semver` module, and
+  `require` stops with a message naming it rather than letting a requirement
+  pass unchecked — a check that is silently not enforced is worse than one
+  nobody wrote.
+
+  `dybatpho::doctor` reads the same syntax in its dependency maps. A dependency
+  is now reported as `ok`, `missing`, `outdated`, or `unknown`, with the version
+  it found, and the report fails on a required dependency that is outdated just
+  as it does on one that is absent. It does not fail on `unknown`: a probe that
+  could not read a version has not shown that anything is wrong. Only a
+  dependency that names a range is ever executed, so the report stays a report.
+
+  The first such constraint ships with it: `json` now requires `yq>=4`.
+
+  New: `dybatpho::command_version`, which reports the version a command states
+  about itself, and `dybatpho::semver_coerce`, which turns that answer into the
+  complete SemVer the range matcher needs — `tar` says `1.35`, `unzip` says
+  `6.00`, and `yq` buries `v4.53.3` in a sentence.
+
+  `semver_coerce` keeps a trailing `-rc1` as a pre-release but drops a build
+  marker such as the `-modified` a distribution appends to its patched `grep`.
+  Read as a pre-release, that version ranks *below* the plain release, and
+  `>=3.12` would have rejected the very grep that satisfies it.
+
 - **`os` — the host facts every module was detecting for itself.** The module
   now answers what a script actually needs to know about the machine it runs
   on, so that a worker pool, a log banner and a lock file stop each carrying

@@ -93,6 +93,11 @@ declare -A __dybatpho_module_deps=(
   [pkg]="safety"
   [release]="semver git archive"
   [i18n]="date"
+  # A dependency may name a version, and comparing versions is what `semver` is
+  # for. The edge is cheap here: a diagnostic is not on anyone's hot path, which
+  # is why the version constraint lives in the report rather than in `config`,
+  # whose own `yq` call would drag `semver` into every script loading `cli`.
+  [doctor]="semver"
 )
 
 #######################################

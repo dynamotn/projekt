@@ -317,6 +317,75 @@ _os_release() {
   WSL_INTEROP=/run/WSL/1 run -0 dybatpho::is_wsl
 }
 
+# Put a command on PATH that answers a version probe however the test wants.
+# `$1` is the command, `$2` the flag it answers to, `$3` what it prints; any
+# other flag exits non-zero without output, the way a real tool does.
+fake_tool() {
+  local dir="${BATS_TEST_TMPDIR}/probe_bin"
+  mkdir -p "${dir}"
+  printf '#!/usr/bin/env bash\n[[ "$1" == %q ]] || exit 1\nprintf "%%s\\n" %q\n' "$2" "$3" \
+    > "${dir}/$1"
+  chmod +x "${dir}/$1"
+  PATH="${dir}:${PATH}"
+}
+
+@test "dybatpho::command_version reads the version a command prints" {
+  fake_tool faketool --version "faketool 2.4.1"
+  assert_equal "$(dybatpho::command_version faketool)" "2.4.1"
+}
+
+@test "dybatpho::command_version finds the version among the rest of the output" {
+  fake_tool faketool --version "yq (https://github.com/mikefarah/yq/) version v4.53.3"
+  assert_equal "$(dybatpho::command_version faketool)" "4.53.3"
+}
+
+@test "dybatpho::command_version falls back to the other probes" {
+  # Go and Docker style tools answer a `version` subcommand, not a flag.
+  fake_tool faketool version "faketool version 1.21.5"
+  assert_equal "$(dybatpho::command_version faketool)" "1.21.5"
+}
+
+@test "dybatpho::command_version reads a version printed on standard error" {
+  local dir="${BATS_TEST_TMPDIR}/probe_bin"
+  mkdir -p "${dir}"
+  printf '#!/usr/bin/env bash\nprintf "noisy 3.2.1\\n" >&2\n' > "${dir}/faketool"
+  chmod +x "${dir}/faketool"
+  PATH="${dir}:${PATH}"
+  assert_equal "$(dybatpho::command_version faketool)" "3.2.1"
+}
+
+@test "dybatpho::command_version fails on a command that reveals no version" {
+  local dir="${BATS_TEST_TMPDIR}/probe_bin"
+  mkdir -p "${dir}"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${dir}/faketool"
+  chmod +x "${dir}/faketool"
+  PATH="${dir}:${PATH}"
+  run ! dybatpho::command_version faketool
+  assert_output ""
+}
+
+@test "dybatpho::command_version fails on a command that is not installed" {
+  run ! dybatpho::command_version dyfoooo
+  assert_output ""
+}
+
+@test "dybatpho::command_version does not hang on a command that reads stdin" {
+  # Standard input is closed for the probe, so a tool that would otherwise wait
+  # for input returns instead of stalling the script.
+  local dir="${BATS_TEST_TMPDIR}/probe_bin"
+  mkdir -p "${dir}"
+  printf '#!/usr/bin/env bash\ncat\n' > "${dir}/faketool"
+  chmod +x "${dir}/faketool"
+  PATH="${dir}:${PATH}"
+  run ! dybatpho::command_version faketool
+}
+
+@test "dybatpho::command_version reads the version of a real command" {
+  # `BASH_VERSION` is `5.2.21(1)-release`, and the version is what comes before
+  # the patch-level parenthesis.
+  assert_equal "$(dybatpho::command_version bash)" "${BASH_VERSION%%(*}"
+}
+
 @test "dybatpho::is_ci recognizes a service and honors a disabled one" {
   CI=true run -0 dybatpho::is_ci
   GITHUB_ACTIONS=true run -0 dybatpho::is_ci

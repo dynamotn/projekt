@@ -23,8 +23,24 @@
 #   A dependency written as `a|b` is satisfied by any one of the alternatives:
 #   `file` hashes with whichever of `sha256sum`, `shasum`, or `openssl` exists.
 #
-#   Only missing **required** dependencies make `dybatpho::doctor` fail, so an
-#   optional entry is information rather than a problem.
+#   A dependency may also name a version, as in `yq>=4`, using the range syntax
+#   of `dybatpho::semver_satisfies` minus the spaces, which separate one spec
+#   from the next here. Being installed is then not enough: the wrong major
+#   release of a tool is its own kind of missing, and `yq` is the example that
+#   prompted this, since the Go `yq` this library calls and the Python program
+#   of the same name share nothing but a name.
+#
+#   A dependency is reported as one of four statuses:
+#
+#   - **ok** — installed, and new enough when a version was asked for;
+#   - **missing** — no alternative is installed;
+#   - **outdated** — installed, but the version does not satisfy the constraint;
+#   - **unknown** — installed, but the version could not be read.
+#
+#   Only **required** dependencies that are missing or outdated make
+#   `dybatpho::doctor` fail. An optional entry is information rather than a
+#   problem, and so is `unknown`: a probe that could not read a version has not
+#   shown that anything is wrong.
 # @see
 #   - `example/doctor_ops.sh`
 #   - `scripts/bundle.sh`
@@ -43,7 +59,10 @@ declare -gA DYBATPHO_DOCTOR_REQUIRED=(
   [ai]="curl"
   [archive]="tar"
   [git]="git"
-  [json]="yq"
+  # The YAML helpers call `yq eval`, which is the Go `yq`. The unrelated Python
+  # `yq` and the Go one before v4 both take a different expression syntax, so a
+  # plain presence check would pass on a host where every YAML call then fails.
+  [json]="yq>=4"
   [network]="curl"
 )
 # @env DYBATPHO_DOCTOR_OPTIONAL array Optional external commands per module
@@ -61,28 +80,97 @@ declare -gA DYBATPHO_DOCTOR_OPTIONAL=(
 )
 
 #######################################
-# @description Return success when a dependency spec is satisfied.
-#   A spec is one command name, or several separated by `|` when any one of
-#   them will do.
-# @arg $1 string Dependency spec, such as `curl` or `sha256sum|shasum`
-# @arg $2 string Optional name of the variable that receives the resolved path
-# @set The named variable, to the path of the command that satisfied the spec
-# @exitcode 0 At least one of the alternatives is installed
-# @exitcode 1 None of the alternatives is installed
+# @description Rank a status, so that the least satisfying alternative of a spec
+#   is not the one that gets reported.
+#   When no alternative satisfies the spec, the most specific complaint is the
+#   useful one: `outdated` names a version to upgrade, `unknown` names a command
+#   that is at least installed, and `missing` says the least.
+# @arg $1 string Status
+# @stdout The rank, higher being more worth reporting
+#######################################
+function __dybatpho_doctor_rank {
+  case "$1" in
+    outdated) printf '3' ;;
+    unknown) printf '2' ;;
+    *) printf '1' ;;
+  esac
+}
+
+#######################################
+# Where a command name ends and a version range begins. The operator characters
+# are listed with `^` in a position where it is an ordinary member, and the
+# pattern is held in a variable rather than written inline: an unquoted pattern
+# goes through quote removal first, so an escaped `\^` would arrive at the regex
+# engine as a bare `^` at the head of the bracket expression and negate it,
+# which matches nearly every character instead of none.
+__DYBATPHO_DOCTOR_SPEC_REGEX='^([^<>=^~]+)([<>=^~].*)$'
+
+#######################################
+# @description Split a dependency alternative into its command and version range.
+#   A range here cannot contain a space, because the maps separate one spec from
+#   the next with one. `^4` says what `>=4 <5` would have said.
+# @arg $1 string One alternative, such as `yq` or `yq>=4`
+# @stdout Two lines: the command name, and the range or an empty line
+#######################################
+function __dybatpho_doctor_split {
+  if [[ "$1" =~ ${__DYBATPHO_DOCTOR_SPEC_REGEX} ]]; then
+    printf '%s\n%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+  else
+    printf '%s\n\n' "$1"
+  fi
+}
+
+#######################################
+# @description Decide whether a dependency spec is satisfied, and how.
+#   A spec is one alternative, or several separated by `|` when any one of them
+#   will do. An alternative may carry a version constraint, as in `yq>=4`, in
+#   which case being installed is not enough on its own.
+#
+#   Only an alternative that carries a constraint is asked for its version. A
+#   report has no business running every tool on the host to print a table, and
+#   the version of a dependency nothing has an opinion about is not news.
+# @arg $1 string Dependency spec, such as `curl`, `sha256sum|shasum`, or `yq>=4`
+# @stdout One line of `status<TAB>path<TAB>version`, where status is `ok`,
+#   `outdated`, `unknown`, or `missing`
+# @exitcode 0 An alternative is installed and satisfies its constraint
+# @exitcode 1 No alternative does
 #######################################
 function __dybatpho_doctor_resolve {
   local spec="$1"
-  # The locals are named apart from anything a caller is likely to pass as the
-  # output variable, which `printf -v` would otherwise write to the local copy.
-  local __doctor_command __doctor_path
-  for __doctor_command in ${spec//|/ }; do
-    __doctor_path="$(command -v "${__doctor_command}" 2> /dev/null || true)"
-    if [[ -n "${__doctor_path}" ]]; then
-      [[ -z "${2-}" ]] || printf -v "$2" '%s' "${__doctor_path}"
+  local alternative command_name constraint path version
+  local status="missing" best_status="missing" best_path="" best_version=""
+  local -a parts
+  for alternative in ${spec//|/ }; do
+    mapfile -t -n 2 parts < <(__dybatpho_doctor_split "${alternative}")
+    command_name="${parts[0]}"
+    constraint="${parts[1]-}"
+
+    path="$(command -v "${command_name}" 2> /dev/null || true)"
+    [[ -n "${path}" ]] || continue
+
+    if [[ -z "${constraint}" ]]; then
+      printf '%s\t%s\t%s\n' "ok" "${path}" ""
       return 0
     fi
+
+    if version="$(dybatpho::command_version "${command_name}")"; then
+      if dybatpho::semver_satisfies "$(dybatpho::semver_coerce "${version}")" "${constraint}"; then
+        printf '%s\t%s\t%s\n' "ok" "${path}" "${version}"
+        return 0
+      fi
+      status="outdated"
+    else
+      status="unknown"
+      version=""
+    fi
+
+    if (($(__dybatpho_doctor_rank "${status}") > $(__dybatpho_doctor_rank "${best_status}"))); then
+      best_status="${status}"
+      best_path="${path}"
+      best_version="${version}"
+    fi
   done
-  [[ -z "${2-}" ]] || printf -v "$2" '%s' ""
+  printf '%s\t%s\t%s\n' "${best_status}" "${best_path}" "${best_version}"
   return 1
 }
 
@@ -169,8 +257,8 @@ function __dybatpho_doctor_json_escape {
 
 #######################################
 # @description Collect every dependency row a scope produces.
-#   A row is `module<TAB>spec<TAB>kind<TAB>status<TAB>path`, which keeps the
-#   text and JSON renderers reading the same data.
+#   A row is `module<TAB>spec<TAB>kind<TAB>status<TAB>path<TAB>version`, which
+#   keeps the text and JSON renderers reading the same data.
 # @arg $1 string Name of the array variable that receives the rows
 # @arg $@ string Module names to inspect
 # @set The named array, to one row per dependency
@@ -179,7 +267,7 @@ function __dybatpho_doctor_rows {
   local -n __rows_out="$1"
   shift
   __rows_out=()
-  local module kind specs spec status path
+  local module kind specs spec status path version resolved
   for module in "$@"; do
     for kind in required optional; do
       case "${kind}" in
@@ -187,12 +275,11 @@ function __dybatpho_doctor_rows {
         optional) specs="${DYBATPHO_DOCTOR_OPTIONAL[${module}]-}" ;;
       esac
       for spec in ${specs}; do
-        if __dybatpho_doctor_resolve "${spec}" path; then
-          status="ok"
-        else
-          status="missing"
-        fi
-        __rows_out+=("${module}"$'\t'"${spec}"$'\t'"${kind}"$'\t'"${status}"$'\t'"${path}")
+        # The exit code only repeats what the status says, and a non-zero one
+        # would end the report under `errexit`.
+        resolved="$(__dybatpho_doctor_resolve "${spec}" || true)"
+        IFS=$'\t' read -r status path version <<< "${resolved}"
+        __rows_out+=("${module}"$'\t'"${spec}"$'\t'"${kind}"$'\t'"${status}"$'\t'"${path}"$'\t'"${version}")
       done
     done
   done
@@ -224,19 +311,24 @@ function __dybatpho_doctor_report_text {
   # module and command names are.
   local module_width=6 spec_width=10 row module spec
   for row in "${__rows_in[@]}"; do
-    IFS=$'\t' read -r module spec _ _ _ <<< "${row}"
+    IFS=$'\t' read -r module spec _ _ _ _ <<< "${row}"
     ((${#module} <= module_width)) || module_width=${#module}
     ((${#spec} <= spec_width)) || spec_width=${#spec}
   done
 
-  local kind status path
+  local kind status path version detail
   printf '\n%-*s  %-*s  %-8s  %s\n' \
     "${module_width}" "MODULE" "${spec_width}" "DEPENDENCY" "KIND" "STATUS"
   for row in "${__rows_in[@]}"; do
-    IFS=$'\t' read -r module spec kind status path <<< "${row}"
+    IFS=$'\t' read -r module spec kind status path version <<< "${row}"
+    # The version comes first in the parenthesis because it is what the reader
+    # is checking when a spec carries a constraint; the path answers "which one
+    # did you find", which only matters once there is any doubt.
+    detail="${version}"
+    detail="${detail}${detail:+${path:+, }}${path}"
     printf '%-*s  %-*s  %-8s  %s\n' \
       "${module_width}" "${module}" "${spec_width}" "${spec}" "${kind}" \
-      "${status}${path:+ (${path})}"
+      "${status}${detail:+ (${detail})}"
   done
 }
 
@@ -267,18 +359,19 @@ function __dybatpho_doctor_report_json {
     printf '"%s"' "$(__dybatpho_doctor_json_escape "${module}")"
   done
   printf ']'
-  local row spec kind status path
+  local row spec kind status path version
   first=1
   printf ',"dependencies":['
   for row in "${__rows_in[@]}"; do
-    IFS=$'\t' read -r module spec kind status path <<< "${row}"
+    IFS=$'\t' read -r module spec kind status path version <<< "${row}"
     ((first)) || printf ','
     first=0
-    printf '{"module":"%s","dependency":"%s","kind":"%s","status":"%s","path":"%s"}' \
+    printf '{"module":"%s","dependency":"%s","kind":"%s","status":"%s","path":"%s","version":"%s"}' \
       "$(__dybatpho_doctor_json_escape "${module}")" \
       "$(__dybatpho_doctor_json_escape "${spec}")" \
       "${kind}" "${status}" \
-      "$(__dybatpho_doctor_json_escape "${path}")"
+      "$(__dybatpho_doctor_json_escape "${path}")" \
+      "$(__dybatpho_doctor_json_escape "${version}")"
   done
   printf ']'
 }
@@ -319,19 +412,38 @@ function dybatpho::doctor {
 
   # Collect what is missing before printing, so the text summary and the exit
   # code describe the same run.
-  local row spec kind status missing_required=() missing_optional=()
+  local row spec kind status version
+  local missing_required=() missing_optional=() unknown=()
+  local outdated_required=() outdated_optional=()
   for row in "${rows[@]}"; do
-    IFS=$'\t' read -r _ spec kind status _ <<< "${row}"
-    [[ "${status}" == "missing" ]] || continue
-    if [[ "${kind}" == "required" ]]; then
-      missing_required+=("${spec}")
-    else
-      missing_optional+=("${spec}")
-    fi
+    IFS=$'\t' read -r _ spec kind status _ version <<< "${row}"
+    case "${status}" in
+      missing)
+        if [[ "${kind}" == "required" ]]; then
+          missing_required+=("${spec}")
+        else
+          missing_optional+=("${spec}")
+        fi
+        ;;
+      outdated)
+        if [[ "${kind}" == "required" ]]; then
+          outdated_required+=("${spec} (found ${version})")
+        else
+          outdated_optional+=("${spec} (found ${version})")
+        fi
+        ;;
+      unknown) unknown+=("${spec}") ;;
+    esac
   done
 
   local healthy=0
   ((${#missing_required[@]} == 0)) || healthy=1
+  # A required tool that is installed but too old fails the report for the same
+  # reason a missing one does: the module that declared the constraint will not
+  # work. An optional one does not, matching how an optional missing tool is
+  # treated. A version that could not be read fails nothing at all, because "I
+  # could not tell" is not the same claim as "it is wrong".
+  ((${#outdated_required[@]} == 0)) || healthy=1
   dybatpho::doctor_bash_supported || healthy=1
 
   if [[ "${quiet}" == "true" ]]; then
@@ -351,8 +463,17 @@ function dybatpho::doctor {
   if ((${#missing_optional[@]} > 0)); then
     printf 'Optional, some functions are unavailable: %s\n' "${missing_optional[*]}"
   fi
+  if ((${#outdated_optional[@]} > 0)); then
+    printf 'Optional, too old: %s\n' "${outdated_optional[*]}"
+  fi
+  if ((${#unknown[@]} > 0)); then
+    printf 'Installed, version could not be read: %s\n' "${unknown[*]}"
+  fi
   if ((${#missing_required[@]} > 0)); then
     printf 'Missing required: %s\n' "${missing_required[*]}"
+  fi
+  if ((${#outdated_required[@]} > 0)); then
+    printf 'Required, too old: %s\n' "${outdated_required[*]}"
   fi
   dybatpho::doctor_bash_supported \
     || printf 'Bash %s is older than the supported minimum %s\n' \

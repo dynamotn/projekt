@@ -138,9 +138,15 @@ scripts/bundle.sh --modules "logging git semver" --output dist/dybatpho.sh
 - **FR-001**: The module MUST declare, per module, the external commands that module can call, split into required and optional.
 - **FR-002**: A dependency MUST be able to name alternatives, and MUST count as satisfied when any one of them is installed.
 - **FR-003**: The report MUST cover the loaded modules by default, an explicit module list when given one, and the whole registry on request.
-- **FR-004**: The report MUST state, for every dependency, the module, the dependency, whether it is required or optional, and whether it was found, including the resolved path when it was.
+- **FR-002a**: A dependency MUST be able to name a version range, written in the range syntax of `dybatpho::semver_satisfies` without spaces, and an alternative carrying one MUST count as satisfied only when the installed version falls inside it.
+- **FR-002b**: The module MUST ask a dependency for its version only when that dependency names a range, so that a report never executes a tool nothing has an opinion about.
+- **FR-002c**: When no alternative of a dependency satisfies it, the report MUST name the most specific outcome available, preferring an alternative that is installed but outdated over one whose version could not be read, and either over nothing being installed.
+- **FR-004**: The report MUST state, for every dependency, the module, the dependency, whether it is required or optional, and whether it was found, including the resolved path and, when a version was read, that version.
+- **FR-004a**: The report MUST classify every dependency as `ok`, `missing`, `outdated`, or `unknown`, where `outdated` means installed but outside the declared range and `unknown` means installed with a version that could not be read.
 - **FR-005**: The report MUST state the library version, the running Bash version, the supported Bash minimum, and the host platform.
 - **FR-006**: The report MUST fail when a required dependency is missing or the running Bash is older than the supported minimum, and MUST succeed when only optional dependencies are missing.
+- **FR-006a**: The report MUST fail when a required dependency is installed but outdated, and MUST NOT fail for an outdated optional dependency.
+- **FR-006b**: The report MUST NOT fail for a dependency whose version could not be read, because a probe that could not tell has not shown that anything is wrong.
 - **FR-007**: The report MUST offer a quiet mode that prints nothing and answers through the exit code.
 - **FR-008**: The report MUST offer a JSON mode that emits one object, and MUST build it without depending on an external JSON tool.
 - **FR-009**: The module MUST stop the script with a clear message for an unknown module name, an unknown dependency kind, or an unknown option.
@@ -166,6 +172,7 @@ scripts/bundle.sh --modules "logging git semver" --output dist/dybatpho.sh
 ### Measurable Outcomes
 
 - **SC-001**: A user learns every missing dependency of a script in one run instead of one failure per tool.
+- **SC-001a**: A user learns that an installed tool is the wrong version before the script reaches the function that needs it, rather than from that function's error.
 - **SC-002**: An automated consumer can decide on the exit code alone, without parsing the text report.
 - **SC-003**: Any consumer can name the exact library version it is running.
 - **SC-004**: A project can adopt the library by copying one generated file.
@@ -179,9 +186,16 @@ scripts/bundle.sh --modules "logging git semver" --output dist/dybatpho.sh
 - **IT-004**: Verify a missing required dependency fails the report and is named in the summary.
 - **IT-005**: Verify a missing optional dependency is reported without failing the run.
 - **IT-006**: Verify an any-of dependency is satisfied by any alternative and missing only when every alternative is.
+- **IT-006a**: Verify a dependency naming a range is reported `ok` with its version when the installed version satisfies it.
+- **IT-006b**: Verify a required dependency that is installed but outside its range is reported `outdated`, named in the summary, and fails the run.
+- **IT-006c**: Verify a dependency whose version cannot be read is reported `unknown`, named in the summary, and does not fail the run.
+- **IT-006d**: Verify an outdated optional dependency is named in the summary without failing the run.
+- **IT-006e**: Verify an any-of dependency prefers an alternative inside its range, and reports `outdated` rather than `missing` when only an out-of-range alternative is installed.
+- **IT-006f**: Verify a dependency that names no range is never executed by the report.
 - **IT-007**: Verify the default scope, an explicit list, a comma separated list, and the whole registry.
 - **IT-008**: Verify quiet mode prints nothing and reports through the exit code in both directions.
 - **IT-009**: Verify JSON mode emits one parseable object containing the version, Bash details, modules, dependencies, and overall result.
+- **IT-009a**: Verify JSON mode carries the detected version of a dependency and reports an outdated required dependency as not ok.
 - **IT-010**: Verify an unknown option and a `--modules` without a value stop the script.
 - **IT-011**: Verify the version comes from the version file, drops a leading `v`, is cached, honors an environment override, and falls back when no file exists.
 - **IT-011a**: Verify the version names the current short commit, marks a dirty working tree, and reports the stamped version alone when the library is vendored inside another repository.

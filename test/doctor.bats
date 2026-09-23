@@ -23,6 +23,18 @@ only_fakes() {
   PATH="${DOCTOR_BIN}"
 }
 
+# A fake that answers any version probe with the given text, so that a test can
+# decide what version the host appears to have.
+#
+# The shebang is an absolute `/bin/sh` rather than `/usr/bin/env bash`, because
+# `only_fakes` narrows PATH down to the fake directory: `env` would find no
+# `bash` there, the fake would never run, and every version would read as
+# undetectable no matter what the test set up.
+fake_versioned_command() {
+  printf '#!/bin/sh\necho %q\n' "$2" > "${DOCTOR_BIN}/$1"
+  PATH="${ORIGINAL_PATH}" chmod +x "${DOCTOR_BIN}/$1"
+}
+
 @test "dybatpho::doctor_requirements lists required dependencies" {
   run -0 dybatpho::doctor_requirements archive required
   assert_output "tar"
@@ -42,7 +54,7 @@ only_fakes() {
 
 @test "dybatpho::doctor_requirements defaults to every kind" {
   run -0 dybatpho::doctor_requirements json
-  assert_line --index 0 "yq"
+  assert_line --index 0 "yq>=4"
   assert_line --index 1 "jq"
 }
 
@@ -179,4 +191,91 @@ only_fakes() {
 @test "dybatpho::doctor rejects --modules without a value" {
   run -1 dybatpho::doctor --modules
   assert_output --partial "--modules expects a module list"
+}
+
+@test "dybatpho::doctor marks a dependency ok and names the version when it satisfies the constraint" {
+  only_fakes
+  fake_versioned_command yq "yq (https://github.com/mikefarah/yq/) version v4.53.3"
+  run -0 dybatpho::doctor --modules json
+  assert_output --partial "yq>=4"
+  assert_output --partial "ok (4.53.3, ${DOCTOR_BIN}/yq)"
+  assert_output --partial "No required dependency is missing."
+}
+
+@test "dybatpho::doctor fails a required dependency that is installed but too old" {
+  only_fakes
+  fake_versioned_command yq "yq version 3.4.3"
+  run -1 dybatpho::doctor --modules json
+  assert_output --partial "outdated (3.4.3,"
+  assert_output --partial "Required, too old: yq>=4 (found 3.4.3)"
+  refute_output --partial "No required dependency is missing."
+}
+
+@test "dybatpho::doctor reports a version it cannot read without failing on it" {
+  only_fakes
+  # Installed, but silent on every probe: the report may not claim that this is
+  # the wrong version, only that it could not tell.
+  fake_command yq
+  run -0 dybatpho::doctor --modules json
+  assert_output --partial "unknown"
+  assert_output --partial "Installed, version could not be read: yq>=4"
+  refute_output --partial "Required, too old"
+}
+
+@test "dybatpho::doctor does not run a dependency that carries no constraint" {
+  only_fakes
+  # `curl` has no constraint, so the report has no reason to execute it. A fake
+  # that fails the test if run proves the report stayed a report.
+  printf '#!/bin/sh\necho ran > %q\n' "${BATS_TEST_TMPDIR}/ran" \
+    > "${DOCTOR_BIN}/curl"
+  PATH="${ORIGINAL_PATH}" chmod +x "${DOCTOR_BIN}/curl"
+  run -0 dybatpho::doctor --modules network
+  assert_output --partial "ok (${DOCTOR_BIN}/curl)"
+  [ ! -e "${BATS_TEST_TMPDIR}/ran" ]
+}
+
+@test "dybatpho::doctor prefers an alternative that satisfies its constraint" {
+  only_fakes
+  DYBATPHO_DOCTOR_REQUIRED[string]="oldtool>=2|newtool>=2"
+  fake_versioned_command oldtool "oldtool 1.0.0"
+  fake_versioned_command newtool "newtool 2.5.0"
+  run -0 dybatpho::doctor --modules string
+  assert_output --partial "ok (2.5.0, ${DOCTOR_BIN}/newtool)"
+  unset 'DYBATPHO_DOCTOR_REQUIRED[string]'
+}
+
+@test "dybatpho::doctor reports outdated rather than missing when one alternative is merely old" {
+  only_fakes
+  DYBATPHO_DOCTOR_REQUIRED[string]="oldtool>=2|newtool>=2"
+  fake_versioned_command oldtool "oldtool 1.0.0"
+  run -1 dybatpho::doctor --modules string
+  assert_output --partial "outdated (1.0.0,"
+  unset 'DYBATPHO_DOCTOR_REQUIRED[string]'
+}
+
+@test "dybatpho::doctor --json carries the detected version" {
+  only_fakes
+  fake_versioned_command yq "yq version v4.53.3"
+  run -0 dybatpho::doctor --modules json --json
+  assert_output --partial '"dependency":"yq>=4"'
+  assert_output --partial '"status":"ok"'
+  assert_output --partial '"version":"4.53.3"'
+}
+
+@test "dybatpho::doctor --json reports an outdated required dependency as not ok" {
+  only_fakes
+  fake_versioned_command yq "yq version 3.4.3"
+  run -1 dybatpho::doctor --modules json --json
+  assert_output --partial '"status":"outdated"'
+  assert_output --partial '"version":"3.4.3"'
+  assert_output --partial '"ok":false'
+}
+
+@test "dybatpho::doctor keeps an outdated optional dependency out of the exit code" {
+  only_fakes
+  DYBATPHO_DOCTOR_OPTIONAL[string]="oldtool>=2"
+  fake_versioned_command oldtool "oldtool 1.0.0"
+  run -0 dybatpho::doctor --modules string
+  assert_output --partial "Optional, too old: oldtool>=2 (found 1.0.0)"
+  unset 'DYBATPHO_DOCTOR_OPTIONAL[string]'
 }

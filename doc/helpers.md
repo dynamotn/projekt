@@ -33,7 +33,7 @@ modules rely on:
 - [`dybatpho::expect_args`](#dybatphoexpect_args) — Validate function arguments and assign them into named local variables.
 - [`dybatpho::still_has_args`](#dybatphostill_has_args) — Check whether at least one more positional argument remains after the current one. This helper is useful while manually parsing a shifting argument list.
 - [`dybatpho::expect_envs`](#dybatphoexpect_envs) — Ensure that required environment variables are set.
-- [`dybatpho::require`](#dybatphorequire) — Ensure that a required command is installed.
+- [`dybatpho::require`](#dybatphorequire) — Ensure that a required command is installed, and new enough. With a version range, the command is asked what version it is through `dybatpho::command_version`, the answer is normalized by `dybatpho::semver_coerce`, and the result is matched with `dybatpho::semver_satisfies`. The range is written the way that function documents it: `>=1.6`, `^4`, `>=1.2 <2`, `1.2.x`, or alternatives with `||`. The range has to open with one of `>`, `<`, `=`, `^`, or `~`. A bare `4` is a valid range on its own elsewhere, but this argument has meant an exit code since before ranges existed here, and no amount of cleverness makes `require jq 3` mean both things at once. Matching a version needs the optional `semver` module. Rather than let a range pass unchecked in a script that did not load it, this stops with a message naming what to load: a requirement that is silently not enforced is worse than one that was never written. A command whose version cannot be read is also a failure, for the same reason. `dybatpho::doctor` treats that case as a report rather than a failure, because a report is allowed to say "I could not tell".
 - [`dybatpho::command_exists_all`](#dybatphocommand_exists_all) — Return success when all listed commands are available.
 - [`dybatpho::is`](#dybatphois) — Check whether a value matches a supported shell-oriented condition.
 - [`dybatpho::coalesce`](#dybatphocoalesce) — Print the first non-empty value from a list of fallbacks.
@@ -236,20 +236,56 @@ dybatpho::expect_envs ENV_VAR1 ENV_VAR2
 
 ### `dybatpho::require`
 
-Ensure that a required command is installed.
+Ensure that a required command is installed, and new enough.
+  With a version range, the command is asked what version it is through
+  `dybatpho::command_version`, the answer is normalized by
+  `dybatpho::semver_coerce`, and the result is matched with
+  `dybatpho::semver_satisfies`. The range is written the way that function
+  documents it: `>=1.6`, `^4`, `>=1.2 <2`, `1.2.x`, or alternatives with `||`.
+
+
+  The range has to open with one of `>`, `<`, `=`, `^`, or `~`. A bare `4`
+  is a valid range on its own elsewhere, but this argument has meant an exit
+  code since before ranges existed here, and no amount of cleverness makes
+  `require jq 3` mean both things at once.
+
+
+  Matching a version needs the optional `semver` module. Rather than let a
+  range pass unchecked in a script that did not load it, this stops with a
+  message naming what to load: a requirement that is silently not enforced is
+  worse than one that was never written.
+
+
+  A command whose version cannot be read is also a failure, for the same
+  reason. `dybatpho::doctor` treats that case as a report rather than a
+  failure, because a report is allowed to say "I could not tell".
+
+**🧪 Example**
+
+```bash
+dybatpho::require git
+dybatpho::require jq '>=1.6'
+dybatpho::require yq '^4' 3
+
+```
 
 **🧾 Arguments**
 
 | Name | Type | Description |
 | --- | --- | --- |
 | `$1` | string | Command that must be available |
-| `$2` | number | Exit code if not installed (default 127) |
+| `$2` | string | Version range opening with an operator, or the exit code |
+| `$3` | number | Exit code when a range was given (default 127) |
 
 **🚦 Exit codes**
 
-- `127`: Stop script if command isn't installed
-- `0`: The command is available
-- `other`: Exit code if command isn't installed and second argument is set
+- `127`: Stop script if command isn't installed, or is outside the range
+- `0`: The command is available and satisfies the range
+- `other`: Exit code given as an argument, instead of 127
+
+**🔗 See also**
+
+- [- `dybatpho::command_version` - `dybatpho::semver_coerce` - `dybatpho::semver_satisfies](#dybatphocommand_version-dybatphosemver_coerce-dybatphosemver_satisfies)
 
 
 ---

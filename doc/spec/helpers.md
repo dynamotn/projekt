@@ -143,6 +143,12 @@ _deploy prod "${DEPLOY_TOKEN:-}"
 - **FR-001**: The module MUST assign positional inputs into named variables through a reusable expectation helper.
 - **FR-002**: The module MUST verify that required environment variables are set.
 - **FR-003**: The module MUST verify that external commands are installed before work proceeds.
+- **FR-003a**: The command check MUST accept an optional version range, written in the range syntax of `dybatpho::semver_satisfies`, and MUST stop the script when the installed version falls outside it.
+- **FR-003b**: A range MUST be recognised only by its leading operator, one of `>`, `<`, `=`, `^`, or `~`, so that the same argument keeps its older meaning as an exit code and a bare number is never read as a range.
+- **FR-003c**: The command check MUST verify that the command exists before it asks for a version, so the message names the real problem.
+- **FR-003d**: When a range is given and the optional `semver` module is not loaded, the command check MUST stop the script with a message naming what to load, rather than let the range pass unchecked.
+- **FR-003e**: When a range is given and the installed version cannot be read, the command check MUST stop the script, because a requirement that cannot be verified has not been met.
+- **FR-003f**: The command check MUST normalize the reported version before matching it, so that a command answering `1.35` or `3.12-modified` is judged on the release it is.
 - **FR-004**: The module MUST provide `is` conditions for command, function,
   file, directory, link, existence, readable, writable, executable, set,
   empty, number, integer, true, and false values.
@@ -188,6 +194,9 @@ _deploy prod "${DEPLOY_TOKEN:-}"
 - **IT-002**: Evaluate representative predicate types such as `file`, `dir`, `command`, `true`, and `int` to verify behavior.
 - **IT-003**: Pass empty and non-empty fallback candidates to coalesce and verify first-match and no-match behavior.
 - **IT-004**: Run retry around a flaky command and verify escalating delays and final success.
+- **IT-004a**: Verify the command check accepts a command inside its range and rejects one outside it, naming the version it found, with the default and a custom exit code.
+- **IT-004b**: Verify a version that is not full SemVer, and one carrying a distribution's build marker, are judged on the release they are.
+- **IT-004c**: Verify a bare second argument still means an exit code, that a missing command is reported before any version is asked for, and that an unreadable version stops the script.
 - **IT-005**: Verify command coalescing, default environment assignment, any/all
   environment checks, assertions, and fixed-delay retry behavior.
 

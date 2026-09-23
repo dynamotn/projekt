@@ -111,6 +111,78 @@ setup() {
   assert_stderr --partial "nonexistent_command_xyz isn't installed"
 }
 
+# A command on PATH that answers `--version` with whatever the test decided.
+require_fake_tool() {
+  local dir="${BATS_TEST_TMPDIR}/require_bin"
+  mkdir -p "${dir}"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" %q\n' "$2" > "${dir}/$1"
+  chmod +x "${dir}/$1"
+  PATH="${dir}:${PATH}"
+  # `hash` remembers where a command was, and an earlier lookup of the same
+  # name would otherwise win over the one just installed.
+  hash -r
+}
+
+@test "dybatpho::require accepts a command that satisfies the range" {
+  require_fake_tool faketool "faketool 1.7.1"
+  dybatpho::require faketool '>=1.6'
+  dybatpho::require faketool '^1.2'
+  dybatpho::require faketool '>=1.0 <2'
+}
+
+@test "dybatpho::require rejects a command that is older than the range" {
+  require_fake_tool faketool "faketool 1.5.0"
+  run --separate-stderr -127 dybatpho::require faketool '>=1.6'
+  assert_stderr --partial "faketool >=1.6 is required, found 1.5.0"
+}
+
+@test "dybatpho::require reports a range failure with a custom exit code" {
+  require_fake_tool faketool "faketool 1.5.0"
+  run --separate-stderr -3 dybatpho::require faketool '>=1.6' 3
+  assert_stderr --partial "faketool >=1.6 is required, found 1.5.0"
+}
+
+@test "dybatpho::require normalizes a version that is not full semver" {
+  # `tar` says `1.35`, which is not a semver at all until it is coerced.
+  require_fake_tool faketool "tar (GNU tar) 1.35"
+  dybatpho::require faketool '>=1.30'
+  run --separate-stderr -127 dybatpho::require faketool '>=1.40'
+  assert_stderr --partial "found 1.35"
+}
+
+@test "dybatpho::require treats a distribution's build marker as the release" {
+  # Read as a pre-release, `3.12-modified` would rank below `3.12` and be
+  # rejected by a range that the very same grep satisfies.
+  require_fake_tool faketool "grep (GNU grep) 3.12-modified"
+  dybatpho::require faketool '>=3.12'
+}
+
+@test "dybatpho::require fails when the version cannot be read" {
+  local dir="${BATS_TEST_TMPDIR}/require_bin"
+  mkdir -p "${dir}"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${dir}/faketool"
+  chmod +x "${dir}/faketool"
+  PATH="${dir}:${PATH}"
+  hash -r
+  run --separate-stderr -127 dybatpho::require faketool '>=1.0'
+  assert_stderr --partial "version can't be determined"
+}
+
+@test "dybatpho::require still reads a bare second argument as an exit code" {
+  # Ranges arrived after this argument already meant an exit code, so only an
+  # operator makes it a range. `4` stays an exit code even though it would be a
+  # valid range anywhere else.
+  run --separate-stderr -4 dybatpho::require "nonexistent_command_xyz" 4
+  assert_stderr --partial "isn't installed"
+  require_fake_tool faketool "faketool 1.0.0"
+  dybatpho::require faketool 4
+}
+
+@test "dybatpho::require checks the command exists before it checks the version" {
+  run --separate-stderr -127 dybatpho::require "nonexistent_command_xyz" '>=1.0'
+  assert_stderr --partial "nonexistent_command_xyz isn't installed"
+}
+
 @test "dybatpho::is with empty" {
   run dybatpho::is
   assert_failure

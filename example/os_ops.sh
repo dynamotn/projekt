@@ -61,3 +61,17 @@ if tool_path="$(dybatpho::command_path git gh curl)"; then
 else
   dybatpho::warn "None of git, gh, or curl is installed"
 fi
+
+dybatpho::header "TOOL VERSIONS"
+# Asking a command what version it is, rather than only whether it exists. Not
+# every tool answers in a way that can be read, so the failure is expected and
+# handled rather than fatal.
+for tool in bash git tar; do
+  if ! dybatpho::is command "${tool}"; then
+    dybatpho::print "${tool}: not installed"
+  elif tool_version="$(dybatpho::command_version "${tool}")"; then
+    dybatpho::print "${tool}: ${tool_version}"
+  else
+    dybatpho::print "${tool}: installed, version could not be read"
+  fi
+done

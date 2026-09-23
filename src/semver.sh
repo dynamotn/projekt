@@ -549,3 +549,74 @@ function dybatpho::semver_max {
     || dybatpho::die "${FUNCNAME[0]}: Expected at least one version"
   printf '%s\n' "${sorted}" | tail -n 1
 }
+
+# Words that open a real pre-release tail, as opposed to the build and
+# packaging markers that sit in the same place. Matched against a lower-cased
+# tail, and only where the word ends the tail or is followed by a separator, so
+# that `modified` is not read as the `m` of a milestone.
+__DYBATPHO_SEMVER_PRERELEASE_REGEX='^(alpha|beta|rc|pre|preview|dev|snapshot|nightly|canary|next)([.0-9-]|$)'
+
+#######################################
+# @description Normalize a version, as a real command reports it, into a semver
+#   string the rest of this module accepts.
+#   `dybatpho::semver_satisfies` insists on a complete version, and this is what
+#   turns what a command actually printed into one.
+#   `dybatpho::semver_compare` only looks at `major.minor.patch`, and almost
+#   nothing in the wild says its version that way: `tar` answers `1.35`, `yq`
+#   answers `v4.53.3` buried in a sentence, and `unzip` answers `6.00`. This
+#   fills the missing fields with zero, drops a leading `v`, and strips the
+#   leading zeros semver forbids.
+#
+#   A version with more than three fields, as several Windows tools report, is
+#   cut down to the first three.
+#
+#   A trailing `-something` is only kept as a pre-release when it opens with a
+#   word that names one. Distributions patch tools and say so in that same
+#   place: this host's `grep` answers `3.12-modified`, and Debian builds answer
+#   things like `1.2.3-1ubuntu2`. Read as semver, those rank *below* the plain
+#   release, so `>=3.12` would reject the very grep that satisfies it. A build
+#   marker is dropped; `1.7.1-rc1` keeps its pre-release and still ranks below
+#   `1.7.1`, which is what a pre-release is supposed to do.
+# @example
+#   dybatpho::semver_coerce 1.35                   # 1.35.0
+#   dybatpho::semver_coerce "git version 2.43.0"   # 2.43.0
+#   dybatpho::semver_coerce v4                     # 4.0.0
+#
+# @arg $1 string A version, or any text with one in it
+# @stdout The version as `major.minor.patch`, with the pre-release kept
+# @exitcode 0 A version was found
+# @exitcode 1 Stop the script when the text holds no version
+# @see
+#   - `dybatpho::command_version`
+#######################################
+function dybatpho::semver_coerce {
+  local text
+  dybatpho::expect_args text -- "$@"
+  local core="" pre=""
+  if [[ "${text}" =~ ${DYBATPHO_VERSION_SCAN_REGEX} ]]; then
+    core="${BASH_REMATCH[1]}"
+    pre="${BASH_REMATCH[4]-}"
+    # Keep the tail only when it announces a pre-release. Anything else in that
+    # position is a build or packaging marker, and dropping it is the safe way
+    # to be wrong: an unrecognised marker makes the version count as the
+    # release it was built from, rather than as something older.
+    [[ "${pre,,}" =~ ${__DYBATPHO_SEMVER_PRERELEASE_REGEX} ]] || pre=""
+  elif [[ "${text}" =~ ^[[:space:]]*v?([0-9]+)[[:space:]]*$ ]]; then
+    # A lone number is how a constraint names a major release: `yq>=4`. The
+    # scan pattern rejects it on purpose, so that a stray number inside a
+    # sentence is never mistaken for a version.
+    core="${BASH_REMATCH[1]}"
+  else
+    dybatpho::die "${FUNCNAME[0]}: No version found in '${text}'"
+  fi
+
+  local -a fields
+  IFS='.' read -r -a fields <<< "${core}"
+  local result
+  # `10#` is what strips the leading zeros: `unzip` answers `6.00`, and `06`
+  # is not a valid semver field.
+  printf -v result '%d.%d.%d' \
+    "$((10#${fields[0]-0}))" "$((10#${fields[1]-0}))" "$((10#${fields[2]-0}))"
+  [[ -z "${pre}" ]] || result="${result}-${pre}"
+  printf '%s\n' "${result}"
+}

@@ -151,17 +151,84 @@ function dybatpho::expect_envs {
   done
 }
 
+# What tells a version range apart from the exit code that may sit in the same
+# argument. The pattern is held in a variable for two reasons: written inline
+# and unquoted, `<` and `>` are read as redirections before the conditional ever
+# sees them, and escaping them as `\<` drags `\^` along, which quote removal
+# turns into a leading `^` that negates the bracket expression and matches
+# nearly everything. Here `^` is simply one more member of the set.
+__DYBATPHO_HELPERS_RANGE_REGEX='^[<>=^~]'
+
 #######################################
-# @description Ensure that a required command is installed.
+# @description Ensure that a required command is installed, and new enough.
+#   With a version range, the command is asked what version it is through
+#   `dybatpho::command_version`, the answer is normalized by
+#   `dybatpho::semver_coerce`, and the result is matched with
+#   `dybatpho::semver_satisfies`. The range is written the way that function
+#   documents it: `>=1.6`, `^4`, `>=1.2 <2`, `1.2.x`, or alternatives with `||`.
+#
+#   The range has to open with one of `>`, `<`, `=`, `^`, or `~`. A bare `4`
+#   is a valid range on its own elsewhere, but this argument has meant an exit
+#   code since before ranges existed here, and no amount of cleverness makes
+#   `require jq 3` mean both things at once.
+#
+#   Matching a version needs the optional `semver` module. Rather than let a
+#   range pass unchecked in a script that did not load it, this stops with a
+#   message naming what to load: a requirement that is silently not enforced is
+#   worse than one that was never written.
+#
+#   A command whose version cannot be read is also a failure, for the same
+#   reason. `dybatpho::doctor` treats that case as a report rather than a
+#   failure, because a report is allowed to say "I could not tell".
+# @example
+#   dybatpho::require git
+#   dybatpho::require jq '>=1.6'
+#   dybatpho::require yq '^4' 3
+#
 # @arg $1 string Command that must be available
-# @arg $2 number Exit code if not installed (default 127)
+# @arg $2 string Version range opening with an operator, or the exit code
+# @arg $3 number Exit code when a range was given (default 127)
 # @tip Prefer this over repeating inline `command -v ... || exit` checks throughout a script
-# @exitcode 127 Stop script if command isn't installed
-# @exitcode 0 The command is available
-# @exitcode other Exit code if command isn't installed and second argument is set
+# @exitcode 127 Stop script if command isn't installed, or is outside the range
+# @exitcode 0 The command is available and satisfies the range
+# @exitcode other Exit code given as an argument, instead of 127
+# @see
+#   - `dybatpho::command_version`
+#   - `dybatpho::semver_coerce`
+#   - `dybatpho::semver_satisfies`
 #######################################
 function dybatpho::require {
-  hash "$1" > /dev/null 2>&1 || dybatpho::die "$1 isn't installed" "${2:-127}"
+  local command_name
+  dybatpho::expect_args command_name -- "$@"
+  local range="" exit_code
+  if [[ "${2-}" =~ ${__DYBATPHO_HELPERS_RANGE_REGEX} ]]; then
+    range="$2"
+    exit_code="${3:-127}"
+  else
+    exit_code="${2:-127}"
+  fi
+
+  hash "${command_name}" > /dev/null 2>&1 \
+    || dybatpho::die "${command_name} isn't installed" "${exit_code}"
+  [[ -n "${range}" ]] || return 0
+
+  # The guard names an internal helper on purpose: `dybatpho::` functions are
+  # exported and a child shell inherits them without the internals they call,
+  # so testing the public name would pass here in a child that never loaded
+  # `semver` and then fail on the first internal call.
+  declare -F __dybatpho_semver_holds > /dev/null \
+    || dybatpho::die \
+      "${command_name} ${range} needs the semver module, load it with: dybatpho::load semver" \
+      "${exit_code}"
+
+  local found
+  found="$(dybatpho::command_version "${command_name}")" \
+    || dybatpho::die \
+      "${command_name} ${range} is required, but its version can't be determined" \
+      "${exit_code}"
+  dybatpho::semver_satisfies "$(dybatpho::semver_coerce "${found}")" "${range}" \
+    || dybatpho::die \
+      "${command_name} ${range} is required, found ${found}" "${exit_code}"
 }
 
 #######################################

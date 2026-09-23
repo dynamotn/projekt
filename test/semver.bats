@@ -378,6 +378,61 @@ setup() {
   run ! dybatpho::semver_max nonsense
 }
 
+@test "dybatpho::semver_coerce fills the fields a real version leaves out" {
+  assert_equal "$(dybatpho::semver_coerce 1.35)" "1.35.0"
+  assert_equal "$(dybatpho::semver_coerce 4)" "4.0.0"
+  assert_equal "$(dybatpho::semver_coerce v4)" "4.0.0"
+  assert_equal "$(dybatpho::semver_coerce 1.2.3)" "1.2.3"
+}
+
+@test "dybatpho::semver_coerce finds the version inside what a command prints" {
+  assert_equal "$(dybatpho::semver_coerce 'git version 2.43.0')" "2.43.0"
+  assert_equal "$(dybatpho::semver_coerce 'jq-1.7.1')" "1.7.1"
+  assert_equal "$(dybatpho::semver_coerce \
+    'yq (https://github.com/mikefarah/yq/) version v4.53.3')" "4.53.3"
+  assert_equal "$(dybatpho::semver_coerce 'GNU bash, version 5.2.21(1)-release')" "5.2.21"
+}
+
+@test "dybatpho::semver_coerce ignores a number that is not a version" {
+  # zstd opens with `64-bits`, which a pattern accepting a bare run of digits
+  # would answer instead of the version that follows it.
+  assert_equal "$(dybatpho::semver_coerce \
+    '*** zstd command line interface 64-bits v1.5.5, by Yann Collet ***')" "1.5.5"
+}
+
+@test "dybatpho::semver_coerce strips the leading zeros semver forbids" {
+  assert_equal "$(dybatpho::semver_coerce 'UnZip 6.00 of 20 April 2009')" "6.0.0"
+  assert [ "$(dybatpho::semver_valid "$(dybatpho::semver_coerce 'UnZip 6.00')" && echo yes)" = yes ]
+}
+
+@test "dybatpho::semver_coerce keeps only the first three fields" {
+  assert_equal "$(dybatpho::semver_coerce 1.2.3.4)" "1.2.3"
+}
+
+@test "dybatpho::semver_coerce keeps a pre-release but drops a build marker" {
+  assert_equal "$(dybatpho::semver_coerce 1.7.1-rc1)" "1.7.1-rc1"
+  assert_equal "$(dybatpho::semver_coerce 2.0.0-BETA.2)" "2.0.0-BETA.2"
+  # A distribution says it patched the tool in the same place a pre-release
+  # goes. Read as a pre-release, the version would rank below the release it
+  # actually is, and a `>=` on that release would reject it.
+  assert_equal "$(dybatpho::semver_coerce 3.12-modified)" "3.12.0"
+  assert_equal "$(dybatpho::semver_coerce 1.2.3-1ubuntu2)" "1.2.3"
+}
+
+@test "dybatpho::semver_coerce rejects text with no version in it" {
+  run --separate-stderr ! dybatpho::semver_coerce "no digits here"
+  assert_stderr --partial "No version found"
+}
+
+@test "dybatpho::semver_coerce hands a real version over to the range matcher" {
+  # `semver_satisfies` insists on a complete version, which is the whole reason
+  # `semver_coerce` exists: these two are always used together.
+  dybatpho::semver_satisfies "$(dybatpho::semver_coerce 'yq version v4.53.3')" '>=4'
+  dybatpho::semver_satisfies "$(dybatpho::semver_coerce 1.35)" '>=1.30'
+  dybatpho::semver_satisfies "$(dybatpho::semver_coerce 3.12-modified)" '>=3.12'
+  run ! dybatpho::semver_satisfies "$(dybatpho::semver_coerce 'yq version v3.4.3')" '>=4'
+}
+
 @test "the sort agrees with the comparison it is built on" {
   # Sorting must not invent an order of its own: every adjacent pair of the
   # result has to compare as less-than-or-equal.

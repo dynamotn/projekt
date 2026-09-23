@@ -81,6 +81,58 @@ function dybatpho::command_path {
   return 1
 }
 
+# Pattern that finds a version inside the noise a command prints when asked for
+# one. It lives in this core module because `dybatpho::command_version` needs it
+# and `semver.sh` reuses it: `semver` is optional, so the shared constant has to
+# sit on the side of the registry that is always loaded.
+#
+# A candidate has to carry at least one dot. `zstd --version` opens with
+# `*** zstd command line interface 64-bits v1.5.5`, and a pattern that accepted
+# a bare run of digits would answer `64`. The leftmost dotted run is the version
+# in every tool output this was checked against.
+# @env DYBATPHO_VERSION_SCAN_REGEX string Pattern matching a version inside arbitrary text
+export DYBATPHO_VERSION_SCAN_REGEX='v?([0-9]+\.[0-9]+(\.[0-9]+)*)(-([0-9A-Za-z.-]+))?'
+
+#######################################
+# @description Print the version a command reports.
+#   The command is asked with `--version`, `-version`, `version`, and `-V`, in
+#   that order, until one of them prints something a version can be read out of.
+#   Both output streams are read, because a good number of tools answer on
+#   standard error, and standard input is closed so that a command that would
+#   otherwise wait for input cannot hang the script.
+#
+#   Detection is best effort: it reports what the command says about itself,
+#   which is not always what a package manager calls the same build.
+# @example
+#   dybatpho::command_version git   # 2.43.0
+#   dybatpho::command_version tar   # 1.35
+#
+# @arg $1 string Command to ask
+# @stdout The version as the command writes it, without a leading `v`
+# @exitcode 0 A version was found
+# @exitcode 1 The command is not installed, or none of the probes revealed a version
+# @see
+#   - `dybatpho::semver_satisfies`
+#   - `dybatpho::require`
+#######################################
+function dybatpho::command_version {
+  local command_name
+  dybatpho::expect_args command_name -- "$@"
+  dybatpho::is command "${command_name}" || return 1
+  local flag output
+  for flag in --version -version version -V; do
+    # A probe that fails is ordinary: only one of these flags is the right one,
+    # and the rest usually exit non-zero after printing a usage message.
+    output="$(command "${command_name}" "${flag}" 2>&1 < /dev/null || true)"
+    [[ -n "${output}" ]] || continue
+    if [[ "${output}" =~ ${DYBATPHO_VERSION_SCAN_REGEX} ]]; then
+      printf '%s\n' "${BASH_REMATCH[0]#v}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 #######################################
 # @description Get $GOARCH compilation environment
 # @stdout Return $GOOS value https://go.dev/doc/install/source#environment

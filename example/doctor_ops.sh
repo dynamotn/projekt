@@ -78,10 +78,23 @@ function _demo_bash {
   fi
 }
 
+# @description Show what a dependency that names a version looks like in the
+#   report. `json` needs the Go `yq` from v4 on, so being installed is not the
+#   whole question.
+function _demo_versioned_dependency {
+  dybatpho::header "A DEPENDENCY THAT NAMES A VERSION"
+  dybatpho::print "json requires: $(dybatpho::doctor_requirements json required)"
+  # `ok` means installed and new enough, `outdated` means installed and not,
+  # and `unknown` means the version could not be read, which is reported but
+  # never treated as a failure.
+  dybatpho::doctor --modules json || true
+}
+
 _demo_version
 _demo_report
 _demo_scope
 _demo_requirements
+_demo_versioned_dependency
 _demo_quiet
 _demo_json
 _demo_bash

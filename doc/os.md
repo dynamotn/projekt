@@ -11,6 +11,12 @@ Utilities for getting information of OS/distro
 
 This module contains functions to get information of OS/distro, such as platform, distribution and architecture, plus the host facts other modules would otherwise each detect for themselves: host and user names, processor count, terminal size, and whether the script runs as root, in a container, under WSL, or on CI. Package manager detection and dependency installation live in `pkg.sh`.
 
+### 🌍 Environment
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`DYBATPHO_VERSION_SCAN_REGEX`** | string | Pattern matching a version inside arbitrary text |
+
 ### 🚀 Highlights
 
 - [`dybatpho::goos`](#dybatphogoos) — Get $GOOS compilation environment
@@ -19,6 +25,7 @@ This module contains functions to get information of OS/distro, such as platform
 - [`dybatpho::is_linux`](#dybatphois_linux) — Return success when running on Linux.
 - [`dybatpho::is_windows`](#dybatphois_windows) — Return success when running on a Windows-compatible environment such as Cygwin, MSYS, or MinGW.
 - [`dybatpho::command_path`](#dybatphocommand_path) — Return the path of the first installed command.
+- [`dybatpho::command_version`](#dybatphocommand_version) — Print the version a command reports. The command is asked with `--version`, `-version`, `version`, and `-V`, in that order, until one of them prints something a version can be read out of. Both output streams are read, because a good number of tools answer on standard error, and standard input is closed so that a command that would otherwise wait for input cannot hang the script. Detection is best effort: it reports what the command says about itself, which is not always what a package manager calls the same build.
 - [`dybatpho::goarch`](#dybatphogoarch) — Get $GOARCH compilation environment
 - [`dybatpho::hostname`](#dybatphohostname) — Print the host name of the machine. The answer is resolved once and cached for the lifetime of the shell, because it cannot change under a running script and every structured log event asks for it.
 - [`dybatpho::user`](#dybatphouser) — Print the name of the user the script runs as. This is the effective user, so a script under `sudo` reports `root` rather than the account that called it.
@@ -107,6 +114,49 @@ Return the path of the first installed command.
 **🚦 Exit codes**
 
 - `1`: None of the commands is installed
+
+
+---
+
+### `dybatpho::command_version`
+
+Print the version a command reports.
+  The command is asked with `--version`, `-version`, `version`, and `-V`, in
+  that order, until one of them prints something a version can be read out of.
+  Both output streams are read, because a good number of tools answer on
+  standard error, and standard input is closed so that a command that would
+  otherwise wait for input cannot hang the script.
+
+
+  Detection is best effort: it reports what the command says about itself,
+  which is not always what a package manager calls the same build.
+
+**🧪 Example**
+
+```bash
+dybatpho::command_version git   # 2.43.0
+dybatpho::command_version tar   # 1.35
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Command to ask |
+
+**📤 Output on stdout**
+
+- The version as the command writes it, without a leading `v`
+
+**🚦 Exit codes**
+
+- `0`: A version was found
+- `1`: The command is not installed, or none of the probes revealed a version
+
+**🔗 See also**
+
+- [- `dybatpho::semver_satisfies` - `dybatpho::require](#dybatphosemver_satisfies-dybatphorequire)
 
 
 ---

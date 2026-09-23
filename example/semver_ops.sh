@@ -99,6 +99,20 @@ function _demo_ranges {
     fi
   done
 
+  dybatpho::header "VERSIONS AS REAL COMMANDS REPORT THEM"
+  # A range needs a complete version, and almost nothing in the wild says its
+  # version that way. This is the step between the two.
+  local reported
+  for reported in "1.35" "git version 2.43.0" \
+    "yq (https://github.com/mikefarah/yq/) version v4.53.3" \
+    "UnZip 6.00 of 20 April 2009" "grep (GNU grep) 3.12-modified"; do
+    dybatpho::print "  $(printf '%-52s' "${reported}") -> $(dybatpho::semver_coerce "${reported}")"
+  done
+  # What the two are for together: deciding whether an installed tool is usable.
+  if dybatpho::semver_satisfies "$(dybatpho::semver_coerce "$(dybatpho::command_version bash)")" '>=4.3'; then
+    dybatpho::print "  the running bash satisfies >=4.3"
+  fi
+
   dybatpho::info "A pre-release stays out of a range that never named one:"
   if dybatpho::semver_satisfies "2.0.0-alpha" "^1.0.0"; then
     dybatpho::warn "  2.0.0-alpha satisfied ^1.0.0, which would be a nasty surprise"

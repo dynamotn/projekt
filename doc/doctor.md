@@ -35,8 +35,27 @@ A dependency written as `a|b` is satisfied by any one of the alternatives:
 `file` hashes with whichever of `sha256sum`, `shasum`, or `openssl` exists.
 
 
-Only missing **required** dependencies make `dybatpho::doctor` fail, so an
-optional entry is information rather than a problem.
+A dependency may also name a version, as in `yq>=4`, using the range syntax
+of `dybatpho::semver_satisfies` minus the spaces, which separate one spec
+from the next here. Being installed is then not enough: the wrong major
+release of a tool is its own kind of missing, and `yq` is the example that
+prompted this, since the Go `yq` this library calls and the Python program
+of the same name share nothing but a name.
+
+
+A dependency is reported as one of four statuses:
+
+
+- **ok** — installed, and new enough when a version was asked for;
+- **missing** — no alternative is installed;
+- **outdated** — installed, but the version does not satisfy the constraint;
+- **unknown** — installed, but the version could not be read.
+
+
+Only **required** dependencies that are missing or outdated make
+`dybatpho::doctor` fail. An optional entry is information rather than a
+problem, and so is `unknown`: a probe that could not read a version has not
+shown that anything is wrong.
 
 ### 🌍 Environment
 
@@ -48,12 +67,14 @@ optional entry is information rather than a problem.
 
 ### 🚀 Highlights
 
-- [`__dybatpho_doctor_resolve`](#__dybatpho_doctor_resolve) — Return success when a dependency spec is satisfied. A spec is one command name, or several separated by `|` when any one of them will do.
+- [`__dybatpho_doctor_rank`](#__dybatpho_doctor_rank) — Rank a status, so that the least satisfying alternative of a spec is not the one that gets reported. When no alternative satisfies the spec, the most specific complaint is the useful one: `outdated` names a version to upgrade, `unknown` names a command that is at least installed, and `missing` says the least.
+- [`__dybatpho_doctor_split`](#__dybatpho_doctor_split) — Split a dependency alternative into its command and version range. A range here cannot contain a space, because the maps separate one spec from the next with one. `^4` says what `>=4 <5` would have said.
+- [`__dybatpho_doctor_resolve`](#__dybatpho_doctor_resolve) — Decide whether a dependency spec is satisfied, and how. A spec is one alternative, or several separated by `|` when any one of them will do. An alternative may carry a version constraint, as in `yq>=4`, in which case being installed is not enough on its own. Only an alternative that carries a constraint is asked for its version. A report has no business running every tool on the host to print a table, and the version of a dependency nothing has an opinion about is not news.
 - [`dybatpho::doctor_requirements`](#dybatphodoctor_requirements) — Print the external commands a module can call.
 - [`dybatpho::doctor_bash_supported`](#dybatphodoctor_bash_supported) — Return success when the running Bash is new enough for the library.
 - [`__dybatpho_doctor_scope`](#__dybatpho_doctor_scope) — Resolve the module list a report covers.
 - [`__dybatpho_doctor_json_escape`](#__dybatpho_doctor_json_escape) — Escape a value for use inside a JSON string. The report is written without `jq`, because a diagnostic that needs a tool the user may be missing is of no use.
-- [`__dybatpho_doctor_rows`](#__dybatpho_doctor_rows) — Collect every dependency row a scope produces. A row is `module<TAB>spec<TAB>kind<TAB>status<TAB>path`, which keeps the text and JSON renderers reading the same data.
+- [`__dybatpho_doctor_rows`](#__dybatpho_doctor_rows) — Collect every dependency row a scope produces. A row is `module<TAB>spec<TAB>kind<TAB>status<TAB>path<TAB>version`, which keeps the text and JSON renderers reading the same data.
 - [`__dybatpho_doctor_report_text`](#__dybatpho_doctor_report_text) — Print the report as aligned text.
 - [`__dybatpho_doctor_report_json`](#__dybatpho_doctor_report_json) — Print the report as a single JSON object.
 - [`dybatpho::doctor`](#dybatphodoctor) — Report the environment the loaded modules need, and what is missing.
@@ -67,27 +88,73 @@ optional entry is information rather than a problem.
 <a id="reference"></a>
 ## 📚 Reference
 
-### `__dybatpho_doctor_resolve`
+### `__dybatpho_doctor_rank`
 
-Return success when a dependency spec is satisfied.
-  A spec is one command name, or several separated by `|` when any one of
-  them will do.
+Rank a status, so that the least satisfying alternative of a spec
+  is not the one that gets reported.
+  When no alternative satisfies the spec, the most specific complaint is the
+  useful one: `outdated` names a version to upgrade, `unknown` names a command
+  that is at least installed, and `missing` says the least.
 
 **🧾 Arguments**
 
 | Name | Type | Description |
 | --- | --- | --- |
-| `$1` | string | Dependency spec, such as `curl` or `sha256sum\|shasum` |
-| `$2` | string | Optional name of the variable that receives the resolved path |
+| `$1` | string | Status |
 
-**🧩 Variable sets**
+**📤 Output on stdout**
 
-- **`The`**: named variable, to the path of the command that satisfied the spec
+- The rank, higher being more worth reporting
+
+
+---
+
+### `__dybatpho_doctor_split`
+
+Split a dependency alternative into its command and version range.
+  A range here cannot contain a space, because the maps separate one spec from
+  the next with one. `^4` says what `>=4 <5` would have said.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | One alternative, such as `yq` or `yq>=4` |
+
+**📤 Output on stdout**
+
+- Two lines: the command name, and the range or an empty line
+
+
+---
+
+### `__dybatpho_doctor_resolve`
+
+Decide whether a dependency spec is satisfied, and how.
+  A spec is one alternative, or several separated by `|` when any one of them
+  will do. An alternative may carry a version constraint, as in `yq>=4`, in
+  which case being installed is not enough on its own.
+
+
+  Only an alternative that carries a constraint is asked for its version. A
+  report has no business running every tool on the host to print a table, and
+  the version of a dependency nothing has an opinion about is not news.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Dependency spec, such as `curl`, `sha256sum\|shasum`, or `yq>=4` |
+
+**📤 Output on stdout**
+
+- One line of `status<TAB>path<TAB>version`, where status is `ok`,
+  `outdated`, `unknown`, or `missing`
 
 **🚦 Exit codes**
 
-- `0`: At least one of the alternatives is installed
-- `1`: None of the alternatives is installed
+- `0`: An alternative is installed and satisfies its constraint
+- `1`: No alternative does
 
 
 ---
@@ -178,8 +245,8 @@ Escape a value for use inside a JSON string.
 ### `__dybatpho_doctor_rows`
 
 Collect every dependency row a scope produces.
-  A row is `module<TAB>spec<TAB>kind<TAB>status<TAB>path`, which keeps the
-  text and JSON renderers reading the same data.
+  A row is `module<TAB>spec<TAB>kind<TAB>status<TAB>path<TAB>version`, which
+  keeps the text and JSON renderers reading the same data.
 
 **🧾 Arguments**
 
