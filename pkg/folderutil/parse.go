@@ -47,12 +47,9 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 		}
 
 		for _, entry := range entries {
-			if !entry.IsDir() {
-				info, err := entry.Info()
-				if err != nil || info.Mode()&os.ModeSymlink == 0 {
-					cli.Debug("Not is directory or symlink: %s", entry.Name())
-					continue
-				}
+			if !isDirOrLinkToDir(folder.Path, entry) {
+				cli.Debug("Not is directory or symlink to directory: %s", entry.Name())
+				continue
 			}
 			if !re.MatchString(entry.Name()) {
 				cli.Debug("Not Match: %s", entry.Name())
@@ -75,6 +72,19 @@ func sortFoldersByPriority(folders []lazypath.Folder) []lazypath.Folder {
 		return sorted[i].Priority > sorted[j].Priority
 	})
 	return sorted
+}
+
+// isDirOrLinkToDir reports whether an entry is a directory, following symlinks.
+func isDirOrLinkToDir(parent string, entry os.DirEntry) bool {
+	if entry.IsDir() {
+		return true
+	}
+	if entry.Type()&os.ModeSymlink == 0 {
+		return false
+	}
+	// Resolve the symlink: a link to a regular file is not a project folder.
+	info, err := os.Stat(filepath.Join(parent, entry.Name()))
+	return err == nil && info.IsDir()
 }
 
 func appendToParsedFolder(list []ParsedFolder, prefix string, folderPath string, childFolderName string) []ParsedFolder {

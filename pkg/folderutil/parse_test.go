@@ -182,3 +182,49 @@ func TestParseConfig_PriorityWinsDuplicateShortName(t *testing.T) {
 		t.Errorf("ParseConfig() kept %s, want the higher priority %s", result[0].Path, high)
 	}
 }
+
+func TestParseConfig_SymlinkToFileIsSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	regular := filepath.Join(tmpDir, "project")
+	if err := os.Mkdir(regular, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	target := filepath.Join(tmpDir, "target.txt")
+	if err := os.WriteFile(target, []byte("not a folder"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(tmpDir, "linked")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	linkedDir := filepath.Join(tmpDir, "linked-dir")
+	if err := os.Symlink(regular, linkedDir); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	config := lazypath.Config{
+		Folders: []lazypath.Folder{{Path: tmpDir, IsWorkspace: true, RegexMatch: ".*"}},
+	}
+
+	result, err := ParseConfig(config)
+	if err != nil {
+		t.Fatalf("ParseConfig() error = %v", err)
+	}
+
+	names := make(map[string]bool, len(result))
+	for _, folder := range result {
+		names[folder.ShortName] = true
+	}
+
+	if !names["project"] || !names["linked-dir"] {
+		t.Errorf("ParseConfig() = %v, want the directory and the symlink to a directory", names)
+	}
+	if names["linked"] {
+		t.Error("ParseConfig() included a symlink pointing at a regular file")
+	}
+	if names["target.txt"] {
+		t.Error("ParseConfig() included a regular file")
+	}
+}
