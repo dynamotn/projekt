@@ -14,49 +14,90 @@
 #   scripts/doc.sh                 # regenerate every document
 #   scripts/doc.sh --check         # fail if a committed document is stale
 #   scripts/doc.sh src/logging.sh  # regenerate one module
-SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+#
+# @see
+#   - `scripts/genshdoc.awk`
+#   - `scripts/lint.sh`
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=init.sh
-. "${SCRIPT_DIR}/../init.sh"
-dybatpho::require "gawk"
+. "${SCRIPT_DIR}/../init.sh" --modules cli
 
-check=false
-if [[ "${1-}" == "--check" ]]; then
-  check=true
-  shift
-fi
+dybatpho::register_common_handlers
 
-if (($#)); then
-  sources=("$@")
-else
-  # `init.sh` ships public functions of its own, so it is documented alongside
-  # the modules it loads.
-  sources=("${DYBATPHO_DIR}/init.sh" "${DYBATPHO_DIR}/src/"*.sh)
-fi
+# @description Print the source files to document, one per line: the ones named
+#   on the command line, or every documented source when none were.
+#   `init.sh` ships public functions of its own, so it is documented alongside
+#   the modules it loads.
+# @stdout Paths of the source files
+function __dybatpho_doc_sources {
+  local -a _named=()
+  # `dybatpho::opts::setup` collects the positional arguments into a single
+  # space-joined string, so they are split back out here.
+  read -r -a _named <<< "${DOC_ARGS}"
+  if ((${#_named[@]})); then
+    printf '%s\n' "${_named[@]}"
+    return 0
+  fi
+  printf '%s\n' "${DYBATPHO_DIR}/init.sh" "${DYBATPHO_DIR}/src/"*.sh
+}
 
-if dybatpho::is true "${check}"; then
-  stale=""
-  generated=""
-  dybatpho::create_temp_dir generated "doc-check"
-  for src in "${sources[@]}"; do
-    module="$(basename "${src}" .sh)"
-    gawk -f "${SCRIPT_DIR}/genshdoc.awk" "${src}" > "${generated}/${module}.md"
-    if ! diff -q "${DYBATPHO_DIR}/doc/${module}.md" "${generated}/${module}.md" > /dev/null 2>&1; then
-      stale+="doc/${module}.md is stale relative to $(basename "${src}")"$'\n'
+# @description Write `doc/<module>.md` for every source.
+function __dybatpho_doc_generate {
+  local _src _module
+  while IFS= read -r _src; do
+    _module="$(basename "${_src}" .sh)"
+    gawk -f "${SCRIPT_DIR}/genshdoc.awk" "${_src}" \
+      > "${DYBATPHO_DIR}/doc/${_module}.md"
+  done < <(__dybatpho_doc_sources)
+}
+
+# @description Compare the committed documents against freshly generated ones.
+# @exitcode 0 Every document matches its source
+# @exitcode 1 At least one document is stale
+function __dybatpho_doc_check {
+  local _generated _src _module _stale=""
+  dybatpho::create_temp_dir _generated "doc-check"
+
+  while IFS= read -r _src; do
+    _module="$(basename "${_src}" .sh)"
+    gawk -f "${SCRIPT_DIR}/genshdoc.awk" "${_src}" > "${_generated}/${_module}.md"
+    if ! diff -q "${DYBATPHO_DIR}/doc/${_module}.md" "${_generated}/${_module}.md" > /dev/null 2>&1; then
+      _stale+="doc/${_module}.md is stale relative to $(basename "${_src}")"$'\n'
     fi
-  done
+  done < <(__dybatpho_doc_sources)
 
-  if [[ -n "${stale}" ]]; then
+  if [[ -n "${_stale}" ]]; then
     dybatpho::error "Generated documentation is out of date; run scripts/doc.sh"
-    printf '%s' "${stale}" >&2
-    exit 1
+    printf '%s' "${_stale}" >&2
+    return 1
   fi
   dybatpho::success "Generated documentation is up to date"
-  exit 0
-fi
+}
 
-for src in "${sources[@]}"; do
-  module="$(basename "${src}" .sh)"
-  gawk \
-    -f "${SCRIPT_DIR}/genshdoc.awk" \
-    "${src}" > "${DYBATPHO_DIR}/doc/${module}.md"
-done
+# @description Generate or check, depending on `--check`.
+function __dybatpho_doc_run {
+  dybatpho::require "gawk"
+
+  if dybatpho::is true "${CHECK}"; then
+    __dybatpho_doc_check
+    return
+  fi
+  __dybatpho_doc_generate
+}
+
+# @description CLI specification for this script.
+function _spec {
+  dybatpho::opts::setup \
+    "Generate doc/<module>.md from the shdoc comments in each source file" \
+    DOC_ARGS action:"__dybatpho_doc_run"
+
+  dybatpho::opts::arg "Source files to document; defaults to all of them" \
+    SOURCE required:false variadic:true
+
+  dybatpho::opts::flag "Fail if a committed document is stale instead of writing" \
+    CHECK --check on:true off:false init:="false"
+
+  dybatpho::opts::disp "Show help" --help action:"dybatpho::generate_help _spec"
+}
+
+dybatpho::generate_from_spec _spec "$@"
