@@ -127,6 +127,51 @@ function _demo_pipeline {
   dybatpho::info "Output : $(dybatpho::array_join "sorted" ", ")"
 }
 
+# @description Put an array in order. Numbers are the reason: as text, `10`
+#   sorts before `9`.
+function _demo_order {
+  dybatpho::header "ORDER"
+  local releases=(1.10 1.9 2.0)
+  dybatpho::array_sort releases
+  dybatpho::print "  text:    ${releases[*]}"
+
+  local sizes=(10 9 100 -3)
+  dybatpho::array_sort sizes
+  dybatpho::print "  as text: ${sizes[*]}"
+  sizes=(10 9 100 -3)
+  dybatpho::array_sort sizes --numeric
+  dybatpho::print "  numeric: ${sizes[*]}"
+  dybatpho::array_sort sizes --numeric --reverse
+  dybatpho::print "  largest first: ${sizes[*]}"
+
+  # A negative start counts back from the end, so the last two need no length
+  # arithmetic at the call site.
+  local recent=(build-1 build-2 build-3 build-4 build-5)
+  dybatpho::array_slice recent -2
+  dybatpho::print "  last two builds: ${recent[*]}"
+}
+
+# @description Compare two lists of permissions, which is what set operations
+#   are for in a deployment script.
+function _demo_sets {
+  dybatpho::header "SETS"
+  local requested=(read write admin read)
+  local granted=(read write)
+
+  local missing=("${requested[@]}")
+  dybatpho::array_difference missing granted
+  dybatpho::print "  requested but not granted: ${missing[*]}"
+
+  local usable=("${requested[@]}")
+  dybatpho::array_intersect usable granted
+  dybatpho::print "  usable now:                ${usable[*]}"
+
+  local everything=("${requested[@]}")
+  dybatpho::array_union everything granted
+  # The result is a set, so the duplicate `read` appears once.
+  dybatpho::print "  either side:               ${everything[*]}"
+}
+
 function _main {
   _demo_print
   _demo_reverse
@@ -140,6 +185,8 @@ function _main {
   _demo_lookup
   _demo_join
   _demo_pipeline
+  _demo_order
+  _demo_sets
   dybatpho::success "Array operations demo complete"
 }
 

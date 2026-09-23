@@ -112,6 +112,14 @@ dybatpho::info "Run started at $(dybatpho::date_format "${started_at}" "%F %T")"
 - **FR-009**: The module MUST respect the timezone configured through
   `DYBATPHO_DATE_TIMEZONE` across every parsing and formatting helper.
 
+- **FR-010**: The module MUST report whether a year is a leap year, applying the century and four-century rules, and MUST report how many days a given month has.
+- **FR-011**: The module MUST print the first and the last day of the month a date falls in, working the last day out from the calendar rather than by adding a month and stepping back.
+- **FR-012**: The module MUST shift a date by a signed amount of a named unit, and MUST measure the distance between two dates in a named unit, truncating toward zero and keeping the sign.
+- **FR-012a**: The units MUST be those that are a fixed number of seconds: seconds, minutes, hours, days, and weeks, named in the singular or the plural. Months and years MUST be refused, because their length depends on the calendar and the supported `date` implementations shift by them differently.
+- **FR-012b**: A rejected unit MUST stop the caller even when the caller has switched `errexit` off, so that a validation helper failing inside a command substitution can never leave the caller with an answer computed from unvalidated input.
+- **FR-013**: The day-offset and day-difference helpers MUST keep their existing behaviour while being expressed in terms of the general helpers.
+- **FR-014**: The module MUST print a number of seconds as `H:MM:SS`, without wrapping the hours at a day and keeping the sign of a negative span.
+
 ### Key Entities *(include if feature involves data)*
 
 - **Date String**: A caller-provided textual date or datetime value parsed by the underlying `date` command.
@@ -133,6 +141,13 @@ dybatpho::info "Run started at $(dybatpho::date_format "${started_at}" "%F %T")"
 - **IT-003**: Validate good and bad date strings.
 - **IT-004**: Shift a fixed date forward and backward by signed day offsets.
 - **IT-005**: Calculate the signed day difference between two known dates.
+- **IT-006**: Verify the leap-year predicate for a leap year, a century that is not one, a four-century that is, and a common year, and that a non-numeric year stops the script.
+- **IT-007**: Verify the month-length helper for 31-day, 30-day, leap and non-leap February, and a month written with a leading zero; and that a month outside 1-12 stops the script.
+- **IT-008**: Verify the month bounds for a leap February, a non-leap February, a 30-day month, and December, with the default and a custom format.
+- **IT-009**: Shift a date by each supported unit, forward and backward, across a month and a leap day, using both the singular and plural unit names.
+- **IT-010**: Verify a calendar-dependent unit and a non-numeric amount are refused, and that the refusal still stops a caller that has switched `errexit` off.
+- **IT-011**: Measure a distance in each unit, verify truncation toward zero in both directions, and verify the day-offset and day-difference helpers answer as they did before delegating.
+- **IT-012**: Verify the clock helper for a span under an hour, over a day, and negative, and that a fractional value stops the script.
 
 ## Acceptance Criteria *(mandatory)*
 

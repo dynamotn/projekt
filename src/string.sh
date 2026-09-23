@@ -6,6 +6,11 @@
 #   trimming exact prefixes/suffixes and characters, slugifying, truncating,
 #   counting lines, testing blank strings, wrapping text, repeating, padding,
 #   encoding, decoding, and case-converting shell strings.
+#
+#   The naming-convention helpers convert between `snake_case`, `kebab-case`,
+#   `camelCase`, and `PascalCase`, reading the word boundaries whichever
+#   convention the input arrived in. `dybatpho::string_quote` prepares a value
+#   to be written into shell code that will be evaluated later.
 # @see
 #   - `example/string_ops.sh`
 : "${DYBATPHO_DIR:?DYBATPHO_DIR must be set. Please source dybatpho/init.sh before other scripts from dybatpho.}"
@@ -366,4 +371,175 @@ function dybatpho::lower {
 #######################################
 function dybatpho::upper {
   printf '%s\n' "${1^^}"
+}
+
+#######################################
+# @description Split a string into the words its naming convention implies.
+#   Every case helper in this module goes through here, so they all accept the
+#   same input whatever convention it arrived in: `fooBar`, `foo_bar`,
+#   `foo-bar`, `Foo Bar` and `FOO_BAR` all give the same two words.
+#
+#   A capital opens a new word after a lowercase letter or a digit, and at the
+#   end of a run of capitals that is followed by a lowercase one, which is what
+#   keeps `XMLHttpRequest` reading as `xml http request` rather than as one
+#   word or as one letter per word. A digit stays attached to the word it
+#   follows, so `foo2bar` is one word: splitting there would be guessing.
+#
+#   The cost of that acronym rule is single-letter words: `ABC` reads as one
+#   word, because nothing in it says whether it was an acronym or `a b c`. A
+#   name that went through `dybatpho::string_to_pascal` as `a_b_c` does not come
+#   back. There is no rule that gets both cases right, and acronyms are the ones
+#   that turn up in real names.
+# @arg $1 string String to split
+# @arg $2 string Name of the array variable receiving the lower-cased words
+# @set The named array
+#######################################
+function __dybatpho_string_words {
+  local __words_input="${1-}"
+  local -n __words_out="$2"
+  __words_out=()
+  local __words_current="" __words_previous="" __words_next="" __words_char
+  local __words_index
+  for ((__words_index = 0; __words_index < ${#__words_input}; __words_index++)); do
+    __words_char="${__words_input:__words_index:1}"
+    __words_next="${__words_input:__words_index+1:1}"
+    case "${__words_char}" in
+      [A-Z])
+        if [[ "${__words_previous}" == [a-z0-9] ]] \
+          || { [[ "${__words_previous}" == [A-Z] ]] && [[ "${__words_next}" == [a-z] ]]; }; then
+          [[ -z "${__words_current}" ]] || {
+            __words_out+=("${__words_current}")
+            __words_current=""
+          }
+        fi
+        __words_current+="${__words_char,,}"
+        ;;
+      [a-z0-9])
+        __words_current+="${__words_char}"
+        ;;
+      *)
+        [[ -z "${__words_current}" ]] || {
+          __words_out+=("${__words_current}")
+          __words_current=""
+        }
+        ;;
+    esac
+    __words_previous="${__words_char}"
+  done
+  [[ -z "${__words_current}" ]] || __words_out+=("${__words_current}")
+}
+
+#######################################
+# @description Convert a string to `snake_case`.
+# @example
+#   dybatpho::string_to_snake "XMLHttpRequest"   # xml_http_request
+#   dybatpho::string_to_snake "deploy-to-prod"   # deploy_to_prod
+#
+# @arg $1 string String to convert
+# @stdout The string in snake case, empty when it holds no letters or digits
+# @see
+#   - `dybatpho::string_to_kebab`
+#   - `dybatpho::string_slugify`
+#######################################
+function dybatpho::string_to_snake {
+  local input
+  dybatpho::expect_args input -- "$@"
+  local -a words=()
+  __dybatpho_string_words "${input}" words
+  local IFS='_'
+  printf '%s\n' "${words[*]-}"
+}
+
+#######################################
+# @description Convert a string to `kebab-case`.
+#   Unlike `dybatpho::string_slugify`, this reads the word boundaries a naming
+#   convention implies, so `XMLHttpRequest` becomes `xml-http-request` rather
+#   than `xmlhttprequest`. Slugify is for prose; this is for identifiers.
+# @example
+#   dybatpho::string_to_kebab "XMLHttpRequest"   # xml-http-request
+#   dybatpho::string_to_kebab "deploy_to_prod"   # deploy-to-prod
+#
+# @arg $1 string String to convert
+# @stdout The string in kebab case, empty when it holds no letters or digits
+# @see
+#   - `dybatpho::string_to_snake`
+#   - `dybatpho::string_slugify`
+#######################################
+function dybatpho::string_to_kebab {
+  local input
+  dybatpho::expect_args input -- "$@"
+  local -a words=()
+  __dybatpho_string_words "${input}" words
+  local IFS='-'
+  printf '%s\n' "${words[*]-}"
+}
+
+#######################################
+# @description Convert a string to `camelCase`.
+# @example
+#   dybatpho::string_to_camel "deploy_to_prod"   # deployToProd
+#   dybatpho::string_to_camel "XMLHttpRequest"   # xmlHttpRequest
+#
+# @arg $1 string String to convert
+# @stdout The string in camel case, empty when it holds no letters or digits
+# @see
+#   - `dybatpho::string_to_pascal`
+#######################################
+function dybatpho::string_to_camel {
+  local input
+  dybatpho::expect_args input -- "$@"
+  local -a words=()
+  __dybatpho_string_words "${input}" words
+  ((${#words[@]} > 0)) || {
+    printf '\n'
+    return 0
+  }
+  local result="${words[0]}" index
+  for ((index = 1; index < ${#words[@]}; index++)); do
+    result+="${words[${index}]^}"
+  done
+  printf '%s\n' "${result}"
+}
+
+#######################################
+# @description Convert a string to `PascalCase`.
+# @example
+#   dybatpho::string_to_pascal "deploy_to_prod"   # DeployToProd
+#
+# @arg $1 string String to convert
+# @stdout The string in Pascal case, empty when it holds no letters or digits
+# @see
+#   - `dybatpho::string_to_camel`
+#######################################
+function dybatpho::string_to_pascal {
+  local input
+  dybatpho::expect_args input -- "$@"
+  local -a words=()
+  __dybatpho_string_words "${input}" words
+  local result="" word
+  for word in ${words[@]+"${words[@]}"}; do
+    result+="${word^}"
+  done
+  printf '%s\n' "${result}"
+}
+
+#######################################
+# @description Quote a string so the shell reads it back as one literal value.
+#   This is what to reach for when a value is going into generated shell code:
+#   a completion script, a `--command` argument, or anything that will be
+#   evaluated later. Writing the value in by hand leaves whitespace, quotes and
+#   `$` to be read as syntax rather than as data.
+#
+#   The empty string quotes to `''` rather than to nothing, which is the whole
+#   point: an unquoted empty value disappears from the command it was part of.
+# @example
+#   dybatpho::string_quote "a b"          # a\ b
+#   dybatpho::string_quote ""             # ''
+#   printf 'ssh host %s\n' "$(dybatpho::string_quote "${remote_command}")"
+#
+# @arg $1 string Value to quote
+# @stdout The value quoted for the shell
+#######################################
+function dybatpho::string_quote {
+  printf '%q\n' "${1-}"
 }

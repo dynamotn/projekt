@@ -402,3 +402,156 @@ EOF
   assert_failure
   assert_stderr --partial "Invalid predicate function"
 }
+
+@test "dybatpho::array_sort orders text and reverses it" {
+  local fruit=(banana apple cherry)
+  dybatpho::array_sort fruit
+  assert_equal "${fruit[*]}" "apple banana cherry"
+  dybatpho::array_sort fruit --reverse
+  assert_equal "${fruit[*]}" "cherry banana apple"
+}
+
+@test "dybatpho::array_sort orders numbers by value under --numeric" {
+  # The reason a shell script wants a sort at all: as text, 10 comes before 9.
+  local sizes=(10 9 100 -3)
+  dybatpho::array_sort sizes
+  assert_equal "${sizes[*]}" "-3 10 100 9"
+  sizes=(10 9 100 -3)
+  dybatpho::array_sort sizes --numeric
+  assert_equal "${sizes[*]}" "-3 9 10 100"
+  dybatpho::array_sort sizes -n -r
+  assert_equal "${sizes[*]}" "100 10 9 -3"
+}
+
+@test "dybatpho::array_sort handles the sizes where a sort does nothing" {
+  local empty=()
+  dybatpho::array_sort empty
+  assert_equal "${#empty[@]}" "0"
+  local single=(one)
+  dybatpho::array_sort single
+  assert_equal "${single[*]}" "one"
+  local dupes=(b a b a)
+  dybatpho::array_sort dupes
+  assert_equal "${dupes[*]}" "a a b b"
+}
+
+@test "dybatpho::array_sort keeps an element that contains a newline" {
+  # A pipe through sort(1) would split this element into two.
+  local values=($'z\nz' a)
+  dybatpho::array_sort values
+  assert_equal "${#values[@]}" "2"
+  assert_equal "${values[0]}" "a"
+}
+
+@test "dybatpho::array_sort prints with -- and rejects a bad option or value" {
+  local fruit=(b a)
+  run -0 dybatpho::array_sort fruit --
+  assert_line --index 0 "a"
+  assert_line --index 1 "b"
+  run --separate-stderr ! dybatpho::array_sort fruit --nope
+  assert_stderr --partial "Unknown option '--nope'"
+  local mixed=(1 x)
+  run --separate-stderr ! dybatpho::array_sort mixed --numeric
+  assert_stderr --partial "is not an integer"
+}
+
+@test "dybatpho::array_sort does not shadow a caller array named like its locals" {
+  # A nameref resolves in the caller's scope, so a plainly named local inside
+  # would hide the caller's array and the function would sort its own copy.
+  local values=(c a b)
+  dybatpho::array_sort values
+  assert_equal "${values[*]}" "a b c"
+  local result=(3 1 2)
+  dybatpho::array_sort result --numeric
+  assert_equal "${result[*]}" "1 2 3"
+  local seen=(y x)
+  dybatpho::array_sort seen
+  assert_equal "${seen[*]}" "x y"
+}
+
+@test "dybatpho::array_slice keeps a run and counts back from the end" {
+  local items=(a b c d e)
+  dybatpho::array_slice items 1 3
+  assert_equal "${items[*]}" "b c d"
+  items=(a b c d e)
+  dybatpho::array_slice items -2
+  assert_equal "${items[*]}" "d e"
+  items=(a b c d e)
+  dybatpho::array_slice items 2
+  assert_equal "${items[*]}" "c d e"
+}
+
+@test "dybatpho::array_slice leaves an empty array when the run is not there" {
+  local items=(a b c d e)
+  dybatpho::array_slice items 10
+  assert_equal "${#items[@]}" "0"
+  items=(a b c)
+  dybatpho::array_slice items 0 0
+  assert_equal "${#items[@]}" "0"
+  # A start further back than the array is long clamps to its beginning.
+  items=(a b c)
+  dybatpho::array_slice items -99
+  assert_equal "${items[*]}" "a b c"
+  items=(a b c)
+  dybatpho::array_slice items 1 99
+  assert_equal "${items[*]}" "b c"
+}
+
+@test "dybatpho::array_slice prints with -- in either argument position" {
+  local items=(a b c)
+  run -0 dybatpho::array_slice items 1 --
+  assert_line --index 0 "b"
+  items=(a b c)
+  run -0 dybatpho::array_slice items 0 2 --
+  assert_line --index 1 "b"
+  run --separate-stderr ! dybatpho::array_slice items xx
+  assert_stderr --partial "is not a whole number"
+}
+
+@test "dybatpho::array_union merges two arrays as a set" {
+  local allowed=(read write read)
+  local extra=(write admin)
+  dybatpho::array_union allowed extra
+  assert_equal "${allowed[*]}" "read write admin"
+  local empty=()
+  dybatpho::array_union allowed empty
+  assert_equal "${allowed[*]}" "read write admin"
+  local fresh=()
+  dybatpho::array_union fresh extra
+  assert_equal "${fresh[*]}" "write admin"
+}
+
+@test "dybatpho::array_intersect keeps what both arrays hold" {
+  local requested=(read write admin)
+  local granted=(write read)
+  dybatpho::array_intersect requested granted
+  assert_equal "${requested[*]}" "read write"
+  local disjoint=(x y)
+  dybatpho::array_intersect disjoint granted
+  assert_equal "${#disjoint[@]}" "0"
+}
+
+@test "dybatpho::array_difference subtracts one array from another" {
+  local wanted=(read write admin)
+  local granted=(write)
+  dybatpho::array_difference wanted granted
+  assert_equal "${wanted[*]}" "read admin"
+  # One-sided: a value only the second array holds is not added.
+  local left=(a)
+  local right=(b)
+  dybatpho::array_difference left right
+  assert_equal "${left[*]}" "a"
+  local same=(a b)
+  local other=(a b)
+  dybatpho::array_difference same other
+  assert_equal "${#same[@]}" "0"
+}
+
+@test "the set operations print with -- and keep the first array's order" {
+  local first=(c a)
+  local second=(b)
+  run -0 dybatpho::array_union first second --
+  assert_line --index 0 "c"
+  assert_line --index 1 "a"
+  assert_line --index 2 "b"
+}

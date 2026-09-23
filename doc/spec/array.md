@@ -170,6 +170,15 @@ fi
 - **FR-018**: Predicate helpers MUST treat an empty array as matching `every`
   and not matching `some` or `find`.
 
+- **FR-019**: The module MUST sort an array in place, ordering text by the current locale's collation and, on request, comparing values as numbers so that `10` follows `9`.
+- **FR-019a**: The numeric sort MUST accept whole numbers including negative ones and MUST stop the script on any other value, rather than falling back to ordering it as text.
+- **FR-019b**: The sort MUST NOT depend on an external command, and MUST leave an element containing a newline intact.
+- **FR-019c**: The sort MUST accept a reversing option, and MUST stop the script on an option it does not recognise.
+- **FR-020**: The module MUST keep a run of an array in place, taking a start index and an optional count, where a negative start counts back from the end and a run lying outside the array leaves it empty rather than failing.
+- **FR-021**: The module MUST provide union, intersection, and difference between two arrays, replacing the first in place.
+- **FR-021a**: Each set operation MUST produce a set, with every value appearing once, in the order the first array had them. Difference MUST be one-sided: values only the second array holds are not added.
+- **FR-022**: The helpers added here MUST NOT shadow a caller's array that happens to share a name with one of their own local variables.
+
 ### Key Entities *(include if feature involves data)*
 
 - **Named Array**: A Bash array referenced by variable name rather than copied by value.
@@ -200,6 +209,12 @@ fi
 - **IT-006**: Map arrays with valid mappers and verify invalid or failing mappers surface errors.
 - **IT-007**: Find the first matching value in dense and sparse arrays and verify missing matches fail without output.
 - **IT-008**: Join an array with multi-character separators and verify the exact output string.
+- **IT-009**: Sort text ascending and reversed, and verify the same values sort differently with and without the numeric option.
+- **IT-010**: Verify the sort leaves an empty array, a single element, and duplicate values alone, and keeps an element containing a newline whole.
+- **IT-011**: Verify the sort rejects an unknown option and a non-numeric value under the numeric option, and prints with `--`.
+- **IT-012**: Sort arrays named after the helper's own locals and verify the caller's values are the ones sorted.
+- **IT-013**: Slice from an index, with a count, and from a negative start; verify a start or count outside the array leaves it empty or clamps, and that `--` prints in either argument position.
+- **IT-014**: Verify union, intersection, and difference against overlapping, disjoint, and empty arrays, that duplicates collapse, and that difference adds nothing from the second array.
 
 ## Acceptance Criteria *(mandatory)*
 

@@ -166,6 +166,11 @@ printf '%s\n' "$(dybatpho::string_pad "name" 12)|$(dybatpho::upper "${slug}")"
 - **FR-020**: The module MUST provide a helper that counts logical lines in a string.
 - **FR-021**: The module MUST provide a wrapping helper for width-limited output.
 
+- **FR-022**: The module MUST convert a string to `snake_case`, `kebab-case`, `camelCase`, and `PascalCase`, accepting input written in any of those conventions or separated by whitespace or punctuation.
+- **FR-022a**: Word splitting MUST break before a capital that follows a lowercase letter or a digit, and at the end of a run of capitals followed by a lowercase letter, so that `XMLHttpRequest` reads as three words.
+- **FR-022b**: Word splitting MUST keep a digit attached to the word before it, and MUST return nothing for input holding no letters or digits.
+- **FR-023**: The module MUST provide a helper that quotes a value so the shell reads it back as one literal, including the empty string, for use in shell code that will be evaluated later.
+
 ### Key Entities *(include if feature involves data)*
 
 - **Input String**: The caller-provided text value to normalize, split, match, replace, repeat, pad, encode, decode, or case-convert.
@@ -196,6 +201,10 @@ printf '%s\n' "$(dybatpho::string_pad "name" 12)|$(dybatpho::upper "${slug}")"
 - **IT-006**: Validate slugify behavior for punctuation-heavy, mixed-case, and separator-only inputs.
 - **IT-007**: Validate repeat behavior for positive and zero counts plus padding behavior for default and custom pad tokens.
 - **IT-008**: Encode and decode values containing spaces, `+`, and `%` sequences to verify expected behavior.
+- **IT-009**: Convert names written in each convention, and separated by spaces and punctuation, and verify all four outputs agree on the word boundaries.
+- **IT-010**: Verify a run of capitals breaks where the word ends, that a digit stays attached to the word before it, and that input with no letters or digits returns nothing.
+- **IT-011**: Verify the kebab helper and the slug helper differ on a name whose word boundaries are implied by its case.
+- **IT-012**: Verify the quoting helper round-trips through `eval` for values containing spaces, quotes, `$`, a semicolon, a tab, a glob, and the empty string.
 
 ## Acceptance Criteria *(mandatory)*
 

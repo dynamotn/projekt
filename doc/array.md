@@ -12,7 +12,12 @@ Utilities for working with array
 This module contains helpers for printing, reversing, deduplicating,
 compacting, filtering, mapping, rejecting, finding values, checking
 membership, checking every/some values, finding positions, and joining Bash
-arrays by name.
+arrays by name. It also sorts and slices them, and treats them as sets for
+union, intersection, and difference.
+
+
+Every helper takes an array by name and changes it in place, with a final
+`--` to print the result as well.
 
 ### 🚀 Highlights
 
@@ -31,6 +36,14 @@ arrays by name.
 - [`dybatpho::array_first`](#dybatphoarray_first) — Print the first element of an array.
 - [`dybatpho::array_last`](#dybatphoarray_last) — Print the last element of an array.
 - [`dybatpho::array_join`](#dybatphoarray_join) — Join array elements with a separator into one string.
+- [`__dybatpho_array_copy`](#__dybatpho_array_copy) — Copy the values of one array into another. Bash 4.3 treats `"${empty[@]}"` as unset under `nounset`, so every copy in this module goes through the length check here rather than repeating it.
+- [`__dybatpho_array_index`](#__dybatpho_array_index) — Build a lookup of the values an array holds.
+- [`__dybatpho_array_sorts_after`](#__dybatpho_array_sorts_after) — Return success when one value must sort after another.
+- [`dybatpho::array_sort`](#dybatphoarray_sort) — Sort an array in place. Text is ordered by the current locale's collation, the same rule `sort` follows, so a script that needs one fixed order everywhere sets `LC_ALL` as it would for `sort`. `--numeric` compares values as numbers, which is the reason a shell script wants a sort at all: as text, `10` comes before `9`. It takes integers, negative ones included, and stops the script on anything else rather than quietly ordering it as text. The sort is an insertion sort rather than a pipe through `sort(1)`: it keeps an element containing a newline intact, needs no external command, and is quick at the sizes a shell array actually reaches.
+- [`dybatpho::array_slice`](#dybatphoarray_slice) — Keep a run of an array in place and drop the rest. A negative start counts back from the end, so `-2` takes the last two elements without the caller working out the length first. A start past either end leaves an empty array rather than failing: asking for elements that are not there is a shape the data can have, not a mistake in the call.
+- [`dybatpho::array_union`](#dybatphoarray_union) — Replace an array with the union of it and another, in place. The result is a set: every value appears once, in the order it was first seen, the first array's values ahead of the second's. A set operation that kept duplicates would not be one, so `dybatpho::array_unique` afterwards has nothing left to do.
+- [`dybatpho::array_intersect`](#dybatphoarray_intersect) — Keep only the values an array shares with another, in place. The result is a set, in the order the first array had them.
+- [`dybatpho::array_difference`](#dybatphoarray_difference) — Drop the values an array shares with another, in place. The result is a set, in the order the first array had them. The operation is one-sided: values only the second array holds are not added.
 
 <a id="see-also"></a>
 ## 🔗 See also
@@ -329,4 +342,249 @@ Join array elements with a separator into one string.
 **📤 Output on stdout**
 
 - Print outputted string
+
+
+---
+
+### `__dybatpho_array_copy`
+
+Copy the values of one array into another.
+  Bash 4.3 treats `"${empty[@]}"` as unset under `nounset`, so every copy in
+  this module goes through the length check here rather than repeating it.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the array to fill |
+| `$2` | string | Name of the array to read |
+
+**🧩 Variable sets**
+
+- **`The`**: named array
+
+
+---
+
+### `__dybatpho_array_index`
+
+Build a lookup of the values an array holds.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the associative array to fill |
+| `$2` | string | Name of the array to read |
+
+**🧩 Variable sets**
+
+- **`The`**: named associative array, one key per distinct value
+
+
+---
+
+### `__dybatpho_array_sorts_after`
+
+Return success when one value must sort after another.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Left value |
+| `$2` | string | Right value |
+| `$3` | bool | Compare as numbers rather than as text |
+| `$4` | bool | Reverse the order |
+
+**🚦 Exit codes**
+
+- `0`: The left value belongs after the right one
+- `1`: It does not
+
+
+---
+
+### `dybatpho::array_sort`
+
+Sort an array in place.
+  Text is ordered by the current locale's collation, the same rule `sort`
+  follows, so a script that needs one fixed order everywhere sets `LC_ALL` as
+  it would for `sort`.
+
+
+  `--numeric` compares values as numbers, which is the reason a shell script
+  wants a sort at all: as text, `10` comes before `9`. It takes integers,
+  negative ones included, and stops the script on anything else rather than
+  quietly ordering it as text.
+
+
+  The sort is an insertion sort rather than a pipe through `sort(1)`: it keeps
+  an element containing a newline intact, needs no external command, and is
+  quick at the sizes a shell array actually reaches.
+
+**🧪 Examples**
+
+```bash
+releases=(1.10 1.9 2.0)
+dybatpho::array_sort releases --
+# 1.10
+# 1.9
+# 2.0
+
+```
+
+```bash
+sizes=(10 9 100 -3)
+dybatpho::array_sort sizes --numeric --          # -3 9 10 100
+dybatpho::array_sort sizes --numeric --reverse
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of array |
+| `$@` | string | Any of `--numeric`/`-n`, `--reverse`/`-r`, and `--` to print |
+
+**📤 Output on stdout**
+
+- Print the sorted array if `--` is given
+
+**🚦 Exit codes**
+
+- `1`: Stop the script on an unknown option, or on a value that is not an integer under `--numeric`
+
+**🔗 See also**
+
+- [- `dybatpho::semver_sort](#dybatphosemver_sort)
+
+
+---
+
+### `dybatpho::array_slice`
+
+Keep a run of an array in place and drop the rest.
+  A negative start counts back from the end, so `-2` takes the last two
+  elements without the caller working out the length first. A start past
+  either end leaves an empty array rather than failing: asking for elements
+  that are not there is a shape the data can have, not a mistake in the call.
+
+**🧪 Example**
+
+```bash
+items=(a b c d e)
+dybatpho::array_slice items 1 3 --   # b c d
+dybatpho::array_slice items -2 --    # the last two
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of array |
+| `$2` | number | Index to start at, negative to count back from the end |
+| `$3` | number | Optional count, defaulting to everything from the start on |
+| `$4` | string | Set `--` to print to stdout |
+
+**📤 Output on stdout**
+
+- Print the sliced array if `--` is given
+
+**🚦 Exit codes**
+
+- `1`: Stop the script when the start or the count is not a whole number
+
+
+---
+
+### `dybatpho::array_union`
+
+Replace an array with the union of it and another, in place.
+  The result is a set: every value appears once, in the order it was first
+  seen, the first array's values ahead of the second's. A set operation that
+  kept duplicates would not be one, so `dybatpho::array_unique` afterwards has
+  nothing left to do.
+
+**🧪 Example**
+
+```bash
+allowed=(read write read)
+extra=(write admin)
+dybatpho::array_union allowed extra --   # read write admin
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the array to replace |
+| `$2` | string | Name of the array to merge in |
+| `$3` | string | Set `--` to print to stdout |
+
+**📤 Output on stdout**
+
+- Print the union if $3 is `--`
+
+
+---
+
+### `dybatpho::array_intersect`
+
+Keep only the values an array shares with another, in place.
+  The result is a set, in the order the first array had them.
+
+**🧪 Example**
+
+```bash
+requested=(read write admin)
+granted=(write read)
+dybatpho::array_intersect requested granted --   # read write
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the array to replace |
+| `$2` | string | Name of the array to intersect with |
+| `$3` | string | Set `--` to print to stdout |
+
+**📤 Output on stdout**
+
+- Print the intersection if $3 is `--`
+
+
+---
+
+### `dybatpho::array_difference`
+
+Drop the values an array shares with another, in place.
+  The result is a set, in the order the first array had them. The operation is
+  one-sided: values only the second array holds are not added.
+
+**🧪 Example**
+
+```bash
+wanted=(read write admin)
+granted=(write)
+dybatpho::array_difference wanted granted --   # read admin
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the array to replace |
+| `$2` | string | Name of the array to subtract |
+| `$3` | string | Set `--` to print to stdout |
+
+**📤 Output on stdout**
+
+- Print the difference if $3 is `--`
 

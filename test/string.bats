@@ -259,3 +259,78 @@ EOF
 @test "dybatpho::string_pad falls back to spaces for an empty pad token" {
   assert_equal "$(dybatpho::string_pad "ab" 5 "")" "ab   "
 }
+
+@test "dybatpho::string_to_snake reads every convention the input may arrive in" {
+  assert_equal "$(dybatpho::string_to_snake fooBar)" "foo_bar"
+  assert_equal "$(dybatpho::string_to_snake foo-bar-baz)" "foo_bar_baz"
+  assert_equal "$(dybatpho::string_to_snake "Foo Bar")" "foo_bar"
+  assert_equal "$(dybatpho::string_to_snake FOO_BAR)" "foo_bar"
+  assert_equal "$(dybatpho::string_to_snake already_snake)" "already_snake"
+  assert_equal "$(dybatpho::string_to_snake "deploy--to__prod")" "deploy_to_prod"
+  assert_equal "$(dybatpho::string_to_snake "_foo_bar_")" "foo_bar"
+}
+
+@test "dybatpho::string_to_snake breaks a run of capitals where the word ends" {
+  # `XMLHttpRequest` is the case that separates a real word splitter from a
+  # regex: the break is before the last capital, not after the first.
+  assert_equal "$(dybatpho::string_to_snake XMLHttpRequest)" "xml_http_request"
+  assert_equal "$(dybatpho::string_to_snake HTTPServer)" "http_server"
+  assert_equal "$(dybatpho::string_to_snake parseJSON)" "parse_json"
+}
+
+@test "dybatpho::string_to_snake keeps a digit attached to the word before it" {
+  # Splitting at a digit would be guessing: `foo2bar` is one name, not two.
+  assert_equal "$(dybatpho::string_to_snake foo2bar)" "foo2bar"
+  assert_equal "$(dybatpho::string_to_snake s3_bucket)" "s3_bucket"
+}
+
+@test "the case helpers return nothing for input with no letters or digits" {
+  assert_equal "$(dybatpho::string_to_snake "")" ""
+  assert_equal "$(dybatpho::string_to_kebab "---")" ""
+  assert_equal "$(dybatpho::string_to_camel "")" ""
+  assert_equal "$(dybatpho::string_to_pascal "  ")" ""
+}
+
+@test "dybatpho::string_to_kebab differs from slugify on word boundaries" {
+  # Slugify is for prose and has no idea where the words are; this reads the
+  # boundaries the naming convention implies.
+  assert_equal "$(dybatpho::string_to_kebab XMLHttpRequest)" "xml-http-request"
+  assert_equal "$(dybatpho::string_slugify XMLHttpRequest)" "xmlhttprequest"
+  assert_equal "$(dybatpho::string_to_kebab deploy_to_prod)" "deploy-to-prod"
+}
+
+@test "dybatpho::string_to_camel and string_to_pascal differ only in the first word" {
+  assert_equal "$(dybatpho::string_to_camel deploy_to_prod)" "deployToProd"
+  assert_equal "$(dybatpho::string_to_pascal deploy_to_prod)" "DeployToProd"
+  assert_equal "$(dybatpho::string_to_camel XMLHttpRequest)" "xmlHttpRequest"
+  assert_equal "$(dybatpho::string_to_camel foo)" "foo"
+  assert_equal "$(dybatpho::string_to_pascal foo)" "Foo"
+}
+
+@test "the case helpers round-trip through each other" {
+  assert_equal "$(dybatpho::string_to_snake "$(dybatpho::string_to_camel deploy_to_prod)")" "deploy_to_prod"
+  assert_equal "$(dybatpho::string_to_kebab "$(dybatpho::string_to_pascal deploy_to_prod)")" "deploy-to-prod"
+  assert_equal "$(dybatpho::string_to_camel "$(dybatpho::string_to_kebab XMLHttpRequest)")" "xmlHttpRequest"
+}
+
+@test "single-letter words do not survive a trip through Pascal case" {
+  # `a_b_c` becomes `ABC`, and nothing in `ABC` says whether it was three words
+  # or one acronym. Reading it as an acronym is what makes `XMLHttpRequest`
+  # work, so this is the cost of that rule rather than a defect.
+  assert_equal "$(dybatpho::string_to_pascal a_b_c)" "ABC"
+  assert_equal "$(dybatpho::string_to_kebab ABC)" "abc"
+}
+
+@test "dybatpho::string_quote produces a value the shell reads back unchanged" {
+  # The contract is the round trip, not the exact spelling of the escape.
+  local original quoted
+  for original in "a b" "" "it's" 'say "hi"' 'a$b' 'x;rm -rf /' $'tab\there' '*'; do
+    quoted="$(dybatpho::string_quote "${original}")"
+    assert_equal "$(eval "printf '%s' ${quoted}")" "${original}"
+  done
+}
+
+@test "dybatpho::string_quote turns the empty string into something visible" {
+  # Unquoted, an empty value vanishes from the command it was part of.
+  assert_equal "$(dybatpho::string_quote "")" "''"
+}

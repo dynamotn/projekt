@@ -5,7 +5,11 @@
 #   This module contains helpers for printing, reversing, deduplicating,
 #   compacting, filtering, mapping, rejecting, finding values, checking
 #   membership, checking every/some values, finding positions, and joining Bash
-#   arrays by name.
+#   arrays by name. It also sorts and slices them, and treats them as sets for
+#   union, intersection, and difference.
+#
+#   Every helper takes an array by name and changes it in place, with a final
+#   `--` to print the result as well.
 # @see
 #   - `example/array_ops.sh`
 : "${DYBATPHO_DIR:?DYBATPHO_DIR must be set. Please source dybatpho/init.sh before other scripts from dybatpho.}"
@@ -314,4 +318,314 @@ function dybatpho::array_join {
   for ((i = 1; i < ${#input_arr[@]}; i++)); do
     printf -- "%s%s" "${separator}" "${input_arr[${i}]}"
   done
+}
+
+#######################################
+# @description Copy the values of one array into another.
+#   Bash 4.3 treats `"${empty[@]}"` as unset under `nounset`, so every copy in
+#   this module goes through the length check here rather than repeating it.
+# @arg $1 string Name of the array to fill
+# @arg $2 string Name of the array to read
+# @set The named array
+#######################################
+function __dybatpho_array_copy {
+  local -n __copy_out="$1"
+  # shellcheck disable=SC2178
+  local -n __copy_in="$2"
+  __copy_out=()
+  ((${#__copy_in[@]} == 0)) || __copy_out=("${__copy_in[@]}")
+}
+
+#######################################
+# @description Build a lookup of the values an array holds.
+# @arg $1 string Name of the associative array to fill
+# @arg $2 string Name of the array to read
+# @set The named associative array, one key per distinct value
+#######################################
+function __dybatpho_array_index {
+  local -n __index_out="$1"
+  # shellcheck disable=SC2178
+  local -n __index_in="$2"
+  __index_out=()
+  local __index_value
+  for __index_value in ${__index_in[@]+"${__index_in[@]}"}; do
+    __index_out["${__index_value}"]=1
+  done
+}
+
+#######################################
+# @description Return success when one value must sort after another.
+# @arg $1 string Left value
+# @arg $2 string Right value
+# @arg $3 bool Compare as numbers rather than as text
+# @arg $4 bool Reverse the order
+# @exitcode 0 The left value belongs after the right one
+# @exitcode 1 It does not
+#######################################
+function __dybatpho_array_sorts_after {
+  local left="$1" right="$2" numeric="$3" reverse="$4"
+  local order
+  if [[ "${numeric}" == true ]]; then
+    if ((left > right)); then
+      order=1
+    elif ((left < right)); then
+      order=-1
+    else
+      order=0
+    fi
+  else
+    if [[ "${left}" > "${right}" ]]; then
+      order=1
+    elif [[ "${left}" < "${right}" ]]; then
+      order=-1
+    else
+      order=0
+    fi
+  fi
+  if [[ "${reverse}" == true ]]; then
+    ((order < 0))
+  else
+    ((order > 0))
+  fi
+}
+
+#######################################
+# @description Sort an array in place.
+#   Text is ordered by the current locale's collation, the same rule `sort`
+#   follows, so a script that needs one fixed order everywhere sets `LC_ALL` as
+#   it would for `sort`.
+#
+#   `--numeric` compares values as numbers, which is the reason a shell script
+#   wants a sort at all: as text, `10` comes before `9`. It takes integers,
+#   negative ones included, and stops the script on anything else rather than
+#   quietly ordering it as text.
+#
+#   The sort is an insertion sort rather than a pipe through `sort(1)`: it keeps
+#   an element containing a newline intact, needs no external command, and is
+#   quick at the sizes a shell array actually reaches.
+# @example
+#   releases=(1.10 1.9 2.0)
+#   dybatpho::array_sort releases --
+#   # 1.10
+#   # 1.9
+#   # 2.0
+#
+# @example
+#   sizes=(10 9 100 -3)
+#   dybatpho::array_sort sizes --numeric --          # -3 9 10 100
+#   dybatpho::array_sort sizes --numeric --reverse
+#
+# @arg $1 string Name of array
+# @arg $@ string Any of `--numeric`/`-n`, `--reverse`/`-r`, and `--` to print
+# @stdout Print the sorted array if `--` is given
+# @exitcode 1 Stop the script on an unknown option, or on a value that is not an integer under `--numeric`
+# @see
+#   - `dybatpho::semver_sort`
+#######################################
+function dybatpho::array_sort {
+  # The locals carry a distinctive prefix because a nameref resolves in the
+  # caller's scope: a plainly named local here would shadow a caller's array of
+  # the same name, and this function would then sort its own empty copy.
+  local __sort_numeric=false __sort_reverse=false __sort_print=false
+  local __sort_option
+  for __sort_option in "${@:2}"; do
+    case "${__sort_option}" in
+      -n | --numeric) __sort_numeric=true ;;
+      -r | --reverse) __sort_reverse=true ;;
+      --) __sort_print=true ;;
+      *) dybatpho::die "dybatpho::array_sort: Unknown option '${__sort_option}'" ;;
+    esac
+  done
+
+  local -a __sort_values=()
+  __dybatpho_array_copy __sort_values "$1"
+  local __sort_count="${#__sort_values[@]}"
+  local __sort_value
+  if [[ "${__sort_numeric}" == true ]]; then
+    for __sort_value in ${__sort_values[@]+"${__sort_values[@]}"}; do
+      [[ "${__sort_value}" =~ ^-?[0-9]+$ ]] \
+        || dybatpho::die "dybatpho::array_sort: '${__sort_value}' is not an integer; drop --numeric, or compare with the math module"
+    done
+  fi
+
+  local __sort_index __sort_position __sort_current
+  for ((__sort_index = 1; __sort_index < __sort_count; __sort_index++)); do
+    __sort_current="${__sort_values[${__sort_index}]}"
+    __sort_position=$((__sort_index - 1))
+    while ((__sort_position >= 0)) \
+      && __dybatpho_array_sorts_after "${__sort_values[${__sort_position}]}" "${__sort_current}" "${__sort_numeric}" "${__sort_reverse}"; do
+      __sort_values[__sort_position + 1]="${__sort_values[${__sort_position}]}"
+      __sort_position=$((__sort_position - 1))
+    done
+    __sort_values[__sort_position + 1]="${__sort_current}"
+  done
+
+  __dybatpho_array_copy "$1" __sort_values
+  if [[ "${__sort_print}" == true ]]; then
+    dybatpho::array_print "$1"
+  fi
+}
+
+#######################################
+# @description Keep a run of an array in place and drop the rest.
+#   A negative start counts back from the end, so `-2` takes the last two
+#   elements without the caller working out the length first. A start past
+#   either end leaves an empty array rather than failing: asking for elements
+#   that are not there is a shape the data can have, not a mistake in the call.
+# @example
+#   items=(a b c d e)
+#   dybatpho::array_slice items 1 3 --   # b c d
+#   dybatpho::array_slice items -2 --    # the last two
+#
+# @arg $1 string Name of array
+# @arg $2 number Index to start at, negative to count back from the end
+# @arg $3 number Optional count, defaulting to everything from the start on
+# @arg $4 string Set `--` to print to stdout
+# @stdout Print the sliced array if `--` is given
+# @exitcode 1 Stop the script when the start or the count is not a whole number
+#######################################
+function dybatpho::array_slice {
+  local __slice_start="${2-}"
+  [[ "${__slice_start}" =~ ^-?[0-9]+$ ]] \
+    || dybatpho::die "dybatpho::array_slice: '${__slice_start}' is not a whole number"
+
+  local -a __slice_values=()
+  __dybatpho_array_copy __slice_values "$1"
+  local __slice_count="${#__slice_values[@]}"
+
+  # The count is optional, so the third argument is either it or the `--` that
+  # would otherwise be fourth.
+  local __slice_length="${__slice_count}" __slice_print="${4-}"
+  if [[ "${3-}" == "--" ]]; then
+    __slice_print="--"
+  elif [[ -n "${3-}" ]]; then
+    [[ "${3}" =~ ^[0-9]+$ ]] \
+      || dybatpho::die "dybatpho::array_slice: '${3}' is not a count"
+    __slice_length="${3}"
+  fi
+
+  if ((__slice_start < 0)); then
+    __slice_start=$((__slice_count + __slice_start))
+    ((__slice_start >= 0)) || __slice_start=0
+  fi
+
+  local -a __slice_result=()
+  local __slice_index
+  for ((__slice_index = __slice_start; __slice_index < __slice_count && __slice_index < __slice_start + __slice_length; __slice_index++)); do
+    __slice_result+=("${__slice_values[${__slice_index}]}")
+  done
+
+  __dybatpho_array_copy "$1" __slice_result
+  if [[ "${__slice_print}" == "--" ]]; then
+    dybatpho::array_print "$1"
+  fi
+}
+
+#######################################
+# @description Replace an array with the union of it and another, in place.
+#   The result is a set: every value appears once, in the order it was first
+#   seen, the first array's values ahead of the second's. A set operation that
+#   kept duplicates would not be one, so `dybatpho::array_unique` afterwards has
+#   nothing left to do.
+# @example
+#   allowed=(read write read)
+#   extra=(write admin)
+#   dybatpho::array_union allowed extra --   # read write admin
+#
+# @arg $1 string Name of the array to replace
+# @arg $2 string Name of the array to merge in
+# @arg $3 string Set `--` to print to stdout
+# @stdout Print the union if $3 is `--`
+#######################################
+function dybatpho::array_union {
+  local -a __set_values=() __set_addition=()
+  __dybatpho_array_copy __set_values "$1"
+  __dybatpho_array_copy __set_addition "$2"
+  ((${#__set_addition[@]} == 0)) || __set_values+=("${__set_addition[@]}")
+
+  local -A __set_seen=()
+  local -a __set_result=()
+  local __set_value
+  for __set_value in ${__set_values[@]+"${__set_values[@]}"}; do
+    if [[ ! -v "__set_seen[${__set_value}]" ]]; then
+      __set_seen["${__set_value}"]=1
+      __set_result+=("${__set_value}")
+    fi
+  done
+
+  __dybatpho_array_copy "$1" __set_result
+  if [[ "${3-}" == "--" ]]; then
+    dybatpho::array_print "$1"
+  fi
+}
+
+#######################################
+# @description Keep only the values an array shares with another, in place.
+#   The result is a set, in the order the first array had them.
+# @example
+#   requested=(read write admin)
+#   granted=(write read)
+#   dybatpho::array_intersect requested granted --   # read write
+#
+# @arg $1 string Name of the array to replace
+# @arg $2 string Name of the array to intersect with
+# @arg $3 string Set `--` to print to stdout
+# @stdout Print the intersection if $3 is `--`
+#######################################
+function dybatpho::array_intersect {
+  local -A __set_other=()
+  __dybatpho_array_index __set_other "$2"
+  local -a __set_values=()
+  __dybatpho_array_copy __set_values "$1"
+
+  local -A __set_seen=()
+  local -a __set_result=()
+  local __set_value
+  for __set_value in ${__set_values[@]+"${__set_values[@]}"}; do
+    if [[ -v "__set_other[${__set_value}]" && ! -v "__set_seen[${__set_value}]" ]]; then
+      __set_seen["${__set_value}"]=1
+      __set_result+=("${__set_value}")
+    fi
+  done
+
+  __dybatpho_array_copy "$1" __set_result
+  if [[ "${3-}" == "--" ]]; then
+    dybatpho::array_print "$1"
+  fi
+}
+
+#######################################
+# @description Drop the values an array shares with another, in place.
+#   The result is a set, in the order the first array had them. The operation is
+#   one-sided: values only the second array holds are not added.
+# @example
+#   wanted=(read write admin)
+#   granted=(write)
+#   dybatpho::array_difference wanted granted --   # read admin
+#
+# @arg $1 string Name of the array to replace
+# @arg $2 string Name of the array to subtract
+# @arg $3 string Set `--` to print to stdout
+# @stdout Print the difference if $3 is `--`
+#######################################
+function dybatpho::array_difference {
+  local -A __set_other=()
+  __dybatpho_array_index __set_other "$2"
+  local -a __set_values=()
+  __dybatpho_array_copy __set_values "$1"
+
+  local -A __set_seen=()
+  local -a __set_result=()
+  local __set_value
+  for __set_value in ${__set_values[@]+"${__set_values[@]}"}; do
+    if [[ ! -v "__set_other[${__set_value}]" && ! -v "__set_seen[${__set_value}]" ]]; then
+      __set_seen["${__set_value}"]=1
+      __set_result+=("${__set_value}")
+    fi
+  done
+
+  __dybatpho_array_copy "$1" __set_result
+  if [[ "${3-}" == "--" ]]; then
+    dybatpho::array_print "$1"
+  fi
 }

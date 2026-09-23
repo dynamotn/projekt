@@ -14,6 +14,12 @@ trimming exact prefixes/suffixes and characters, slugifying, truncating,
 counting lines, testing blank strings, wrapping text, repeating, padding,
 encoding, decoding, and case-converting shell strings.
 
+
+The naming-convention helpers convert between `snake_case`, `kebab-case`,
+`camelCase`, and `PascalCase`, reading the word boundaries whichever
+convention the input arrived in. `dybatpho::string_quote` prepares a value
+to be written into shell code that will be evaluated later.
+
 ### 🚀 Highlights
 
 - [`dybatpho::trim`](#dybatphotrim) — Trim leading and trailing whitespace from a string.
@@ -36,6 +42,12 @@ encoding, decoding, and case-converting shell strings.
 - [`dybatpho::url_decode`](#dybatphourl_decode) — URL-decode a string.
 - [`dybatpho::lower`](#dybatpholower) — Convert a string to lowercase.
 - [`dybatpho::upper`](#dybatphoupper) — Convert a string to uppercase.
+- [`__dybatpho_string_words`](#__dybatpho_string_words) — Split a string into the words its naming convention implies. Every case helper in this module goes through here, so they all accept the same input whatever convention it arrived in: `fooBar`, `foo_bar`, `foo-bar`, `Foo Bar` and `FOO_BAR` all give the same two words. A capital opens a new word after a lowercase letter or a digit, and at the end of a run of capitals that is followed by a lowercase one, which is what keeps `XMLHttpRequest` reading as `xml http request` rather than as one word or as one letter per word. A digit stays attached to the word it follows, so `foo2bar` is one word: splitting there would be guessing. The cost of that acronym rule is single-letter words: `ABC` reads as one word, because nothing in it says whether it was an acronym or `a b c`. A name that went through `dybatpho::string_to_pascal` as `a_b_c` does not come back. There is no rule that gets both cases right, and acronyms are the ones that turn up in real names.
+- [`dybatpho::string_to_snake`](#dybatphostring_to_snake) — Convert a string to `snake_case`.
+- [`dybatpho::string_to_kebab`](#dybatphostring_to_kebab) — Convert a string to `kebab-case`. Unlike `dybatpho::string_slugify`, this reads the word boundaries a naming convention implies, so `XMLHttpRequest` becomes `xml-http-request` rather than `xmlhttprequest`. Slugify is for prose; this is for identifiers.
+- [`dybatpho::string_to_camel`](#dybatphostring_to_camel) — Convert a string to `camelCase`.
+- [`dybatpho::string_to_pascal`](#dybatphostring_to_pascal) — Convert a string to `PascalCase`.
+- [`dybatpho::string_quote`](#dybatphostring_quote) — Quote a string so the shell reads it back as one literal value. This is what to reach for when a value is going into generated shell code: a completion script, a `--command` argument, or anything that will be evaluated later. Writing the value in by hand leaves whitespace, quotes and `$` to be read as syntax rather than as data. The empty string quotes to `''` rather than to nothing, which is the whole point: an unquoted empty value disappears from the command it was part of.
 
 <a id="see-also"></a>
 ## 🔗 See also
@@ -401,4 +413,191 @@ Convert a string to uppercase.
 **📤 Output on stdout**
 
 - Converted string
+
+
+---
+
+### `__dybatpho_string_words`
+
+Split a string into the words its naming convention implies.
+  Every case helper in this module goes through here, so they all accept the
+  same input whatever convention it arrived in: `fooBar`, `foo_bar`,
+  `foo-bar`, `Foo Bar` and `FOO_BAR` all give the same two words.
+
+
+  A capital opens a new word after a lowercase letter or a digit, and at the
+  end of a run of capitals that is followed by a lowercase one, which is what
+  keeps `XMLHttpRequest` reading as `xml http request` rather than as one
+  word or as one letter per word. A digit stays attached to the word it
+  follows, so `foo2bar` is one word: splitting there would be guessing.
+
+
+  The cost of that acronym rule is single-letter words: `ABC` reads as one
+  word, because nothing in it says whether it was an acronym or `a b c`. A
+  name that went through `dybatpho::string_to_pascal` as `a_b_c` does not come
+  back. There is no rule that gets both cases right, and acronyms are the ones
+  that turn up in real names.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | String to split |
+| `$2` | string | Name of the array variable receiving the lower-cased words |
+
+**🧩 Variable sets**
+
+- **`The`**: named array
+
+
+---
+
+### `dybatpho::string_to_snake`
+
+Convert a string to `snake_case`.
+
+**🧪 Example**
+
+```bash
+dybatpho::string_to_snake "XMLHttpRequest"   # xml_http_request
+dybatpho::string_to_snake "deploy-to-prod"   # deploy_to_prod
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | String to convert |
+
+**📤 Output on stdout**
+
+- The string in snake case, empty when it holds no letters or digits
+
+**🔗 See also**
+
+- [- `dybatpho::string_to_kebab` - `dybatpho::string_slugify](#dybatphostring_to_kebab-dybatphostring_slugify)
+
+
+---
+
+### `dybatpho::string_to_kebab`
+
+Convert a string to `kebab-case`.
+  Unlike `dybatpho::string_slugify`, this reads the word boundaries a naming
+  convention implies, so `XMLHttpRequest` becomes `xml-http-request` rather
+  than `xmlhttprequest`. Slugify is for prose; this is for identifiers.
+
+**🧪 Example**
+
+```bash
+dybatpho::string_to_kebab "XMLHttpRequest"   # xml-http-request
+dybatpho::string_to_kebab "deploy_to_prod"   # deploy-to-prod
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | String to convert |
+
+**📤 Output on stdout**
+
+- The string in kebab case, empty when it holds no letters or digits
+
+**🔗 See also**
+
+- [- `dybatpho::string_to_snake` - `dybatpho::string_slugify](#dybatphostring_to_snake-dybatphostring_slugify)
+
+
+---
+
+### `dybatpho::string_to_camel`
+
+Convert a string to `camelCase`.
+
+**🧪 Example**
+
+```bash
+dybatpho::string_to_camel "deploy_to_prod"   # deployToProd
+dybatpho::string_to_camel "XMLHttpRequest"   # xmlHttpRequest
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | String to convert |
+
+**📤 Output on stdout**
+
+- The string in camel case, empty when it holds no letters or digits
+
+**🔗 See also**
+
+- [- `dybatpho::string_to_pascal](#dybatphostring_to_pascal)
+
+
+---
+
+### `dybatpho::string_to_pascal`
+
+Convert a string to `PascalCase`.
+
+**🧪 Example**
+
+```bash
+dybatpho::string_to_pascal "deploy_to_prod"   # DeployToProd
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | String to convert |
+
+**📤 Output on stdout**
+
+- The string in Pascal case, empty when it holds no letters or digits
+
+**🔗 See also**
+
+- [- `dybatpho::string_to_camel](#dybatphostring_to_camel)
+
+
+---
+
+### `dybatpho::string_quote`
+
+Quote a string so the shell reads it back as one literal value.
+  This is what to reach for when a value is going into generated shell code:
+  a completion script, a `--command` argument, or anything that will be
+  evaluated later. Writing the value in by hand leaves whitespace, quotes and
+  `$` to be read as syntax rather than as data.
+
+
+  The empty string quotes to `''` rather than to nothing, which is the whole
+  point: an unquoted empty value disappears from the command it was part of.
+
+**🧪 Example**
+
+```bash
+dybatpho::string_quote "a b"          # a\ b
+dybatpho::string_quote ""             # ''
+printf 'ssh host %s\n' "$(dybatpho::string_quote "${remote_command}")"
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Value to quote |
+
+**📤 Output on stdout**
+
+- The value quoted for the shell
 

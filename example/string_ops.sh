@@ -101,6 +101,34 @@ function _demo_case {
   dybatpho::info "Lower    : $(dybatpho::lower "${word}")"
 }
 
+# @description Move a name between the conventions a codebase mixes: a CLI flag
+#   in kebab case, an environment variable in snake case, a function in camel.
+function _demo_naming {
+  dybatpho::header "NAMING CONVENTIONS"
+  local name
+  for name in "XMLHttpRequest" "deploy_to_prod" "deploy-to-prod" "Deploy To Prod"; do
+    dybatpho::print "  $(printf '%-16s' "${name}") -> snake $(dybatpho::string_to_snake "${name}"), kebab $(dybatpho::string_to_kebab "${name}"), camel $(dybatpho::string_to_camel "${name}"), pascal $(dybatpho::string_to_pascal "${name}")"
+  done
+  # Slugify has no idea where the words are; these read the boundaries the
+  # convention implies.
+  dybatpho::print "  slugify XMLHttpRequest -> $(dybatpho::string_slugify XMLHttpRequest)"
+  dybatpho::print "  kebab   XMLHttpRequest -> $(dybatpho::string_to_kebab XMLHttpRequest)"
+}
+
+# @description Put a value into shell code that will be evaluated later, without
+#   its spaces and quotes being read as syntax.
+function _demo_quote {
+  dybatpho::header "QUOTING FOR THE SHELL"
+  local value
+  for value in "a b" "it's" 'say "hi"' ""; do
+    dybatpho::print "  [${value}] -> $(dybatpho::string_quote "${value}")"
+  done
+  # The empty string quotes to something visible, which is the point: unquoted,
+  # it would vanish from the command it was part of.
+  local remote_command="ls -la /tmp/my dir"
+  dybatpho::print "  ssh host $(dybatpho::string_quote "${remote_command}")"
+}
+
 function _main {
   _demo_trim
   _demo_split
@@ -113,6 +141,8 @@ function _main {
   _demo_repeat_and_pad
   _demo_url
   _demo_case
+  _demo_naming
+  _demo_quote
   dybatpho::success "String operations demo complete"
 }
 

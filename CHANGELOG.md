@@ -9,6 +9,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`array` — order, slices, and set operations.** The module could filter and
+  map an array but not put one in order, and nothing anywhere in the library
+  could sort a plain list: `dybatpho::semver_sort` was the only sort there was.
+
+  `dybatpho::array_sort` fills that in, with `--numeric` for the case that
+  makes a shell script want a sort at all — as text, `10` comes before `9` —
+  and `--reverse`. It is an insertion sort rather than a pipe through `sort(1)`,
+  which keeps an element containing a newline whole and needs nothing installed.
+  Text follows the locale's collation, as `sort` does; the numeric form takes
+  whole numbers and stops on anything else rather than quietly falling back to
+  text order.
+
+  `dybatpho::array_slice` keeps a run of an array, with a negative start
+  counting back from the end. `dybatpho::array_union`,
+  `dybatpho::array_intersect` and `dybatpho::array_difference` compare two
+  arrays; each produces a set, in the order the first array had them.
+
+- **`string` — naming conventions and quoting for generated shell code.**
+  `dybatpho::string_to_snake`, `_to_kebab`, `_to_camel` and `_to_pascal`
+  convert between the conventions a codebase mixes, reading the word
+  boundaries whichever one the input arrived in, so `XMLHttpRequest`,
+  `deploy_to_prod` and `Deploy To Prod` all split the same way. This is what
+  `dybatpho::string_slugify` is not: slugify is for prose and has no idea where
+  the words are, so it answers `xmlhttprequest`.
+
+  `dybatpho::string_quote` prepares a value to be written into shell code that
+  is evaluated later — a completion script, a remote command. `printf %q` was
+  already being used for this in four modules with no helper to call.
+
+- **`date` — the calendar and span arithmetic the module was missing.** It
+  could add days and count days, and nothing else. New:
+  `dybatpho::date_is_leap_year`, `dybatpho::date_days_in_month`,
+  `dybatpho::date_month_start`, `dybatpho::date_month_end`,
+  `dybatpho::date_add`, `dybatpho::date_diff`, and
+  `dybatpho::date_seconds_to_hms`.
+
+  Spans are measured in units that are a fixed number of seconds: seconds,
+  minutes, hours, days, and weeks. Months and years are refused rather than
+  approximated, because their length depends on where in the calendar they fall
+  and GNU and BSD `date` shift by them differently — a helper that took them
+  would answer differently per platform.
+
+  `dybatpho::date_add_days` and `dybatpho::date_diff_days` now delegate to the
+  general helpers instead of repeating them, and answer exactly as before.
+
 - **`testing` — a time budget and a bulk snapshot refresh.** Two things a suite
   built on this module had to hand-roll.
 
