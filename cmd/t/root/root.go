@@ -16,8 +16,6 @@ func NewProjektTemplateCmd(out io.Writer) *cobra.Command {
 		Short:   "Create a template file from various sources",
 	}
 
-	cmd.AddCommand()
-
 	cli.SetColorAndStyles(cmd)
 	return cmd
 }
