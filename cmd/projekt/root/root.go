@@ -16,6 +16,11 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 		Use:          "projekt",
 		Short:        "A smart command to work with your project folder",
 		SilenceUsage: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Stop before running anything on a config we could not read,
+			// instead of silently behaving as if it were empty.
+			return lazypath.LoadError()
+		},
 	}
 
 	f := rootCmd.PersistentFlags()

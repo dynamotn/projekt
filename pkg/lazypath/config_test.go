@@ -196,3 +196,41 @@ func TestUnmarshalConfig(t *testing.T) {
 		t.Errorf("unmarshalConfig() changed config unexpectedly")
 	}
 }
+
+func TestInitConfig_KeepsMalformedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.yaml")
+
+	// A config file viper cannot parse must survive untouched.
+	content := []byte("folders: [ this is not: valid: yaml\n")
+	if err := os.WriteFile(configFile, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	originalCfgFile := CfgFile
+	CfgFile = configFile
+	defer func() {
+		CfgFile = originalCfgFile
+		loadErr = nil
+	}()
+
+	InitConfig()
+
+	if LoadError() == nil {
+		t.Error("LoadError() = nil, want the parse error that blocks any write")
+	}
+
+	folder := &Folder{Path: tmpDir}
+	if err := folder.AddToConfig(); err == nil {
+		t.Error("AddToConfig() = nil, want a refusal while the config is unreadable")
+	}
+
+	got, err := os.ReadFile(configFile)
+	if err != nil {
+		t.Fatalf("config file unreadable after InitConfig(): %v", err)
+	}
+	if string(got) != string(content) {
+		t.Errorf("InitConfig() overwrote a malformed config file, got %q", string(got))
+	}
+}
+

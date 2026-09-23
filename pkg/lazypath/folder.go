@@ -55,6 +55,9 @@ func CheckFolderExist(path string) (bool, int) {
 
 // AddToConfig adds the folder to the configuration file
 func (f *Folder) AddToConfig() error {
+	if loadErr != nil {
+		return loadErr
+	}
 	unmarshalConfig()
 	isExisted, _ := CheckFolderExist(f.Path)
 
@@ -77,6 +80,9 @@ func (f *Folder) AddToConfig() error {
 
 // RemoveFromConfig removes a folder from the configuration by path
 func RemoveFromConfig(path string) error {
+	if loadErr != nil {
+		return loadErr
+	}
 	unmarshalConfig()
 
 	isExisted, index := CheckFolderExist(path)

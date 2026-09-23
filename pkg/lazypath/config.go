@@ -1,6 +1,7 @@
 package lazypath
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,7 +16,17 @@ import (
 var (
 	CfgFile string
 	c       Config
+	// loadErr records why the existing config file could not be read. Commands
+	// must refuse to run, and above all refuse to write, while it is set:
+	// writing would replace the unreadable file with the empty in-memory config.
+	loadErr error
 )
+
+// LoadError returns the error that prevented the config file from being read,
+// or nil when the configuration is usable.
+func LoadError() error {
+	return loadErr
+}
 
 // Config represents the application configuration
 type Config struct {
@@ -74,6 +85,7 @@ func SetTestConfig(config Config) {
 // ResetTestConfig resets the configuration to empty state
 func ResetTestConfig() {
 	c = Config{}
+	loadErr = nil
 }
 
 // InitConfig initializes the configuration from file or creates a new one
@@ -82,7 +94,7 @@ func InitConfig() {
 		// Use config file from the flag.
 		viper.SetConfigFile(CfgFile)
 	} else {
-		// Search config in home directory with name ".cobra" (without extension).
+		// Search config in the XDG config home.
 		viper.AddConfigPath(filepath.Join(xdg.ConfigHome(), "projekt"))
 		viper.SetConfigType("yaml")
 		viper.SetConfigName("config")
@@ -91,17 +103,48 @@ func InitConfig() {
 
 	viper.AutomaticEnv()
 
-	if err := viper.ReadInConfig(); err == nil {
-		cli.Debug("Using config file: %v", viper.ConfigFileUsed())
-	} else {
-		err := os.MkdirAll(filepath.Dir(CfgFile), os.ModePerm)
-		if err != nil && !os.IsExist(err) {
-			cli.Error("Failed to create folder %v", err)
-		}
+	loadErr = nil
 
-		_, err = os.Create(CfgFile)
-		if err != nil {
-			cli.Error("Failed to create file %v", err)
-		}
+	err := viper.ReadInConfig()
+	if err == nil {
+		cli.Debug("Using config file: %v", viper.ConfigFileUsed())
+		return
 	}
+
+	if !isConfigMissing(err) {
+		// The file exists but is unusable (malformed YAML, bad permissions...).
+		// Never recreate it here: that would silently wipe the user config.
+		loadErr = fmt.Errorf("failed to read config file %s: %w", CfgFile, err)
+		return
+	}
+
+	if err := createEmptyConfig(CfgFile); err != nil {
+		loadErr = fmt.Errorf("failed to create config file %s: %w", CfgFile, err)
+	}
+}
+
+// isConfigMissing reports whether the error only means "there is no config file yet".
+func isConfigMissing(err error) bool {
+	var notFound viper.ConfigFileNotFoundError
+	if errors.As(err, &notFound) {
+		return true
+	}
+	return errors.Is(err, os.ErrNotExist)
+}
+
+// createEmptyConfig creates an empty config file, never overwriting an existing one.
+func createEmptyConfig(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("failed to create folder: %w", err)
+	}
+
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if os.IsExist(err) {
+			// Another process created it in the meantime, leave it alone.
+			return nil
+		}
+		return err
+	}
+	return f.Close()
 }
