@@ -8,10 +8,10 @@ import (
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 )
 
-func compListShortNames(search string) ([]string, cobra.ShellCompDirective) {
+func compListShortNames(_ string) ([]string, cobra.ShellCompDirective) {
 	parsedFolders, err := folderutil.ParseConfig(lazypath.GetConfig())
 	if err != nil {
-		cli.Error("Can't parse config", err)
+		cli.Error("Can't parse config: %v", err)
 		return nil, cobra.ShellCompDirectiveError
 	}
 
