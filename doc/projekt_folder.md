@@ -22,6 +22,7 @@ Manage your project folder
 * [projekt folder check](projekt_folder_check.md)	 - Check status of Git repositories in configuration
 * [projekt folder get](projekt_folder_get.md)	 - Get project folder by short name
 * [projekt folder list](projekt_folder_list.md)	 - List all your project folders
+* [projekt folder recent](projekt_folder_recent.md)	 - List the projects you jumped to, most recent first
 * [projekt folder remove](projekt_folder_remove.md)	 - Remove your project folder to config
 * [projekt folder sync](projekt_folder_sync.md)	 - Synchronize Git repositories defined in configuration
 

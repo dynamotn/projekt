@@ -14,8 +14,12 @@ function pj --description "Jump to a project"
   end
   cd $target
   or return 1
-  test -n "$ZELLIJ"; and zellij action rename-tab $argv[1]
-  test -n "$TMUX"; and tmux rename-window $argv[1]
+
+  # "-" is the jump back, so the tab is named after where we landed.
+  set -l label $argv[1]
+  test "$label" = "-"; and set label (basename $target)
+  test -n "$ZELLIJ"; and zellij action rename-tab $label
+  test -n "$TMUX"; and tmux rename-window $label
 end
 
 function __pj_needs_command

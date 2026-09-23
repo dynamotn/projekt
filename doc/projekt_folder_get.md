@@ -2,6 +2,16 @@
 
 Get project folder by short name
 
+### Synopsis
+
+Print the folder a short name resolves to, which is what `pj` calls.
+
+The name "-" is the project you were in before this one, so `pj -` takes you
+back, and typing it again brings you here, the way `cd -` does.
+
+Every lookup is remembered, one entry per project; --no-record is for a
+lookup that is not a jump.
+
 ```
 projekt folder get [short name] [flags]
 ```
@@ -9,7 +19,8 @@ projekt folder get [short name] [flags]
 ### Options
 
 ```
-  -h, --help   help for get
+  -h, --help        help for get
+      --no-record   Don't remember this lookup as a jump
 ```
 
 ### Options inherited from parent commands

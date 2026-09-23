@@ -49,6 +49,7 @@ A single static Go binary each, no daemon, no index to rebuild — your config f
 ## 🚀 Why projekt?
 
 - **Jump, don't navigate** — `pj <short-name>` resolves a project folder and takes you there. Deep trees stop mattering.
+- **And back again** — `pj -` returns to the project you came from, and toggles, the way `cd -` does.
 - **Workspaces, not just folders** — point at a parent directory once and every child inside it becomes a jumpable project, filtered by your own regex.
 - **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time. Already have them cloned? `--discover` writes that config for you.
 - **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
@@ -478,6 +479,29 @@ The file you are looking at comes first, then its includes in order, which is
 the order `priority` already resolves collisions in. A file is read once even
 when two others include it, a cycle is harmless, and an include that is missing
 or malformed is a warning rather than the end of the configuration.
+## ↩️ Back where you were
+
+```bash
+pj backend-api
+pj oss-some-library
+pj -                     # back to backend-api
+pj -                     # and back again, the way `cd -` does
+```
+
+Every jump is remembered, one entry per project, so `pj -` toggles between the
+two you are actually working on rather than walking back through the same one
+twice.
+
+```bash
+projekt folder recent           # what you have been working on, most recent first
+projekt folder recent --limit 5
+projekt folder recent --clear   # forget all of it
+```
+
+The history lives in `$XDG_STATE_HOME/projekt/history.tsv` — state, not
+configuration: losing it costs you the order of a listing and nothing else. It
+is capped at 200 projects. `projekt folder get --no-record` looks a project up
+without counting it as a jump, for a script that is not going there.
 
 ## 📚 Commands
 
@@ -488,6 +512,7 @@ or malformed is a warning rather than the end of the configuration.
 | [`folder add`](doc/projekt_folder_add.md)            | Register a folder or workspace; `--discover` reads its repos off disk |
 | [`folder list`](doc/projekt_folder_list.md)          | List every project folder, as a table, JSON or TSV         |
 | [`folder get`](doc/projekt_folder_get.md)            | Resolve a short name to a path — what `pj` calls           |
+| [`folder recent`](doc/projekt_folder_recent.md)      | The projects you jumped to, most recent first               |
 | [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |
 | [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos, remotes and worktrees on disk |
 | [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories in parallel, with `--dry-run`   |

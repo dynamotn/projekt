@@ -17,8 +17,12 @@ function pj() {
   fi
 
   cd "$target" || return 1
-  [ -n "$ZELLIJ" ] && zellij action rename-tab "$1"
-  [ -n "$TMUX" ] && tmux rename-window "$1"
+
+  # "-" is the jump back, so the tab is named after where we landed.
+  local label="$1"
+  [ "$label" = "-" ] && label=$(basename "$target")
+  [ -n "$ZELLIJ" ] && zellij action rename-tab "$label"
+  [ -n "$TMUX" ] && tmux rename-window "$label"
   return 0
 }
 

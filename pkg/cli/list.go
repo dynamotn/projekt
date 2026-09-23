@@ -49,6 +49,10 @@ type ListColumn struct {
 type ListView struct {
 	Columns []ListColumn
 	Rows    [][]any
+	// Ordered says the rows are already in the order they are meant to be
+	// read, so a table must not sort them by name. JSON and TSV always keep
+	// the order they were given.
+	Ordered bool
 }
 
 // AppendRow adds one row of cells, in the order of the columns.
@@ -97,7 +101,7 @@ func encodeListTable(out io.Writer, v ListView, o ListOutputOption) error {
 		tw.AppendRow(cells)
 	}
 
-	return EncodeTable(out, tw, o.NoColor)
+	return encodeTable(out, tw, o.NoColor, !v.Ordered)
 }
 
 // displayValue renders a cell for the two text formats. A list of values reads
