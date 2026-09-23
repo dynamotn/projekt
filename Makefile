@@ -55,6 +55,10 @@ doc:
 	@mkdir -p '${DOC_FOLDER}'
 	go run $(CURDIR)/doc.go
 
+.PHONY: release
+release:
+	@$(CURDIR)/scripts/release.sh $(RELEASE_ARGS)
+
 .PHONY: all
 all: install clean doc
 
