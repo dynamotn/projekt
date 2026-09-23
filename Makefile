@@ -30,6 +30,15 @@ projekt:
 	@mkdir -p '$(BINARY_FOLDER)'
 	go build -ldflags '$(LDFLAGS)' -o '$(BINARY_FOLDER)'/projekt $(CURDIR)/cmd/projekt/main.go
 
+.PHONY: test
+test:
+	go test -race ./...
+
+.PHONY: lint
+lint:
+	gofmt -l .
+	go vet ./...
+
 .PHONY: clean
 clean:
 	@rm -rf '$(BINARY_FOLDER)'
