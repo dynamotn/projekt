@@ -40,6 +40,10 @@ type RenderOptions struct {
 	// Interactive lets the prompt functions ask. Without it they take their
 	// default, and a question without one is an error.
 	Interactive bool
+	// lenient lets a prompt function without a default render empty instead of
+	// failing. It is what `t check` renders with: a template that asks a
+	// question is not a broken template.
+	lenient bool
 }
 
 // BaseContext returns what a template is given before any value is asked for,
@@ -163,6 +167,9 @@ func fileTarget(o RenderOptions) (string, error) {
 	}
 	return filepath.Abs(dest)
 }
+
+// noValue is what text/template writes for a value that was never set.
+const noValue = "<no value>"
 
 // Rendered is one file a folder template produces, before anything is written.
 //
@@ -414,6 +421,12 @@ func renderRelative(e *engine, o RenderOptions, relative string) (string, Attrib
 		name := strings.TrimSpace(string(rendered))
 		if name == "" {
 			return "", attrs, fmt.Errorf("path segment %q of %s renders to an empty name", segment, relative)
+		}
+		// text/template writes an unset value as `<no value>`. In a file it is
+		// at worst wrong; in a name it is a folder called "<no value>", which
+		// is never what anyone meant.
+		if strings.Contains(name, noValue) {
+			return "", attrs, fmt.Errorf("path segment %q of %s names a value that was never set", segment, relative)
 		}
 		if i == len(segments)-1 {
 			name = strings.TrimSuffix(name, TemplateExt)

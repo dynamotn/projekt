@@ -21,6 +21,7 @@ Create a template file from various sources
 * [projekt](projekt.md)	 - A smart command to work with your project folder
 * [projekt template add](projekt_template_add.md)	 - Save an existing file or folder as a template
 * [projekt template apply](projekt_template_apply.md)	 - Render a template over a project again
+* [projekt template check](projekt_template_check.md)	 - Validate a template, or the whole store
 * [projekt template diff](projekt_template_diff.md)	 - Show what applying a template would change
 * [projekt template init](projekt_template_init.md)	 - Clone a store of templates
 * [projekt template list](projekt_template_list.md)	 - List all templates of your template folder

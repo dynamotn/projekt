@@ -31,6 +31,9 @@ type engine struct {
 	ask bool
 	// answers keeps what a prompt function was already told.
 	answers map[string]any
+	// lenient lets an unanswerable question render empty, for a check that
+	// only wants to know whether the template holds together.
+	lenient bool
 	// delims are the delimiters this template is written with. The shared
 	// partials keep the default ones: they belong to the store, not to the
 	// template calling them.
@@ -44,6 +47,7 @@ func newEngine(o RenderOptions) (*engine, error) {
 		out:     o.Prompt,
 		ask:     o.Interactive,
 		answers: map[string]any{},
+		lenient: o.lenient,
 		delims:  DefaultDelims,
 	}
 	if o.Template.Path != "" {

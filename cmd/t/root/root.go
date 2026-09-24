@@ -28,6 +28,7 @@ func NewProjektTemplateCmd(out io.Writer) *cobra.Command {
 		NewTemplateApplyCmd(out),
 		NewTemplateDiffCmd(out),
 		NewTemplateAddCmd(out),
+		NewTemplateCheckCmd(out),
 		NewTemplateShowCmd(out),
 		NewTemplatePathCmd(out),
 	)

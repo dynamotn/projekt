@@ -208,6 +208,20 @@ func scalarDefault(fallback []any) string {
 	return fmt.Sprintf("%v", fallback[0])
 }
 
+// zeroOf is what an unanswered question renders as during a check.
+func zeroOf(v Var) any {
+	switch v.Type {
+	case VarInt:
+		return 0
+	case VarBool:
+		return false
+	case VarList:
+		return []string(nil)
+	default:
+		return ""
+	}
+}
+
 // prompt is what every prompt function goes through: the remembered answer,
 // then the terminal, then the default.
 func (e *engine) prompt(key string, v Var, fallback string) (any, error) {
@@ -217,6 +231,11 @@ func (e *engine) prompt(key string, v Var, fallback string) (any, error) {
 
 	if !e.ask {
 		if fallback == "" {
+			if e.lenient {
+				// A check is asking whether the template holds together, not
+				// what the answer would be.
+				return zeroOf(v), nil
+			}
 			return nil, fmt.Errorf("%q needs an answer: run with --interactive, or give it a default", key)
 		}
 		answer, err := parseAnswer(v, fallback)

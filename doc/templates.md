@@ -122,8 +122,11 @@ Besides `.Values`, a template is given:
 | `.Env`      | The environment, as `.Env.EDITOR`                               |
 | `.Now`      | Current time, with `.Date` (`2006-01-02`) and `.Year` besides it |
 
-A value that was never set renders as empty rather than failing, so
-`{{ .Values.license | default "MIT" }}` is the way to make one optional.
+A value that was never set does not fail the render: it comes out as
+`<no value>`, which is why `{{ .Values.license | default "MIT" }}` is the way
+to make one optional. In a *path segment* it is refused outright — a folder
+called `<no value>` is never what anyone meant — so a template that names its
+files after a value says so the moment it is run.
 
 ## Answering questions instead of passing flags
 
@@ -387,6 +390,45 @@ On top of the [sprig](https://masterminds.github.io/sprig/) set:
 
 `include` reads relative to the template and refuses to leave it, so a template
 cannot be made to read a file somewhere else on the disk.
+
+## Checking a template
+
+A template now carries four files that describe it and a folder of shared
+pieces, so there is more to get wrong than there used to be. `t check` reads
+one the way rendering would, and reports everything, rather than the first
+thing:
+
+```bash
+t check              # every template of the store
+t check go-cli       # one of them
+t check --strict     # warnings count as errors too
+```
+
+It writes nothing and exits non-zero when it found an error, so it can gate a
+CI job on a store of templates staying usable.
+
+**Errors** — the template will not render:
+
+- a file or a path segment that does not parse, with the template's own
+  delimiters
+- `{{ template "x" }}` or `includeTemplate "x"` naming a shared template that
+  is in no `.templates` folder
+- a `.vars.yaml`, `.data.yaml` or `.ignore` that does not parse
+- a `delims` that is not a usable pair
+- a path segment that renders to nothing, to a value nobody set, or to a name
+  that would escape the destination
+
+**Warnings** — it renders, but probably not as meant:
+
+- a variable the manifest asks for that the template never reads
+- a value the template reads that the manifest never asks for, so
+  `--interactive` will not offer it. A value the template already handles the
+  absence of — behind a `default` or a `with` — is optional by design and not
+  reported, and neither is a list or a map, which belongs in a `--values` file
+  rather than at a prompt. A value a `.data.yaml` already holds counts as
+  answered
+- a default that is not valid for the type its variable declares
+- an `.ignore` that leaves every single file out
 
 ## Applying a template again
 

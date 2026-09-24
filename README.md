@@ -249,10 +249,10 @@ YAML type), `--values file.yaml` (deep-merged, `--set` wins), or
 `.vars.yaml`, or else from the `.Values` keys in the template itself. Templates
 also get `.Name`, `.Project`, `.Dir`, `.Path`, `.Template`, `.Source`, `.Store`,
 `.User`, `.Home`, `.Hostname`, `.OS`, `.Arch`, `.Env`, `.Now`, `.Date` and
-`.Year`. An unset value renders empty rather than failing, so
+`.Year`. An unset value does not fail the render, so
 `{{ .Values.license | default "MIT" }}` makes one optional. Nothing is
-overwritten without `--force`, and a path segment rendering to `..` or
-containing a separator is refused.
+overwritten without `--force`, and a path segment rendering to `..`, to an
+unset value or to anything containing a separator is refused.
 
 Four names inside a folder template describe it rather than belong to it, and
 between them one template covers what would otherwise be four:
@@ -492,6 +492,7 @@ Each is also reachable as `projekt template <command>` / `projekt boilerplate <c
 | [`t add`](doc/t_add.md) | Save an existing file or folder as a template |
 | [`t show`](doc/t_show.md) | Print the source of a template |
 | [`t path`](doc/t_path.md) | Print the store path, or one template's — handy for `$EDITOR` |
+| [`t check`](doc/t_check.md) | Validate a template, or the whole store; exits 1 on an error |
 | [`t init`](doc/t_init.md) | Clone a repository of templates into the store |
 | [`t sync`](doc/t_sync.md) | Bring the store up to date with its remote |
 | [`b new`](doc/b_new.md) | Create a project from a recipe, and register it |

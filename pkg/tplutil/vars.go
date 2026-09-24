@@ -59,6 +59,14 @@ func (v Var) question() string {
 	return v.Name
 }
 
+// typeName is how the variable's type reads in a message.
+func (v Var) typeName() string {
+	if v.Type == "" {
+		return string(VarString)
+	}
+	return string(v.Type)
+}
+
 // Manifest is the parsed .vars.yaml of a template.
 type Manifest struct {
 	Vars []Var `yaml:"vars"`
@@ -176,6 +184,67 @@ func Vars(tpl Template) ([]Var, error) {
 // type at a prompt, so those are left out along with everything nested under
 // them: they belong in a --values file.
 func InferVars(tpl Template) ([]Var, error) {
+	scan, err := scanValues(tpl)
+	if err != nil {
+		return nil, err
+	}
+
+	vars := make([]Var, 0, len(scan.order))
+	for _, path := range scan.order {
+		if scan.isContained(path) {
+			continue
+		}
+		vars = append(vars, Var{Name: path})
+	}
+	return vars, nil
+}
+
+// ValuesUse is what a template does with `.Values`, as a check needs to see it.
+type ValuesUse struct {
+	// Read is every key the template refers to, the ones it loops over
+	// included.
+	Read map[string]bool
+	// Askable is the subset a manifest could sensibly ask for: the scalars. A
+	// list or a map belongs in a --values file.
+	Askable map[string]bool
+	// Optional is the subset the template already handles the absence of,
+	// every read of it behind a `default` or a `with`. A manifest that does
+	// not ask for one of these is not an oversight.
+	Optional map[string]bool
+}
+
+// ScanValues reports what a template does with `.Values`.
+func ScanValues(tpl Template) (ValuesUse, error) {
+	scan, err := scanValues(tpl)
+	if err != nil {
+		return ValuesUse{}, err
+	}
+
+	use := ValuesUse{
+		Read:     map[string]bool{},
+		Askable:  map[string]bool{},
+		Optional: map[string]bool{},
+	}
+	for _, path := range scan.order {
+		use.Read[path] = true
+		if !scan.isContained(path) {
+			use.Askable[path] = true
+		}
+	}
+	for path := range scan.containers {
+		use.Read[path] = true
+	}
+	for path, reads := range scan.reads {
+		if reads > 0 && scan.guarded[path] == reads {
+			use.Optional[path] = true
+		}
+	}
+	return use, nil
+}
+
+// scanValues parses every piece of a template and collects the `.Values` paths
+// it reads.
+func scanValues(tpl Template) (*varScan, error) {
 	sources, err := templateSources(tpl)
 	if err != nil {
 		return nil, err
@@ -187,7 +256,7 @@ func InferVars(tpl Template) ([]Var, error) {
 	}
 	delims := manifest.delims()
 
-	scan := &varScan{seen: map[string]bool{}, containers: map[string]bool{}}
+	scan := newVarScan()
 	for name, text := range sources {
 		// The scan only has to parse, but a template calling `promptString`
 		// does not parse at all unless the function is known, and one written
@@ -201,15 +270,7 @@ func InferVars(tpl Template) ([]Var, error) {
 			scan.walk(t.Tree.Root, map[string]bool{})
 		}
 	}
-
-	vars := make([]Var, 0, len(scan.order))
-	for _, path := range scan.order {
-		if scan.isContained(path) {
-			continue
-		}
-		vars = append(vars, Var{Name: path})
-	}
-	return vars, nil
+	return scan, nil
 }
 
 // templateSources returns every piece of a template that goes through the
@@ -278,6 +339,22 @@ type varScan struct {
 	// containers are the paths a range or a with loops over. They hold
 	// structure, not an answer.
 	containers map[string]bool
+	// reads and guarded count how often each path is read at all, and how
+	// often it is read behind a `default` or a `with`. A path whose every read
+	// is guarded is optional by design, and a manifest that does not ask for
+	// it is not an oversight.
+	reads   map[string]int
+	guarded map[string]int
+}
+
+// newVarScan builds an empty scan.
+func newVarScan() *varScan {
+	return &varScan{
+		seen:       map[string]bool{},
+		containers: map[string]bool{},
+		reads:      map[string]int{},
+		guarded:    map[string]int{},
+	}
 }
 
 // isContained reports whether a path is a container, or sits under one.
@@ -312,18 +389,20 @@ func (s *varScan) walk(node parse.Node, aliases map[string]bool) {
 			s.walk(child, aliases)
 		}
 	case *parse.ActionNode:
-		s.walkPipe(n.Pipe, aliases, false)
+		s.walkPipe(n.Pipe, aliases, false, false)
 	case *parse.IfNode:
 		s.walkBranch(&n.BranchNode, aliases, false)
 	case *parse.WithNode:
 		// `{{ with .Values.note }}` is the idiom for an optional scalar, so a
-		// with is a plain read — unless its body loops over the scoped dot,
-		// `{{ with .Values.items }}{{ range . }}`, which makes it a list.
-		s.walkBranch(&n.BranchNode, aliases, loopsOverDot(n.List))
+		// with is a plain read — and a guarded one, since the template already
+		// says what to do when the value is not there. Unless its body loops
+		// over the scoped dot, `{{ with .Values.items }}{{ range . }}`, which
+		// makes it a list.
+		s.walkGuardedBranch(&n.BranchNode, aliases, loopsOverDot(n.List))
 	case *parse.RangeNode:
 		s.walkBranch(&n.BranchNode, aliases, true)
 	case *parse.TemplateNode:
-		s.walkPipe(n.Pipe, aliases, false)
+		s.walkPipe(n.Pipe, aliases, false, false)
 	}
 }
 
@@ -349,16 +428,38 @@ func loopsOverDot(list *parse.ListNode) bool {
 }
 
 func (s *varScan) walkBranch(branch *parse.BranchNode, aliases map[string]bool, loops bool) {
-	s.walkPipe(branch.Pipe, aliases, loops)
+	s.walkPipe(branch.Pipe, aliases, loops, false)
 	// The dot inside the body is the element, not .Values, so only the
 	// aliases still carry over.
 	s.walk(branch.List, aliases)
 	s.walk(branch.ElseList, aliases)
 }
 
+// walkGuardedBranch is a branch whose subject the template already handles the
+// absence of.
+func (s *varScan) walkGuardedBranch(branch *parse.BranchNode, aliases map[string]bool, loops bool) {
+	s.walkPipe(branch.Pipe, aliases, loops, true)
+	s.walk(branch.List, aliases)
+	s.walk(branch.ElseList, aliases)
+}
+
+// pipesIntoDefault reports whether a pipeline ends up in `default`, which is
+// how a template says a value is optional.
+func pipesIntoDefault(pipe *parse.PipeNode) bool {
+	for _, cmd := range pipe.Cmds {
+		if len(cmd.Args) == 0 {
+			continue
+		}
+		if ident, ok := cmd.Args[0].(*parse.IdentifierNode); ok && ident.Ident == "default" {
+			return true
+		}
+	}
+	return false
+}
+
 // walkPipe collects the paths of one pipeline. When the pipeline feeds a range
 // or a with, its paths hold structure rather than a value to type.
-func (s *varScan) walkPipe(pipe *parse.PipeNode, aliases map[string]bool, loops bool) {
+func (s *varScan) walkPipe(pipe *parse.PipeNode, aliases map[string]bool, loops, guarded bool) {
 	if pipe == nil {
 		return
 	}
@@ -372,11 +473,18 @@ func (s *varScan) walkPipe(pipe *parse.PipeNode, aliases map[string]bool, loops 
 		}
 	}
 
+	// `{{ .Values.note | default "…" }}` says the template is fine without it.
+	guards := guarded || pipesIntoDefault(pipe)
+
 	for _, cmd := range pipe.Cmds {
 		for _, arg := range cmd.Args {
 			path := valuesPath(arg, aliases)
 			if path == "" {
 				continue
+			}
+			s.reads[path]++
+			if guards {
+				s.guarded[path]++
 			}
 			if loops {
 				s.containers[path] = true
@@ -387,7 +495,7 @@ func (s *varScan) walkPipe(pipe *parse.PipeNode, aliases map[string]bool, loops 
 		// A parenthesised sub-pipeline is an argument like any other.
 		for _, arg := range cmd.Args {
 			if sub, ok := arg.(*parse.PipeNode); ok {
-				s.walkPipe(sub, aliases, false)
+				s.walkPipe(sub, aliases, false, guards)
 			}
 		}
 	}

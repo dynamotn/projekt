@@ -14,6 +14,7 @@ Create a template file from various sources
 
 * [t add](t_add.md)	 - Save an existing file or folder as a template
 * [t apply](t_apply.md)	 - Render a template over a project again
+* [t check](t_check.md)	 - Validate a template, or the whole store
 * [t diff](t_diff.md)	 - Show what applying a template would change
 * [t init](t_init.md)	 - Clone a store of templates
 * [t list](t_list.md)	 - List all templates of your template folder

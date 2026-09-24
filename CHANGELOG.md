@@ -41,6 +41,11 @@
   `stat`, `joinPath`, `toYaml` and `fromYaml`
 - **t**: new variables `.Source`, `.Store`, `.Home`, `.Hostname`, `.OS`,
   `.Arch` and `.Env`
+- **t**: validate a template, or the whole store, with `t check` — every file
+  and path segment parsed, every shared template resolved, the whole tree
+  rendered with the manifest's own defaults, and what the manifest asks for
+  compared with what the template reads. Exits non-zero on an error, so CI can
+  gate on it
 - **t**: keep the template store in a repository — `t init <repo>` clones one
   into it, `t sync` brings it up to date, fast-forward only, so the same
   templates reach your other machine without being copied by hand
@@ -57,6 +62,12 @@
 - **t**: give a template delimiters of its own with `delims: ["<%", "%>"]` in
   its `.vars.yaml`, so one that writes GitHub Actions, Helm charts or other Go
   templates stops escaping its own syntax
+
+### Fixed
+
+- **t**: a path segment naming a value nobody set wrote a folder called
+  `<no value>`; it is refused now, the way an empty or escaping segment
+  already was
 
 ### Removed
 
