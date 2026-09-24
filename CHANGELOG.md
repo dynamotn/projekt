@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Added
+
+- **folder**: reach a project by half its name — `pj bak` finds `backend-api`,
+  ranked by what you have been working in
+- **folder**: choose a project from a list with `pj` alone or `folder select`,
+  through fzf when you have it
+- **folder**: ask which project a folder is in with `folder current`
+- **folder**: move a project with `folder move`, keeping its prefix, tags and
+  priority, and taking its working trees with it
+- **folder**: add and remove tags with `folder tag`, and list what is in use
+- **worktree**: forget the working trees whose folder is gone with `worktree
+  prune`, on both sides — the config entry and git's own record
+- **doctor**: read the report as JSON, TSV or a table with `--output`
+- **b**: start a project from a repository with `source.repo`, cloned shallowly
+  and with its history left behind
+- **b**: run commands in the new project with `after:`, each one printed before
+  it runs and skippable with `--no-hooks`
+- **b**: point a new project at a remote with `register.remote`, and record it
+  under the workspace with `inRepos`
+
 ### Removed
 
 - **b**: `source.command`, which was never implemented; an `after:` hook
