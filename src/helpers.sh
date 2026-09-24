@@ -141,6 +141,54 @@ function dybatpho::expect_args {
 }
 
 #######################################
+# @description Check that a caller-supplied variable name can safely be bound to
+#   a nameref, and stop the script when it cannot.
+#
+#   A function that writes its answer into a variable the caller names does it
+#   with `local -n`, and that has a failure mode with no error in it. When the
+#   name the caller passes is also the name of one of the function's own local
+#   variables, the nameref resolves to *that* local instead of to the caller's
+#   variable, and every write lands somewhere the caller will never look. Bash
+#   warns about the narrow case where the name collides with the nameref itself
+#   — `circular name reference`, after which the writes are dropped — and says
+#   nothing at all about the wider case where it collides with any other local.
+#   That second case was real: `dybatpho::array_sort __sort_values` used to
+#   return successfully and sort nothing.
+#
+#   The library closes this by reserving a prefix. Every local in a function
+#   that takes a variable name is called `__dybatpho_...`, and this check
+#   refuses a caller-supplied name in that namespace. A collision is then either
+#   impossible or a loud error, never a silent wrong answer.
+# @example
+#   function my_helper {
+#     local target
+#     dybatpho::expect_args target -- "$@"
+#     dybatpho::expect_ref "${target}"
+#     local -n __dybatpho_out="${target}"
+#     __dybatpho_out="value"
+#   }
+#
+# @arg $1 string Variable name supplied by the caller
+# @exitcode 0 The name is safe to bind
+# @exitcode 1 Stop the script when the name is not an identifier, or is reserved
+#######################################
+function dybatpho::expect_ref {
+  local name="${1-}"
+  local caller="${FUNCNAME[1]:-dybatpho::expect_ref}"
+
+  [[ "${name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] \
+    || dybatpho::die "${caller}: Invalid variable name: '${name}'"
+
+  # The prefix belongs to the library's own locals. A caller handing one over
+  # would have its nameref bound to the library's variable rather than to its
+  # own, and would never be told.
+  [[ "${name}" == __dybatpho* ]] \
+    && dybatpho::die "${caller}: '${name}' is reserved: names starting with \`__dybatpho\` belong to the library's own variables, and passing one would silently write to the wrong place. Rename the variable in the caller."
+
+  return 0
+}
+
+#######################################
 # @description Check whether at least one more positional argument remains after the current one.
 # This helper is useful while manually parsing a shifting argument list.
 # @example

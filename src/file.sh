@@ -357,6 +357,7 @@ function dybatpho::create_temp {
   if dybatpho::is empty "${path_var}"; then
     return 1
   fi
+  dybatpho::expect_ref "${path_var}"
 
   # Ensure existed parent folder
   local parent_folder="${2-}"

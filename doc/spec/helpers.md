@@ -169,6 +169,17 @@ _deploy prod "${DEPLOY_TOKEN:-}"
   whether more positional arguments remain.
 - **FR-016**: The module MUST provide an interactive breakpoint with controls
   for runtime options, variables, arrays, source display, and quitting.
+- **FR-017**: The module MUST provide a check that a caller-supplied variable
+  name is safe to bind to a nameref, and MUST stop the script when it is not.
+- **FR-017a**: That check MUST reject a name that is not a shell identifier.
+- **FR-017b**: That check MUST reject any name in the `__dybatpho` namespace,
+  which is reserved for the locals of functions that take a variable name. A
+  name in that namespace binds the nameref to the library's own variable rather
+  than to the caller's, which Bash reports as a `circular name reference` only
+  when the collision is with the nameref itself and not at all otherwise.
+- **FR-017c**: Every public function that binds a caller-supplied name MUST
+  apply the check before binding, and MUST name its own locals inside the
+  reserved namespace so that the check covers them.
 
 - **FR-016**: The module MUST report which module defines a loaded function, accepting the name with or without the `dybatpho::` prefix, and MUST report `init` for a function the bootstrap defines.
 - **FR-016a**: The lookup MUST use what Bash knows about the running shell rather than the contents of a directory, so the answer describes the code that is actually loaded.
@@ -221,6 +232,10 @@ _deploy prod "${DEPLOY_TOKEN:-}"
 - **IT-005g**: Inside a generated bundle, verify the describer still prints the comment, the path reporter still names the line, the module reporter fails rather than naming the bundle file, and listing a module stops the script with an explanation.
 - **IT-005**: Verify command coalescing, default environment assignment, any/all
   environment checks, assertions, and fixed-delay retry behavior.
+- **IT-017**: Verify the reference check accepts an ordinary name, rejects a
+  non-identifier, and rejects a reserved `__dybatpho` name; and verify
+  `array_sort` refuses a reserved name rather than silently sorting nothing,
+  while still sorting an ordinary one.
 
 ## Acceptance Criteria *(mandatory)*
 

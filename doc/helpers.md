@@ -46,6 +46,7 @@ reach for at a prompt.
 ### 🚀 Highlights
 
 - [`dybatpho::expect_args`](#dybatphoexpect_args) — Validate function arguments and assign them into named local variables.
+- [`dybatpho::expect_ref`](#dybatphoexpect_ref) — Check that a caller-supplied variable name can safely be bound to a nameref, and stop the script when it cannot. A function that writes its answer into a variable the caller names does it with `local -n`, and that has a failure mode with no error in it. When the name the caller passes is also the name of one of the function's own local variables, the nameref resolves to *that* local instead of to the caller's variable, and every write lands somewhere the caller will never look. Bash warns about the narrow case where the name collides with the nameref itself — `circular name reference`, after which the writes are dropped — and says nothing at all about the wider case where it collides with any other local. That second case was real: `dybatpho::array_sort __sort_values` used to return successfully and sort nothing. The library closes this by reserving a prefix. Every local in a function that takes a variable name is called `__dybatpho_...`, and this check refuses a caller-supplied name in that namespace. A collision is then either impossible or a loud error, never a silent wrong answer.
 - [`dybatpho::still_has_args`](#dybatphostill_has_args) — Check whether at least one more positional argument remains after the current one. This helper is useful while manually parsing a shifting argument list.
 - [`dybatpho::expect_envs`](#dybatphoexpect_envs) — Ensure that required environment variables are set.
 - [`dybatpho::require`](#dybatphorequire) — Ensure that a required command is installed, and new enough. With a version range, the command is asked what version it is through `dybatpho::command_version`, the answer is normalized by `dybatpho::semver_coerce`, and the result is matched with `dybatpho::semver_satisfies`. The range is written the way that function documents it: `>=1.6`, `^4`, `>=1.2 <2`, `1.2.x`, or alternatives with `||`. The range has to open with one of `>`, `<`, `=`, `^`, or `~`. A bare `4` is a valid range on its own elsewhere, but this argument has meant an exit code since before ranges existed here, and no amount of cleverness makes `require jq 3` mean both things at once. Matching a version needs the optional `semver` module. Rather than let a range pass unchecked in a script that did not load it, this stops with a message naming what to load: a requirement that is silently not enforced is worse than one that was never written. A command whose version cannot be read is also a failure, for the same reason. `dybatpho::doctor` treats that case as a report rather than a failure, because a report is allowed to say "I could not tell".
@@ -209,6 +210,56 @@ dybatpho::expect_args arg1 arg2 .. argN -- "$@"
 
 - `1`: Stop the script if the specification is invalid or required arguments are missing
 - `0`: Assign arguments to the requested variable names and return successfully
+
+
+---
+
+### `dybatpho::expect_ref`
+
+Check that a caller-supplied variable name can safely be bound to
+  a nameref, and stop the script when it cannot.
+
+
+  A function that writes its answer into a variable the caller names does it
+  with `local -n`, and that has a failure mode with no error in it. When the
+  name the caller passes is also the name of one of the function's own local
+  variables, the nameref resolves to *that* local instead of to the caller's
+  variable, and every write lands somewhere the caller will never look. Bash
+  warns about the narrow case where the name collides with the nameref itself
+  — `circular name reference`, after which the writes are dropped — and says
+  nothing at all about the wider case where it collides with any other local.
+  That second case was real: `dybatpho::array_sort __sort_values` used to
+  return successfully and sort nothing.
+
+
+  The library closes this by reserving a prefix. Every local in a function
+  that takes a variable name is called `__dybatpho_...`, and this check
+  refuses a caller-supplied name in that namespace. A collision is then either
+  impossible or a loud error, never a silent wrong answer.
+
+**🧪 Example**
+
+```bash
+function my_helper {
+  local target
+  dybatpho::expect_args target -- "$@"
+  dybatpho::expect_ref "${target}"
+  local -n __dybatpho_out="${target}"
+  __dybatpho_out="value"
+}
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Variable name supplied by the caller |
+
+**🚦 Exit codes**
+
+- `0`: The name is safe to bind
+- `1`: Stop the script when the name is not an identifier, or is reserved
 
 
 ---

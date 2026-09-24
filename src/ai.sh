@@ -1028,6 +1028,7 @@ function dybatpho::ai_ask {
 function dybatpho::ai_conversation_new {
   local path_var system
   dybatpho::expect_args path_var -- "$@"
+  dybatpho::expect_ref "${path_var}"
   system="${2:-${DYBATPHO_AI_SYSTEM}}"
   local file
   dybatpho::create_temp file ".json" "ai_chat"

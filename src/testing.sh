@@ -1153,6 +1153,7 @@ function dybatpho::assert_http_called {
 function dybatpho::fixture_dir {
   local path_var
   dybatpho::expect_args path_var -- "$@"
+  dybatpho::expect_ref "${path_var}"
   dybatpho::create_temp "${path_var}" "" "fixture"
 }
 
@@ -1173,6 +1174,7 @@ function dybatpho::fixture_dir {
 function dybatpho::fixture_file {
   local path_var content
   dybatpho::expect_args path_var content -- "$@"
+  dybatpho::expect_ref "${path_var}"
   local extension="${3:-.txt}"
   dybatpho::create_temp "${path_var}" "${extension}" "fixture"
   local -n fixture_path="${path_var}"

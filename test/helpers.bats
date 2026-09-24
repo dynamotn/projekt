@@ -749,3 +749,49 @@ EOF
   run --separate-stderr ! dybatpho::function_list not_a_loaded_module
   assert_stderr --partial "is not loaded"
 }
+
+@test "dybatpho::expect_ref accepts a caller's own variable name" {
+  dybatpho::expect_ref my_array
+  dybatpho::expect_ref _private
+  dybatpho::expect_ref name2
+}
+
+@test "dybatpho::expect_ref rejects the library's reserved prefix" {
+  # Binding a nameref to one of the library's own locals makes every write land
+  # somewhere the caller never looks, and Bash does not always say so.
+  run --separate-stderr dybatpho::expect_ref __dybatpho_array_sort_values
+  assert_failure
+  assert_stderr --partial "is reserved"
+  assert_stderr --partial "Rename the variable in the caller"
+
+  run --separate-stderr dybatpho::expect_ref __dybatpho
+  assert_failure
+  assert_stderr --partial "is reserved"
+}
+
+@test "dybatpho::expect_ref rejects a name that is not an identifier" {
+  run --separate-stderr dybatpho::expect_ref "not a name"
+  assert_failure
+  assert_stderr --partial "Invalid variable name"
+
+  run --separate-stderr dybatpho::expect_ref "2leading"
+  assert_failure
+  assert_stderr --partial "Invalid variable name"
+
+  run --separate-stderr dybatpho::expect_ref ""
+  assert_failure
+  assert_stderr --partial "Invalid variable name"
+}
+
+@test "a reserved name is refused by the helpers that bind it" {
+  # The guard exists because this used to succeed and sort nothing.
+  __dybatpho_array_sort_values=(c a b)
+  run --separate-stderr dybatpho::array_sort __dybatpho_array_sort_values
+  assert_failure
+  assert_stderr --partial "is reserved"
+
+  # An ordinary name still works.
+  local -a mine=(c a b)
+  dybatpho::array_sort mine
+  assert_equal "${mine[*]}" "a b c"
+}

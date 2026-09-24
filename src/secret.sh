@@ -305,8 +305,7 @@ function dybatpho::secret_check_permission {
 function dybatpho::secret_from_file {
   local __dybatpho_secret_var path
   dybatpho::expect_args __dybatpho_secret_var path -- "$@"
-  [[ "${__dybatpho_secret_var}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] \
-    || dybatpho::die "${FUNCNAME[0]}: Invalid variable name: ${__dybatpho_secret_var}"
+  dybatpho::expect_ref "${__dybatpho_secret_var}"
   dybatpho::secret_check_permission "${path}"
 
   local -n __dybatpho_secret_dest="${__dybatpho_secret_var}"
@@ -332,8 +331,7 @@ function dybatpho::secret_from_env {
   local __dybatpho_secret_var name mode
   dybatpho::expect_args __dybatpho_secret_var name -- "$@"
   mode="${3:-unset}"
-  [[ "${__dybatpho_secret_var}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] \
-    || dybatpho::die "${FUNCNAME[0]}: Invalid variable name: ${__dybatpho_secret_var}"
+  dybatpho::expect_ref "${__dybatpho_secret_var}"
   [[ "${name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] \
     || dybatpho::die "${FUNCNAME[0]}: Invalid environment variable name: ${name}"
   case "${mode}" in
@@ -366,8 +364,7 @@ function dybatpho::secret_from_stdin {
   local __dybatpho_secret_var prompt
   dybatpho::expect_args __dybatpho_secret_var -- "$@"
   prompt="${2-}"
-  [[ "${__dybatpho_secret_var}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] \
-    || dybatpho::die "${FUNCNAME[0]}: Invalid variable name: ${__dybatpho_secret_var}"
+  dybatpho::expect_ref "${__dybatpho_secret_var}"
 
   local -n __dybatpho_secret_dest="${__dybatpho_secret_var}"
   __dybatpho_secret_dest=""
@@ -422,8 +419,7 @@ function dybatpho::secret_read {
 function dybatpho::secret_write_file {
   local path __dybatpho_secret_var
   dybatpho::expect_args path __dybatpho_secret_var -- "$@"
-  [[ "${__dybatpho_secret_var}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] \
-    || dybatpho::die "${FUNCNAME[0]}: Invalid variable name: ${__dybatpho_secret_var}"
+  dybatpho::expect_ref "${__dybatpho_secret_var}"
   local -n __dybatpho_secret_source="${__dybatpho_secret_var}"
   [[ -n "${__dybatpho_secret_source:-}" ]] \
     || dybatpho::die "${FUNCNAME[0]}: Variable \`${__dybatpho_secret_var}\` is empty"
@@ -458,8 +454,7 @@ function dybatpho::secret_with_file {
   dybatpho::expect_args __dybatpho_secret_var -- "$@"
   shift
   (($# > 0)) || dybatpho::die "${FUNCNAME[0]}: Expected a command"
-  [[ "${__dybatpho_secret_var}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] \
-    || dybatpho::die "${FUNCNAME[0]}: Invalid variable name: ${__dybatpho_secret_var}"
+  dybatpho::expect_ref "${__dybatpho_secret_var}"
   local -n __dybatpho_secret_source="${__dybatpho_secret_var}"
   [[ -n "${__dybatpho_secret_source:-}" ]] \
     || dybatpho::die "${FUNCNAME[0]}: Variable \`${__dybatpho_secret_var}\` is empty"
@@ -524,8 +519,7 @@ function dybatpho::secret_wipe {
   (($# > 0)) || dybatpho::die "${FUNCNAME[0]}: Expected at least one variable name"
   local __dybatpho_secret_name
   for __dybatpho_secret_name in "$@"; do
-    [[ "${__dybatpho_secret_name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] \
-      || dybatpho::die "${FUNCNAME[0]}: Invalid variable name: ${__dybatpho_secret_name}"
+    dybatpho::expect_ref "${__dybatpho_secret_name}"
     [[ -v "${__dybatpho_secret_name}" ]] || continue
     local -n __dybatpho_secret_target="${__dybatpho_secret_name}"
     if [[ -n "${__dybatpho_secret_target}" ]]; then

@@ -57,6 +57,7 @@ fi
 # For contrast: the module that already gets this right.
 echo
 echo "== contrast: dybatpho::secret_write_file =="
+# shellcheck disable=SC2034 # read by name through a nameref in secret_write_file
 SECRET_VALUE="top-secret-value"
 dybatpho::load secret 2> /dev/null || true
 dybatpho::secret_write_file "${WORK}/secret.txt" SECRET_VALUE

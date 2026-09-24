@@ -20,8 +20,9 @@
 # @stdout Print array with each element separated by newline
 #######################################
 function dybatpho::array_print {
-  local -n input_arr="$1"
-  printf '%s\n' "${input_arr[@]}"
+  dybatpho::expect_ref "$1"
+  local -n __dybatpho_array_ref="$1"
+  printf '%s\n' "${__dybatpho_array_ref[@]}"
 }
 
 #######################################
@@ -31,17 +32,18 @@ function dybatpho::array_print {
 # @stdout Print the reversed array if $2 is `--`
 #######################################
 function dybatpho::array_reverse {
-  local -n input_arr="$1"
-  local result_arr=()
-  [ "${#input_arr[@]}" -eq 0 ] && return
-  local -a indices=("${!input_arr[@]}")
+  dybatpho::expect_ref "$1"
+  local -n __dybatpho_array_ref="$1"
+  local __dybatpho_array_result=()
+  [ "${#__dybatpho_array_ref[@]}" -eq 0 ] && return
+  local -a __dybatpho_array_indices=("${!__dybatpho_array_ref[@]}")
 
-  for ((i = ${#indices[@]} - 1; i >= 0; i--)); do
-    # shellcheck disable=SC2190 # result_arr is indexed; the nameref misleads ShellCheck
-    result_arr+=("${input_arr[${indices[${i}]}]}")
+  for ((__dybatpho_array_i = ${#__dybatpho_array_indices[@]} - 1; __dybatpho_array_i >= 0; __dybatpho_array_i--)); do
+    # shellcheck disable=SC2190 # __dybatpho_array_result is indexed; the nameref misleads ShellCheck
+    __dybatpho_array_result+=("${__dybatpho_array_ref[${__dybatpho_array_indices[${__dybatpho_array_i}]}]}")
   done
 
-  input_arr=("${result_arr[@]}")
+  __dybatpho_array_ref=("${__dybatpho_array_result[@]}")
   if [[ "${2-""}" == "--" ]]; then
     dybatpho::array_print "$1"
   fi
@@ -64,21 +66,22 @@ function dybatpho::array_reverse {
 # @stdout Print the deduplicated array if $2 is `--`
 #######################################
 function dybatpho::array_unique {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local -A __unique_seen=()
-  local -a __unique_result=()
-  local __unique_value
+  local -n __dybatpho_array_ref="$1"
+  local -A __dybatpho_array_unique_seen=()
+  local -a __dybatpho_array_unique_result=()
+  local __dybatpho_array_unique_value
 
-  for __unique_value in ${input_arr[@]+"${input_arr[@]}"}; do
-    [[ -n "${__unique_value}" ]] || continue
-    [[ -v "__unique_seen[${__unique_value}]" ]] && continue
-    __unique_seen["${__unique_value}"]=1
-    __unique_result+=("${__unique_value}")
+  for __dybatpho_array_unique_value in ${__dybatpho_array_ref[@]+"${__dybatpho_array_ref[@]}"}; do
+    [[ -n "${__dybatpho_array_unique_value}" ]] || continue
+    [[ -v "__dybatpho_array_unique_seen[${__dybatpho_array_unique_value}]" ]] && continue
+    __dybatpho_array_unique_seen["${__dybatpho_array_unique_value}"]=1
+    __dybatpho_array_unique_result+=("${__dybatpho_array_unique_value}")
   done
 
-  # shellcheck disable=SC2190 # input_arr is indexed; the nameref misleads ShellCheck
-  input_arr=(${__unique_result[@]+"${__unique_result[@]}"})
+  # shellcheck disable=SC2190 # __dybatpho_array_ref is indexed; the nameref misleads ShellCheck
+  __dybatpho_array_ref=(${__dybatpho_array_unique_result[@]+"${__dybatpho_array_unique_result[@]}"})
   if [[ "${2-""}" == "--" ]]; then
     dybatpho::array_print "$1"
   fi
@@ -92,12 +95,13 @@ function dybatpho::array_unique {
 # @exitcode 1 The element does not exist in the array
 #######################################
 function dybatpho::array_contains {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local needle="${2-}"
-  local i
-  for i in "${!input_arr[@]}"; do
-    [[ "${input_arr[${i}]}" == "${needle}" ]] && return 0
+  local -n __dybatpho_array_ref="$1"
+  local __dybatpho_array_needle="${2-}"
+  local __dybatpho_array_i
+  for __dybatpho_array_i in "${!__dybatpho_array_ref[@]}"; do
+    [[ "${__dybatpho_array_ref[${__dybatpho_array_i}]}" == "${__dybatpho_array_needle}" ]] && return 0
   done
   return 1
 }
@@ -111,13 +115,14 @@ function dybatpho::array_contains {
 # @exitcode 1 No matching element is found
 #######################################
 function dybatpho::array_index_of {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local needle="${2-}"
-  local i
-  for i in "${!input_arr[@]}"; do
-    if [[ "${input_arr[${i}]}" == "${needle}" ]]; then
-      printf '%s\n' "${i}"
+  local -n __dybatpho_array_ref="$1"
+  local __dybatpho_array_needle="${2-}"
+  local __dybatpho_array_i
+  for __dybatpho_array_i in "${!__dybatpho_array_ref[@]}"; do
+    if [[ "${__dybatpho_array_ref[${__dybatpho_array_i}]}" == "${__dybatpho_array_needle}" ]]; then
+      printf '%s\n' "${__dybatpho_array_i}"
       return 0
     fi
   done
@@ -131,14 +136,15 @@ function dybatpho::array_index_of {
 # @stdout Print the compacted array if $2 is `--`
 #######################################
 function dybatpho::array_compact {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local compacted_arr=()
-  local i
-  for i in "${!input_arr[@]}"; do
-    [[ -n "${input_arr[${i}]}" ]] && compacted_arr+=("${input_arr[${i}]}")
+  local -n __dybatpho_array_ref="$1"
+  local __dybatpho_array_compacted=()
+  local __dybatpho_array_i
+  for __dybatpho_array_i in "${!__dybatpho_array_ref[@]}"; do
+    [[ -n "${__dybatpho_array_ref[${__dybatpho_array_i}]}" ]] && __dybatpho_array_compacted+=("${__dybatpho_array_ref[${__dybatpho_array_i}]}")
   done
-  input_arr=("${compacted_arr[@]}")
+  __dybatpho_array_ref=("${__dybatpho_array_compacted[@]}")
   if [[ "${2-""}" == "--" ]]; then
     dybatpho::array_print "$1"
   fi
@@ -152,18 +158,19 @@ function dybatpho::array_compact {
 # @stdout Print the filtered array if $3 is `--`
 #######################################
 function dybatpho::array_filter {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local predicate="${2-}"
-  local filtered_arr=()
-  local i
-  dybatpho::is function "${predicate}" || dybatpho::die "Invalid predicate function: ${predicate}"
-  for i in "${!input_arr[@]}"; do
-    if "${predicate}" "${input_arr[${i}]}"; then
-      filtered_arr+=("${input_arr[${i}]}")
+  local -n __dybatpho_array_ref="$1"
+  local __dybatpho_array_predicate="${2-}"
+  local __dybatpho_array_filtered=()
+  local __dybatpho_array_i
+  dybatpho::is function "${__dybatpho_array_predicate}" || dybatpho::die "Invalid predicate function: ${__dybatpho_array_predicate}"
+  for __dybatpho_array_i in "${!__dybatpho_array_ref[@]}"; do
+    if "${__dybatpho_array_predicate}" "${__dybatpho_array_ref[${__dybatpho_array_i}]}"; then
+      __dybatpho_array_filtered+=("${__dybatpho_array_ref[${__dybatpho_array_i}]}")
     fi
   done
-  input_arr=("${filtered_arr[@]}")
+  __dybatpho_array_ref=("${__dybatpho_array_filtered[@]}")
   if [[ "${3-""}" == "--" ]]; then
     dybatpho::array_print "$1"
   fi
@@ -177,19 +184,20 @@ function dybatpho::array_filter {
 # @stdout Print the mapped array if $3 is `--`
 #######################################
 function dybatpho::array_map {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local mapper="${2-}"
-  local mapped_arr=()
-  local mapped_value i status
-  dybatpho::is function "${mapper}" || dybatpho::die "Invalid mapper function: ${mapper}"
-  for i in "${!input_arr[@]}"; do
-    mapped_value=$("${mapper}" "${input_arr[${i}]}")
+  local -n __dybatpho_array_ref="$1"
+  local __dybatpho_array_mapper="${2-}"
+  local __dybatpho_array_mapped=()
+  local __dybatpho_array_mapped_value __dybatpho_array_i status
+  dybatpho::is function "${__dybatpho_array_mapper}" || dybatpho::die "Invalid mapper function: ${__dybatpho_array_mapper}"
+  for __dybatpho_array_i in "${!__dybatpho_array_ref[@]}"; do
+    __dybatpho_array_mapped_value=$("${__dybatpho_array_mapper}" "${__dybatpho_array_ref[${__dybatpho_array_i}]}")
     status=$?
     ((status == 0)) || return "${status}"
-    mapped_arr+=("${mapped_value}")
+    __dybatpho_array_mapped+=("${__dybatpho_array_mapped_value}")
   done
-  input_arr=("${mapped_arr[@]}")
+  __dybatpho_array_ref=("${__dybatpho_array_mapped[@]}")
   if [[ "${3-""}" == "--" ]]; then
     dybatpho::array_print "$1"
   fi
@@ -204,14 +212,15 @@ function dybatpho::array_map {
 # @exitcode 1 No matching element is found
 #######################################
 function dybatpho::array_find {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local predicate="${2-}"
-  local i
-  dybatpho::is function "${predicate}" || dybatpho::die "Invalid predicate function: ${predicate}"
-  for i in "${!input_arr[@]}"; do
-    if "${predicate}" "${input_arr[${i}]}"; then
-      printf '%s\n' "${input_arr[${i}]}"
+  local -n __dybatpho_array_ref="$1"
+  local __dybatpho_array_predicate="${2-}"
+  local __dybatpho_array_i
+  dybatpho::is function "${__dybatpho_array_predicate}" || dybatpho::die "Invalid predicate function: ${__dybatpho_array_predicate}"
+  for __dybatpho_array_i in "${!__dybatpho_array_ref[@]}"; do
+    if "${__dybatpho_array_predicate}" "${__dybatpho_array_ref[${__dybatpho_array_i}]}"; then
+      printf '%s\n' "${__dybatpho_array_ref[${__dybatpho_array_i}]}"
       return 0
     fi
   done
@@ -226,13 +235,14 @@ function dybatpho::array_find {
 # @exitcode 1 At least one element does not match
 #######################################
 function dybatpho::array_every {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local predicate="${2-}"
-  local i
-  dybatpho::is function "${predicate}" || dybatpho::die "Invalid predicate function: ${predicate}"
-  for i in "${!input_arr[@]}"; do
-    "${predicate}" "${input_arr[${i}]}" || return 1
+  local -n __dybatpho_array_ref="$1"
+  local __dybatpho_array_predicate="${2-}"
+  local __dybatpho_array_i
+  dybatpho::is function "${__dybatpho_array_predicate}" || dybatpho::die "Invalid predicate function: ${__dybatpho_array_predicate}"
+  for __dybatpho_array_i in "${!__dybatpho_array_ref[@]}"; do
+    "${__dybatpho_array_predicate}" "${__dybatpho_array_ref[${__dybatpho_array_i}]}" || return 1
   done
   return 0
 }
@@ -245,13 +255,14 @@ function dybatpho::array_every {
 # @exitcode 1 No elements match
 #######################################
 function dybatpho::array_some {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local predicate="${2-}"
-  local i
-  dybatpho::is function "${predicate}" || dybatpho::die "Invalid predicate function: ${predicate}"
-  for i in "${!input_arr[@]}"; do
-    if "${predicate}" "${input_arr[${i}]}"; then
+  local -n __dybatpho_array_ref="$1"
+  local __dybatpho_array_predicate="${2-}"
+  local __dybatpho_array_i
+  dybatpho::is function "${__dybatpho_array_predicate}" || dybatpho::die "Invalid predicate function: ${__dybatpho_array_predicate}"
+  for __dybatpho_array_i in "${!__dybatpho_array_ref[@]}"; do
+    if "${__dybatpho_array_predicate}" "${__dybatpho_array_ref[${__dybatpho_array_i}]}"; then
       return 0
     fi
   done
@@ -266,18 +277,19 @@ function dybatpho::array_some {
 # @stdout Print the rejected array if $3 is `--`
 #######################################
 function dybatpho::array_reject {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local predicate="${2-}"
-  local rejected_arr=()
-  local i
-  dybatpho::is function "${predicate}" || dybatpho::die "Invalid predicate function: ${predicate}"
-  for i in "${!input_arr[@]}"; do
-    if ! "${predicate}" "${input_arr[${i}]}"; then
-      rejected_arr+=("${input_arr[${i}]}")
+  local -n __dybatpho_array_ref="$1"
+  local __dybatpho_array_predicate="${2-}"
+  local __dybatpho_array_rejected=()
+  local __dybatpho_array_i
+  dybatpho::is function "${__dybatpho_array_predicate}" || dybatpho::die "Invalid predicate function: ${__dybatpho_array_predicate}"
+  for __dybatpho_array_i in "${!__dybatpho_array_ref[@]}"; do
+    if ! "${__dybatpho_array_predicate}" "${__dybatpho_array_ref[${__dybatpho_array_i}]}"; then
+      __dybatpho_array_rejected+=("${__dybatpho_array_ref[${__dybatpho_array_i}]}")
     fi
   done
-  input_arr=("${rejected_arr[@]}")
+  __dybatpho_array_ref=("${__dybatpho_array_rejected[@]}")
   if [[ "${3-""}" == "--" ]]; then
     dybatpho::array_print "$1"
   fi
@@ -291,11 +303,12 @@ function dybatpho::array_reject {
 # @exitcode 1 The array is empty
 #######################################
 function dybatpho::array_first {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local -a indices=("${!input_arr[@]}")
-  ((${#indices[@]} > 0)) || return 1
-  printf '%s\n' "${input_arr[${indices[0]}]}"
+  local -n __dybatpho_array_ref="$1"
+  local -a __dybatpho_array_indices=("${!__dybatpho_array_ref[@]}")
+  ((${#__dybatpho_array_indices[@]} > 0)) || return 1
+  printf '%s\n' "${__dybatpho_array_ref[${__dybatpho_array_indices[0]}]}"
 }
 
 #######################################
@@ -306,13 +319,14 @@ function dybatpho::array_first {
 # @exitcode 1 The array is empty
 #######################################
 function dybatpho::array_last {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local -a indices=("${!input_arr[@]}")
-  local last_index
-  ((${#indices[@]} > 0)) || return 1
-  last_index=$((${#indices[@]} - 1))
-  printf '%s\n' "${input_arr[${indices[${last_index}]}]}"
+  local -n __dybatpho_array_ref="$1"
+  local -a __dybatpho_array_indices=("${!__dybatpho_array_ref[@]}")
+  local __dybatpho_array_last_index
+  ((${#__dybatpho_array_indices[@]} > 0)) || return 1
+  __dybatpho_array_last_index=$((${#__dybatpho_array_indices[@]} - 1))
+  printf '%s\n' "${__dybatpho_array_ref[${__dybatpho_array_indices[${__dybatpho_array_last_index}]}]}"
 }
 
 #######################################
@@ -322,17 +336,18 @@ function dybatpho::array_last {
 # @stdout Print outputted string
 #######################################
 function dybatpho::array_join {
+  dybatpho::expect_ref "$1"
   # shellcheck disable=SC2178
-  local -n input_arr="$1"
-  local separator="$2"
-  local i
+  local -n __dybatpho_array_ref="$1"
+  local __dybatpho_array_separator="$2"
+  local __dybatpho_array_i
 
-  if [[ ${#input_arr[@]} -eq 0 ]]; then
+  if [[ ${#__dybatpho_array_ref[@]} -eq 0 ]]; then
     return
   fi
-  printf -- "%s" "${input_arr[0]}"
-  for ((i = 1; i < ${#input_arr[@]}; i++)); do
-    printf -- "%s%s" "${separator}" "${input_arr[${i}]}"
+  printf -- "%s" "${__dybatpho_array_ref[0]}"
+  for ((__dybatpho_array_i = 1; __dybatpho_array_i < ${#__dybatpho_array_ref[@]}; __dybatpho_array_i++)); do
+    printf -- "%s%s" "${__dybatpho_array_separator}" "${__dybatpho_array_ref[${__dybatpho_array_i}]}"
   done
 }
 
@@ -345,11 +360,11 @@ function dybatpho::array_join {
 # @set The named array
 #######################################
 function __dybatpho_array_copy {
-  local -n __copy_out="$1"
+  local -n __dybatpho_array_copy_out="$1"
   # shellcheck disable=SC2178
-  local -n __copy_in="$2"
-  __copy_out=()
-  ((${#__copy_in[@]} == 0)) || __copy_out=("${__copy_in[@]}")
+  local -n __dybatpho_array_copy_in="$2"
+  __dybatpho_array_copy_out=()
+  ((${#__dybatpho_array_copy_in[@]} == 0)) || __dybatpho_array_copy_out=("${__dybatpho_array_copy_in[@]}")
 }
 
 #######################################
@@ -359,13 +374,13 @@ function __dybatpho_array_copy {
 # @set The named associative array, one key per distinct value
 #######################################
 function __dybatpho_array_index {
-  local -n __index_out="$1"
+  local -n __dybatpho_array_index_out="$1"
   # shellcheck disable=SC2178
-  local -n __index_in="$2"
-  __index_out=()
-  local __index_value
-  for __index_value in ${__index_in[@]+"${__index_in[@]}"}; do
-    __index_out["${__index_value}"]=1
+  local -n __dybatpho_array_index_in="$2"
+  __dybatpho_array_index_out=()
+  local __dybatpho_array_index_value
+  for __dybatpho_array_index_value in ${__dybatpho_array_index_in[@]+"${__dybatpho_array_index_in[@]}"}; do
+    __dybatpho_array_index_out["${__dybatpho_array_index_value}"]=1
   done
 }
 
@@ -439,45 +454,46 @@ function __dybatpho_array_sorts_after {
 #   - `dybatpho::semver_sort`
 #######################################
 function dybatpho::array_sort {
+  dybatpho::expect_ref "$1"
   # The locals carry a distinctive prefix because a nameref resolves in the
   # caller's scope: a plainly named local here would shadow a caller's array of
   # the same name, and this function would then sort its own empty copy.
-  local __sort_numeric=false __sort_reverse=false __sort_print=false
-  local __sort_option
-  for __sort_option in "${@:2}"; do
-    case "${__sort_option}" in
-      -n | --numeric) __sort_numeric=true ;;
-      -r | --reverse) __sort_reverse=true ;;
-      --) __sort_print=true ;;
-      *) dybatpho::die "dybatpho::array_sort: Unknown option '${__sort_option}'" ;;
+  local __dybatpho_array_sort_numeric=false __dybatpho_array_sort_reverse=false __dybatpho_array_sort_print=false
+  local __dybatpho_array_sort_option
+  for __dybatpho_array_sort_option in "${@:2}"; do
+    case "${__dybatpho_array_sort_option}" in
+      -n | --numeric) __dybatpho_array_sort_numeric=true ;;
+      -r | --reverse) __dybatpho_array_sort_reverse=true ;;
+      --) __dybatpho_array_sort_print=true ;;
+      *) dybatpho::die "dybatpho::array_sort: Unknown option '${__dybatpho_array_sort_option}'" ;;
     esac
   done
 
-  local -a __sort_values=()
-  __dybatpho_array_copy __sort_values "$1"
-  local __sort_count="${#__sort_values[@]}"
-  local __sort_value
-  if [[ "${__sort_numeric}" == true ]]; then
-    for __sort_value in ${__sort_values[@]+"${__sort_values[@]}"}; do
-      [[ "${__sort_value}" =~ ^-?[0-9]+$ ]] \
-        || dybatpho::die "dybatpho::array_sort: '${__sort_value}' is not an integer; drop --numeric, or compare with the math module"
+  local -a __dybatpho_array_sort_values=()
+  __dybatpho_array_copy __dybatpho_array_sort_values "$1"
+  local __dybatpho_array_sort_count="${#__dybatpho_array_sort_values[@]}"
+  local __dybatpho_array_sort_value
+  if [[ "${__dybatpho_array_sort_numeric}" == true ]]; then
+    for __dybatpho_array_sort_value in ${__dybatpho_array_sort_values[@]+"${__dybatpho_array_sort_values[@]}"}; do
+      [[ "${__dybatpho_array_sort_value}" =~ ^-?[0-9]+$ ]] \
+        || dybatpho::die "dybatpho::array_sort: '${__dybatpho_array_sort_value}' is not an integer; drop --numeric, or compare with the math module"
     done
   fi
 
-  local __sort_index __sort_position __sort_current
-  for ((__sort_index = 1; __sort_index < __sort_count; __sort_index++)); do
-    __sort_current="${__sort_values[${__sort_index}]}"
-    __sort_position=$((__sort_index - 1))
-    while ((__sort_position >= 0)) \
-      && __dybatpho_array_sorts_after "${__sort_values[${__sort_position}]}" "${__sort_current}" "${__sort_numeric}" "${__sort_reverse}"; do
-      __sort_values[__sort_position + 1]="${__sort_values[${__sort_position}]}"
-      __sort_position=$((__sort_position - 1))
+  local __dybatpho_array_sort_index __dybatpho_array_sort_position __dybatpho_array_sort_current
+  for ((__dybatpho_array_sort_index = 1; __dybatpho_array_sort_index < __dybatpho_array_sort_count; __dybatpho_array_sort_index++)); do
+    __dybatpho_array_sort_current="${__dybatpho_array_sort_values[${__dybatpho_array_sort_index}]}"
+    __dybatpho_array_sort_position=$((__dybatpho_array_sort_index - 1))
+    while ((__dybatpho_array_sort_position >= 0)) \
+      && __dybatpho_array_sorts_after "${__dybatpho_array_sort_values[${__dybatpho_array_sort_position}]}" "${__dybatpho_array_sort_current}" "${__dybatpho_array_sort_numeric}" "${__dybatpho_array_sort_reverse}"; do
+      __dybatpho_array_sort_values[__dybatpho_array_sort_position + 1]="${__dybatpho_array_sort_values[${__dybatpho_array_sort_position}]}"
+      __dybatpho_array_sort_position=$((__dybatpho_array_sort_position - 1))
     done
-    __sort_values[__sort_position + 1]="${__sort_current}"
+    __dybatpho_array_sort_values[__dybatpho_array_sort_position + 1]="${__dybatpho_array_sort_current}"
   done
 
-  __dybatpho_array_copy "$1" __sort_values
-  if [[ "${__sort_print}" == true ]]; then
+  __dybatpho_array_copy "$1" __dybatpho_array_sort_values
+  if [[ "${__dybatpho_array_sort_print}" == true ]]; then
     dybatpho::array_print "$1"
   fi
 }
@@ -501,38 +517,39 @@ function dybatpho::array_sort {
 # @exitcode 1 Stop the script when the start or the count is not a whole number
 #######################################
 function dybatpho::array_slice {
-  local __slice_start="${2-}"
-  [[ "${__slice_start}" =~ ^-?[0-9]+$ ]] \
-    || dybatpho::die "dybatpho::array_slice: '${__slice_start}' is not a whole number"
+  dybatpho::expect_ref "$1"
+  local __dybatpho_array_slice_start="${2-}"
+  [[ "${__dybatpho_array_slice_start}" =~ ^-?[0-9]+$ ]] \
+    || dybatpho::die "dybatpho::array_slice: '${__dybatpho_array_slice_start}' is not a whole number"
 
-  local -a __slice_values=()
-  __dybatpho_array_copy __slice_values "$1"
-  local __slice_count="${#__slice_values[@]}"
+  local -a __dybatpho_array_slice_values=()
+  __dybatpho_array_copy __dybatpho_array_slice_values "$1"
+  local __dybatpho_array_slice_count="${#__dybatpho_array_slice_values[@]}"
 
   # The count is optional, so the third argument is either it or the `--` that
   # would otherwise be fourth.
-  local __slice_length="${__slice_count}" __slice_print="${4-}"
+  local __dybatpho_array_slice_length="${__dybatpho_array_slice_count}" __dybatpho_array_slice_print="${4-}"
   if [[ "${3-}" == "--" ]]; then
-    __slice_print="--"
+    __dybatpho_array_slice_print="--"
   elif [[ -n "${3-}" ]]; then
     [[ "${3}" =~ ^[0-9]+$ ]] \
       || dybatpho::die "dybatpho::array_slice: '${3}' is not a count"
-    __slice_length="${3}"
+    __dybatpho_array_slice_length="${3}"
   fi
 
-  if ((__slice_start < 0)); then
-    __slice_start=$((__slice_count + __slice_start))
-    ((__slice_start >= 0)) || __slice_start=0
+  if ((__dybatpho_array_slice_start < 0)); then
+    __dybatpho_array_slice_start=$((__dybatpho_array_slice_count + __dybatpho_array_slice_start))
+    ((__dybatpho_array_slice_start >= 0)) || __dybatpho_array_slice_start=0
   fi
 
-  local -a __slice_result=()
-  local __slice_index
-  for ((__slice_index = __slice_start; __slice_index < __slice_count && __slice_index < __slice_start + __slice_length; __slice_index++)); do
-    __slice_result+=("${__slice_values[${__slice_index}]}")
+  local -a __dybatpho_array_slice_result=()
+  local __dybatpho_array_slice_index
+  for ((__dybatpho_array_slice_index = __dybatpho_array_slice_start; __dybatpho_array_slice_index < __dybatpho_array_slice_count && __dybatpho_array_slice_index < __dybatpho_array_slice_start + __dybatpho_array_slice_length; __dybatpho_array_slice_index++)); do
+    __dybatpho_array_slice_result+=("${__dybatpho_array_slice_values[${__dybatpho_array_slice_index}]}")
   done
 
-  __dybatpho_array_copy "$1" __slice_result
-  if [[ "${__slice_print}" == "--" ]]; then
+  __dybatpho_array_copy "$1" __dybatpho_array_slice_result
+  if [[ "${__dybatpho_array_slice_print}" == "--" ]]; then
     dybatpho::array_print "$1"
   fi
 }
@@ -554,22 +571,24 @@ function dybatpho::array_slice {
 # @stdout Print the union if $3 is `--`
 #######################################
 function dybatpho::array_union {
-  local -a __set_values=() __set_addition=()
-  __dybatpho_array_copy __set_values "$1"
-  __dybatpho_array_copy __set_addition "$2"
-  ((${#__set_addition[@]} == 0)) || __set_values+=("${__set_addition[@]}")
+  dybatpho::expect_ref "$1"
+  dybatpho::expect_ref "$2"
+  local -a __dybatpho_array_set_values=() __dybatpho_array_set_addition=()
+  __dybatpho_array_copy __dybatpho_array_set_values "$1"
+  __dybatpho_array_copy __dybatpho_array_set_addition "$2"
+  ((${#__dybatpho_array_set_addition[@]} == 0)) || __dybatpho_array_set_values+=("${__dybatpho_array_set_addition[@]}")
 
-  local -A __set_seen=()
-  local -a __set_result=()
-  local __set_value
-  for __set_value in ${__set_values[@]+"${__set_values[@]}"}; do
-    if [[ ! -v "__set_seen[${__set_value}]" ]]; then
-      __set_seen["${__set_value}"]=1
-      __set_result+=("${__set_value}")
+  local -A __dybatpho_array_set_seen=()
+  local -a __dybatpho_array_set_result=()
+  local __dybatpho_array_set_value
+  for __dybatpho_array_set_value in ${__dybatpho_array_set_values[@]+"${__dybatpho_array_set_values[@]}"}; do
+    if [[ ! -v "__dybatpho_array_set_seen[${__dybatpho_array_set_value}]" ]]; then
+      __dybatpho_array_set_seen["${__dybatpho_array_set_value}"]=1
+      __dybatpho_array_set_result+=("${__dybatpho_array_set_value}")
     fi
   done
 
-  __dybatpho_array_copy "$1" __set_result
+  __dybatpho_array_copy "$1" __dybatpho_array_set_result
   if [[ "${3-}" == "--" ]]; then
     dybatpho::array_print "$1"
   fi
@@ -589,22 +608,24 @@ function dybatpho::array_union {
 # @stdout Print the intersection if $3 is `--`
 #######################################
 function dybatpho::array_intersect {
-  local -A __set_other=()
-  __dybatpho_array_index __set_other "$2"
-  local -a __set_values=()
-  __dybatpho_array_copy __set_values "$1"
+  dybatpho::expect_ref "$1"
+  dybatpho::expect_ref "$2"
+  local -A __dybatpho_array_set_other=()
+  __dybatpho_array_index __dybatpho_array_set_other "$2"
+  local -a __dybatpho_array_set_values=()
+  __dybatpho_array_copy __dybatpho_array_set_values "$1"
 
-  local -A __set_seen=()
-  local -a __set_result=()
-  local __set_value
-  for __set_value in ${__set_values[@]+"${__set_values[@]}"}; do
-    if [[ -v "__set_other[${__set_value}]" && ! -v "__set_seen[${__set_value}]" ]]; then
-      __set_seen["${__set_value}"]=1
-      __set_result+=("${__set_value}")
+  local -A __dybatpho_array_set_seen=()
+  local -a __dybatpho_array_set_result=()
+  local __dybatpho_array_set_value
+  for __dybatpho_array_set_value in ${__dybatpho_array_set_values[@]+"${__dybatpho_array_set_values[@]}"}; do
+    if [[ -v "__dybatpho_array_set_other[${__dybatpho_array_set_value}]" && ! -v "__dybatpho_array_set_seen[${__dybatpho_array_set_value}]" ]]; then
+      __dybatpho_array_set_seen["${__dybatpho_array_set_value}"]=1
+      __dybatpho_array_set_result+=("${__dybatpho_array_set_value}")
     fi
   done
 
-  __dybatpho_array_copy "$1" __set_result
+  __dybatpho_array_copy "$1" __dybatpho_array_set_result
   if [[ "${3-}" == "--" ]]; then
     dybatpho::array_print "$1"
   fi
@@ -625,22 +646,24 @@ function dybatpho::array_intersect {
 # @stdout Print the difference if $3 is `--`
 #######################################
 function dybatpho::array_difference {
-  local -A __set_other=()
-  __dybatpho_array_index __set_other "$2"
-  local -a __set_values=()
-  __dybatpho_array_copy __set_values "$1"
+  dybatpho::expect_ref "$1"
+  dybatpho::expect_ref "$2"
+  local -A __dybatpho_array_set_other=()
+  __dybatpho_array_index __dybatpho_array_set_other "$2"
+  local -a __dybatpho_array_set_values=()
+  __dybatpho_array_copy __dybatpho_array_set_values "$1"
 
-  local -A __set_seen=()
-  local -a __set_result=()
-  local __set_value
-  for __set_value in ${__set_values[@]+"${__set_values[@]}"}; do
-    if [[ ! -v "__set_other[${__set_value}]" && ! -v "__set_seen[${__set_value}]" ]]; then
-      __set_seen["${__set_value}"]=1
-      __set_result+=("${__set_value}")
+  local -A __dybatpho_array_set_seen=()
+  local -a __dybatpho_array_set_result=()
+  local __dybatpho_array_set_value
+  for __dybatpho_array_set_value in ${__dybatpho_array_set_values[@]+"${__dybatpho_array_set_values[@]}"}; do
+    if [[ ! -v "__dybatpho_array_set_other[${__dybatpho_array_set_value}]" && ! -v "__dybatpho_array_set_seen[${__dybatpho_array_set_value}]" ]]; then
+      __dybatpho_array_set_seen["${__dybatpho_array_set_value}"]=1
+      __dybatpho_array_set_result+=("${__dybatpho_array_set_value}")
     fi
   done
 
-  __dybatpho_array_copy "$1" __set_result
+  __dybatpho_array_copy "$1" __dybatpho_array_set_result
   if [[ "${3-}" == "--" ]]; then
     dybatpho::array_print "$1"
   fi

@@ -76,7 +76,7 @@ echo
 echo "== attacker plants a symlink at that path =="
 rm -f "${STATE_PATH}"
 ln -s "${VICTIM}" "${STATE_PATH}"
-ls -l "${STATE_PATH}" | sed 's/^/    /'
+printf '    %s -> %s\n' "${STATE_PATH}" "$(readlink "${STATE_PATH}")"
 : > "${WORK}/attacker_ready"
 
 wait "${CHILD_PID}" 2> /dev/null

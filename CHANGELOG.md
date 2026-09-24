@@ -219,6 +219,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Passing the wrong variable name to an array helper did nothing, quietly.**
+  A helper that writes into a variable the caller names binds it with
+  `local -n`, and that has a failure mode with no error in it: when the name
+  collides with one of the helper's own locals, the nameref resolves to *that*
+  local, and every write lands where the caller will never look. Bash warns
+  about the narrow case where the name collides with the nameref itself —
+  `circular name reference`, after which the writes are dropped — and says
+  nothing at all about the wider case. So this returned successfully and sorted
+  nothing:
+
+  ```sh
+  __sort_values=(c a b)
+  dybatpho::array_sort __sort_values   # was: exit 0, still c a b
+  ```
+
+  The library now reserves a namespace. Every local in a function that takes a
+  variable name is called `__dybatpho_...`, and the new `dybatpho::expect_ref`
+  refuses a caller-supplied name in that namespace — and any name that is not a
+  shell identifier — before anything is bound. A collision is now either
+  impossible or a loud error naming the function and saying to rename the
+  variable. It is applied across the `array` helpers, `dybatpho::create_temp`,
+  the `secret` readers and writers, `dybatpho::ai_conversation_new`, and the
+  `testing` fixtures, which replaces the identifier checks those already did.
+
 - **`dybatpho::split` matched its delimiter as a glob pattern.** The function
   documents an *exact* delimiter, but it reached the separator through
   `${1//$2/…}` with `$2` unquoted, which is pattern position. A delimiter
