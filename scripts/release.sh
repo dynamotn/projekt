@@ -99,13 +99,38 @@ function _run_gates {
   dybatpho::dry_run make -C "${REPO_ROOT}" test
 }
 
+# Read the body of the `## [Unreleased]` section, without its heading.
+#
+# Entries are written by hand as the change is made, so this is the list that
+# knows what a release actually contains; the one derived from commit subjects
+# only knows what they were called.
+function _unreleased_body {
+  [[ -f "${CHANGELOG}" ]] || return 0
+  sed -n '/^## \[Unreleased\]/,/^## \[/{ /^## \[/d; p; }' "${CHANGELOG}" \
+    | sed -e '/./,$!d' \
+    | awk 'BEGIN { blank = 0 }
+           /^$/ { blank++; next }
+           { while (blank-- > 0) print ""; blank = 0; print }'
+}
+
 # Put the new section directly under the changelog title, so the file stays
 # newest-first the way Keep a Changelog describes.
+#
+# The hand-written `## [Unreleased]` section becomes the release: its entries
+# were written as each change was made, and leaving them above the version
+# they shipped in would strand them there for good. When there is no such
+# section, the entry derived from the commit subjects is used instead.
 # @arg $1 string Version being released
 function _write_changelog {
-  local version="$1" entry temp_dir temp_file
+  local version="$1" entry unreleased temp_dir temp_file
   entry="$(dybatpho::release_changelog \
     "${REPO_ROOT}" "${PREVIOUS_TAG}" HEAD "${version}")"
+  unreleased="$(_unreleased_body)"
+
+  if [[ -n "${unreleased}" ]]; then
+    dybatpho::info "Releasing the hand-written Unreleased entries"
+    entry="$(printf '## [%s]\n\n%s' "${version}" "${unreleased}")"
+  fi
 
   dybatpho::create_temp temp_dir "/"
   temp_file="${temp_dir}/CHANGELOG.md"
@@ -113,8 +138,11 @@ function _write_changelog {
     printf '# Changelog\n\n'
     printf '%s\n\n' "${entry}"
     if [[ -f "${CHANGELOG}" ]]; then
-      # Drop the old title and the blank line after it; the rest is history.
-      sed -e '1{/^# Changelog$/d}' -e '1{/^$/d}' "${CHANGELOG}"
+      # Drop the old title and the blank line after it, and the Unreleased
+      # section now that it has a version; the rest is history.
+      sed -e '1{/^# Changelog$/d}' -e '1{/^$/d}' \
+        -e '/^## \[Unreleased\]/,/^## \[/{ /^## \[Unreleased\]/d; /^## \[/!d; }' \
+        "${CHANGELOG}"
     fi
   } > "${temp_file}"
 
