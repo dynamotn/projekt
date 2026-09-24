@@ -17,6 +17,7 @@ pj oss-some-library             # workspaces get a prefix, so names never collid
 pj -                            # back where you came from, like `cd -`
 projekt folder sync             # clone every repo your config declares
 projekt folder status --dirty   # what did I leave half-done
+projekt folder current          # and which project am I in right now
 b new go-cli new-service        # scaffolded, registered, jumpable
 t new adr doc/adr/0007-db.md    # a file from your own template store
 projekt worktree add backend-api review/PROJ-123 && pj backend-api@PROJ-123
@@ -380,6 +381,41 @@ recent [--limit N|--clear]` lists them. The history lives in
 `$XDG_STATE_HOME/projekt/history.tsv` — state, not configuration — capped at
 200 projects. `folder get --no-record` looks a project up without counting it.
 
+## ✏️ Keeping the config honest
+
+A configuration is not written once. Projects move, tags change, and folders go
+away — and until now each of those meant editing YAML or losing the entry.
+
+```bash
+projekt folder current              # which project am I in?
+projekt folder current -q || echo "not in a project"
+
+projekt folder move myapp ~/work/myapp   # moves the files, keeps the entry
+projekt folder tag myapp go cli          # add tags
+projekt folder tag myapp -r old          # take one away
+projekt folder tag                       # what is in use, and how much
+
+projekt worktree prune              # forget the working trees that are gone
+```
+
+`folder current` names the **deepest** match, so standing in a working tree
+names the working tree rather than the project it hangs off, and it exits
+non-zero when you are not in a project — which is what makes it usable in a
+prompt or a script.
+
+`folder move` does both halves of the job, because both happen: when the folder
+is still at the old path it is moved, and when it has already been moved by
+hand only the configuration catches up. The prefix, priority and tags survive,
+which `remove` and `add` would have lost. Working trees follow — including
+their name, since moving a project renames it.
+
+`worktree prune` is the other half of `folder prune`: it also runs
+`git worktree prune`, so git stops listing a working tree that was removed with
+`rm -rf`.
+
+A project found inside a workspace has no entry of its own, so it cannot be
+moved or tagged on its own — projekt says so rather than doing nothing.
+
 ## 📚 Commands
 
 ### 📁 `projekt` — project folders
@@ -389,6 +425,9 @@ recent [--limit N|--clear]` lists them. The history lives in
 | [`folder add`](doc/projekt_folder_add.md) | Register a folder or workspace; `--discover` reads its repos off disk |
 | [`folder list`](doc/projekt_folder_list.md) | List every project folder, as a table, JSON or TSV |
 | [`folder get`](doc/projekt_folder_get.md) | Resolve a name to a path, loosely — what `pj` calls |
+| [`folder current`](doc/projekt_folder_current.md) | Which project is this folder in? Exits non-zero when none |
+| [`folder move`](doc/projekt_folder_move.md) | Move a project and keep its prefix, tags and priority |
+| [`folder tag`](doc/projekt_folder_tag.md) | Add or remove tags; list what is in use |
 | [`folder select`](doc/projekt_folder_select.md) | Choose from a list — what `pj` with no argument calls |
 | [`folder recent`](doc/projekt_folder_recent.md) | The projects you jumped to, most recent first |
 | [`folder open`](doc/projekt_folder_open.md) | Open a project in `$VISUAL`, `$EDITOR` or vi |

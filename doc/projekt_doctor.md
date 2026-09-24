@@ -28,8 +28,10 @@ projekt doctor [flags]
 ### Options
 
 ```
-  -h, --help     help for doctor
-      --strict   Treat warnings as failures
+  -h, --help            help for doctor
+      --no-color        Don't use color
+  -o, --output string   Output format, one of: text, table, json, tsv (default "text")
+      --strict          Treat warnings as failures
 ```
 
 ### Options inherited from parent commands

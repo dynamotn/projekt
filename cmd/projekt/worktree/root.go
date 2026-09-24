@@ -42,6 +42,7 @@ func NewWorktreeCmd(out io.Writer) *cobra.Command {
 		NewWorktreeAddCmd(out),
 		NewWorktreeListCmd(out),
 		NewWorktreeRemoveCmd(out),
+		NewWorktreePruneCmd(out),
 	)
 
 	cli.SetColorAndStyles(cmd)
