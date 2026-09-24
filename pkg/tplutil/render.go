@@ -62,6 +62,23 @@ func BaseContext(o RenderOptions) (map[string]any, error) {
 	return context(o, target), nil
 }
 
+// Destination returns the folder a render writes into, which is where a
+// template's `after` commands run.
+func Destination(o RenderOptions) (string, error) {
+	if !o.Template.IsDir() {
+		target, err := fileTarget(o)
+		if err != nil {
+			return "", err
+		}
+		return filepath.Dir(target), nil
+	}
+	dest := o.Dest
+	if dest == "" {
+		dest = "."
+	}
+	return filepath.Abs(dest)
+}
+
 // Render renders a template and reports every file it created, in the order
 // they were written.
 func Render(o RenderOptions) ([]string, error) {

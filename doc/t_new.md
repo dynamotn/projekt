@@ -45,6 +45,7 @@ Examples:
   t new go-cli ./myapp --set module=example.com/myapp
   t new invoice ./INV-001.md --interactive
   t new dockerfile --dry-run
+  t new go-cli ./myapp --no-hooks
 
 ```
 t new [template] [destination] [flags]
@@ -58,6 +59,7 @@ t new [template] [destination] [flags]
   -h, --help                 help for new
   -i, --interactive          Ask for the values the template needs
   -n, --name string          Name of the rendered file, also available as '.Name'
+      --no-hooks after       Don't run the template's after commands
   -s, --set stringArray      Set a template value, like -s key=value or -s author.name=me (repeatable)
   -f, --values stringArray   YAML file of template values (repeatable)
 ```

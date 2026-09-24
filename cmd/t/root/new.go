@@ -49,13 +49,15 @@ Examples:
   t new license LICENSE --set author='Jane Doe'
   t new go-cli ./myapp --set module=example.com/myapp
   t new invoice ./INV-001.md --interactive
-  t new dockerfile --dry-run`
+  t new dockerfile --dry-run
+  t new go-cli ./myapp --no-hooks`
 
 func NewTemplateNewCmd(out io.Writer) *cobra.Command {
 	var (
 		sets        []string
 		valueFiles  []string
 		interactive bool
+		noHooks     bool
 	)
 	o := tplutil.RenderOptions{Out: out}
 
@@ -105,15 +107,17 @@ func NewTemplateNewCmd(out io.Writer) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if o.DryRun {
-				return nil
-			}
-			for _, path := range written {
-				if _, err := fmt.Fprintln(out, path); err != nil {
-					return err
+			if !o.DryRun {
+				for _, path := range written {
+					if _, err := fmt.Fprintln(out, path); err != nil {
+						return err
+					}
 				}
 			}
-			return nil
+			if noHooks {
+				return nil
+			}
+			return runHooks(cmd, out, o)
 		},
 	}
 
@@ -124,8 +128,35 @@ func NewTemplateNewCmd(out io.Writer) *cobra.Command {
 	f.BoolVarP(&interactive, "interactive", "i", false, "Ask for the values the template needs")
 	f.BoolVarP(&o.Force, "force", "F", false, "Overwrite files that already exist")
 	f.BoolVarP(&o.DryRun, "dry-run", "d", false, "Print the rendered result instead of writing files")
+	f.BoolVar(&noHooks, "no-hooks", false, "Don't run the template's `after` commands")
 
 	return cmd
+}
+
+// runHooks runs the template's `after` commands in the folder it wrote.
+//
+// What is being done goes to the caller's stream, and so does the output of
+// the commands: a hook is something someone will want to watch run.
+func runHooks(cmd *cobra.Command, out io.Writer, o tplutil.RenderOptions) error {
+	dir, err := tplutil.Destination(o)
+	if err != nil {
+		return err
+	}
+	base, err := tplutil.BaseContext(o)
+	if err != nil {
+		return err
+	}
+
+	return tplutil.RunAfter(tplutil.HookOptions{
+		Template: o.Template,
+		Dir:      dir,
+		Context:  base,
+		DryRun:   o.DryRun,
+		Log:      out,
+		In:       cmd.InOrStdin(),
+		Out:      out,
+		Err:      cmd.ErrOrStderr(),
+	})
 }
 
 // askForValues asks for whatever the template needs and is not already set.

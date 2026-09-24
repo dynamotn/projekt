@@ -250,6 +250,15 @@ func Create(o CreateOptions) (Result, error) {
 
 	result := Result{Plan: plan, Files: files}
 
+	// The template's own commands belong to the template, and run before the
+	// recipe's: `go mod tidy` is part of rendering a Go project, whatever the
+	// recipe goes on to do with it.
+	if plan.Recipe.Source.Repo == "" && !o.NoHooks {
+		if err := runTemplateHooks(log, plan, o); err != nil {
+			return result, err
+		}
+	}
+
 	if !o.DryRun || len(plan.Recipe.After) > 0 || plan.Recipe.Register.Remote != nil {
 		if err := finish(log, plan, o); err != nil {
 			return result, err
@@ -272,6 +281,27 @@ func Create(o CreateOptions) (Result, error) {
 	}
 	result.Registered = true
 	return result, nil
+}
+
+// runTemplateHooks runs what the template's own manifest asks for, in the
+// project that was just created.
+func runTemplateHooks(log io.Writer, plan Plan, o CreateOptions) error {
+	options := plan.renderOptions(o, o.Values, nil)
+	base, err := tplutil.BaseContext(options)
+	if err != nil {
+		return err
+	}
+
+	return tplutil.RunAfter(tplutil.HookOptions{
+		Template: plan.Template,
+		Dir:      plan.Path,
+		Context:  base,
+		DryRun:   o.DryRun,
+		Log:      log,
+		In:       o.In,
+		Out:      o.HookOut,
+		Err:      o.HookErr,
+	})
 }
 
 // checkEmpty refuses to create a project on top of one that is already there.

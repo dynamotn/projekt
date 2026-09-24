@@ -62,6 +62,12 @@ func (v Var) question() string {
 // Manifest is the parsed .vars.yaml of a template.
 type Manifest struct {
 	Vars []Var `yaml:"vars"`
+	// After are the commands to run in the folder the template wrote, once
+	// every file is there: `go mod tidy`, `git init`, `pre-commit install`.
+	//
+	// Each is rendered with the same values the template was, so a command can
+	// be conditional, and a line that renders empty is skipped.
+	After []string `yaml:"after"`
 	// Delims replaces `{{` and `}}` for the whole template.
 	//
 	// A template that writes Go templates, Helm charts or GitHub Actions
