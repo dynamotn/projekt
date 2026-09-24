@@ -52,9 +52,6 @@ type Source struct {
 	// its own, and copying it verbatim is what a starting point usually
 	// means. A repository written to be a template says so here.
 	Render bool `yaml:"render"`
-	// Command delegates to a generator of the language itself, such as
-	// `cargo new`. Not supported yet.
-	Command []string `yaml:"command"`
 }
 
 // Register says how the finished project enters the configuration.
@@ -256,14 +253,14 @@ func load(path, name string) (Recipe, error) {
 // Validate reports what makes a recipe unusable.
 func (r Recipe) Validate() error {
 	declared := 0
-	for _, set := range []bool{r.Source.Template != "", r.Source.Repo != "", len(r.Source.Command) > 0} {
+	for _, set := range []bool{r.Source.Template != "", r.Source.Repo != ""} {
 		if set {
 			declared++
 		}
 	}
 	switch {
 	case declared == 0:
-		return fmt.Errorf("source declares nothing to create from, expected source.template")
+		return fmt.Errorf("source declares nothing to create from, expected source.template or source.repo")
 	case declared > 1:
 		return fmt.Errorf("source declares more than one origin, expected exactly one")
 	}
@@ -272,12 +269,6 @@ func (r Recipe) Validate() error {
 		if _, err := ParseRepoRef(r.Source.Repo); err != nil {
 			return err
 		}
-	}
-	// Delegating to a generator of the language itself is recognised so that a
-	// recipe written for it fails with a straight answer rather than being
-	// quietly ignored.
-	if len(r.Source.Command) > 0 {
-		return fmt.Errorf("source.command is not supported yet, use source.template or source.repo")
 	}
 	if r.Register.Remote != nil {
 		if strings.TrimSpace(r.Register.Remote.Host) == "" {
@@ -306,8 +297,6 @@ func (r Recipe) Origin() string {
 		return "template:" + r.Source.Template
 	case r.Source.Repo != "":
 		return "repo:" + r.Source.Repo
-	case len(r.Source.Command) > 0:
-		return "command:" + strings.Join(r.Source.Command, " ")
 	default:
 		return ""
 	}

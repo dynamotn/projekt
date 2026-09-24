@@ -58,8 +58,9 @@ register:
   that adds files to something that already exists, and has no project of its
   own to register.
 
-`source.command` — delegating to `cargo new` and friends — is recognised and
-refused with a message saying so; it is not implemented.
+A source is one of those two. There is no third: delegating to `cargo new` and
+friends would be a worse `after:` hook, which already runs any command you
+like in the new project.
 
 ## Starting from a repository
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Removed
+
+- **b**: `source.command`, which was never implemented; an `after:` hook
+  already runs any command you like in the new project
+
 ## [2.1.0]
 
 ### Added
