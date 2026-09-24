@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.1.0]
+
+### Added
+
+- **shell**: add the zsh integration
+- **worktree**: work on two branches of a project at once
+- **folder**: drop the entries whose folder is gone
+- **config**: compose the configuration from several files
+- **doctor**: say whether this machine is set up
+- **folder**: go back where you were with `pj -`
+- **folder**: show the git state of every project
+- **folder**: archive a project that is done
+- **folder**: open a project in your editor
+- **folder**: run one command in every project
+
+### Fixed
+
+- **shell**: offer a project fish has not seen created
+- remove duplicate function outputLines
+- lack of refresh after pruning stale entries
+
+
 ## [2.0.0]
 
 ### Added
