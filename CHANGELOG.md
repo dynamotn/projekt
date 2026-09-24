@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [3.0.0]
 
 ### Added
 
@@ -46,6 +46,7 @@
 
 - **b**: `source.command`, which was never implemented; an `after:` hook
   already runs any command you like in the new project
+
 
 ## [2.1.0]
 
