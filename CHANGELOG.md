@@ -41,6 +41,9 @@
   `stat`, `joinPath`, `toYaml` and `fromYaml`
 - **t**: new variables `.Source`, `.Store`, `.Home`, `.Hostname`, `.OS`,
   `.Arch` and `.Env`
+- **t**: keep the template store in a repository — `t init <repo>` clones one
+  into it, `t sync` brings it up to date, fast-forward only, so the same
+  templates reach your other machine without being copied by hand
 - **t**: apply a template to a project again with `t apply`, and see what it
   would do with `t diff` — a unified diff, exiting non-zero when a project has
   drifted, so CI can gate on it. A project records what it was rendered from in

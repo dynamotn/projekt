@@ -26,6 +26,27 @@ t path              # where the templates are
 t path license      # where one template is, handy for $EDITOR (t path license)
 ```
 
+### Carrying the store between machines
+
+A store is a folder of files, so it can simply be a repository — which is how
+the same templates reach your other machine, and how a team shares one set:
+
+```bash
+t init git@github.com:me/templates.git   # clone it into the template folder
+t init github:me/templates               # or the server:group/name shorthand
+t sync                                   # bring it up to date later
+t sync --dry-run                         # say what would be pulled
+```
+
+`t init` clones with the history, so a template can be edited and pushed back.
+It refuses a folder that already holds templates rather than clone over them,
+and a store that is already a repository is `t sync`'s business.
+
+`t sync` pulls fast-forward only: a store you have edited without committing is
+something to sort out by hand, not something for a sync to guess at. A folder
+that merely *sits inside* some other checkout is not a store to sync — pulling
+it would pull that checkout — and `t sync` says so instead.
+
 Each entry of that folder is one template:
 
 - a **file** template renders one file. A `.tmpl` suffix is stripped from the

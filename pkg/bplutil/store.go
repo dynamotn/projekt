@@ -29,6 +29,7 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
 	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
 )
 
@@ -266,7 +267,7 @@ func (r Recipe) Validate() error {
 	}
 
 	if r.Source.Repo != "" {
-		if _, err := ParseRepoRef(r.Source.Repo); err != nil {
+		if _, err := folderutil.ParseRepoRef(r.Source.Repo); err != nil {
 			return err
 		}
 	}

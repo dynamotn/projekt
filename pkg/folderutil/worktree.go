@@ -164,9 +164,31 @@ func WorktreeNameFromBranch(branch string) string {
 	return name
 }
 
-// IsGitRepo reports whether a folder is a git repository.
+// IsGitRepo reports whether a folder is a git repository, or sits inside one.
 func IsGitRepo(path string) bool {
 	return runGit(path, "rev-parse", "--git-dir") == nil
+}
+
+// IsRepoRoot reports whether a folder is a repository in its own right,
+// rather than a folder that merely sits inside one.
+//
+// The difference matters whenever something is about to act on "the
+// repository": pulling a folder that happens to live inside a checkout would
+// pull that checkout, which is nobody's idea of updating the folder.
+func IsRepoRoot(path string) bool {
+	out, err := gitOutput(path, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return false
+	}
+	top, err := filepath.Abs(strings.TrimSpace(out))
+	if err != nil {
+		return false
+	}
+	here, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	return top == here
 }
 
 // RemoveWorktreeOptions drives `projekt worktree remove`.

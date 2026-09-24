@@ -7,63 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
 	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
 )
-
-// RepoRef is a repository to start from, however it was written.
-type RepoRef struct {
-	// URL is set when the recipe gave one outright.
-	URL string
-	// Host, Group and Name are set when it gave the shorthand
-	// `server:group/name`, resolved against the configured git servers.
-	Host, Group, Name string
-}
-
-// ParseRepoRef reads what a recipe means by `source.repo`.
-//
-// A URL is taken as it is. Anything else is `server:group/name`, where the
-// server is one of the configured gitServers, so that a recipe can be shared
-// between people whose remotes differ in scheme or host.
-func ParseRepoRef(repo string) (RepoRef, error) {
-	repo = strings.TrimSpace(repo)
-	if repo == "" {
-		return RepoRef{}, fmt.Errorf("source.repo is empty")
-	}
-	if folderutil.IsGitURL(repo) {
-		return RepoRef{URL: repo}, nil
-	}
-
-	host, rest, ok := strings.Cut(repo, ":")
-	if !ok || strings.TrimSpace(host) == "" {
-		return RepoRef{}, fmt.Errorf("source.repo %q is neither a URL nor server:group/name", repo)
-	}
-	group, name, ok := strings.Cut(strings.Trim(rest, "/"), "/")
-	if !ok || strings.TrimSpace(group) == "" || strings.TrimSpace(name) == "" {
-		return RepoRef{}, fmt.Errorf("source.repo %q is missing the group or the repository", repo)
-	}
-
-	return RepoRef{Host: host, Group: group, Name: strings.TrimSuffix(name, ".git")}, nil
-}
-
-// String describes the reference, for a listing.
-func (r RepoRef) String() string {
-	if r.URL != "" {
-		return r.URL
-	}
-	return fmt.Sprintf("%s:%s/%s", r.Host, r.Group, r.Name)
-}
-
-// URLs returns the URLs to clone from, the preferred one first.
-func (r RepoRef) URLs() (primary, fallback string, err error) {
-	if r.URL != "" {
-		return r.URL, "", nil
-	}
-	return folderutil.GitURLs(r.Host, r.Group, r.Name)
-}
 
 // createFromRepo clones a starting point and puts its files in the
 // destination.
@@ -73,7 +21,7 @@ func (r RepoRef) URLs() (primary, fallback string, err error) {
 // the new project is not a fork of the starting point, and its first commit is
 // its own.
 func createFromRepo(plan Plan, o CreateOptions, log io.Writer) ([]string, error) {
-	ref, err := ParseRepoRef(plan.Recipe.Source.Repo)
+	ref, err := folderutil.ParseRepoRef(plan.Recipe.Source.Repo)
 	if err != nil {
 		return nil, err
 	}

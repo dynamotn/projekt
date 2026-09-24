@@ -492,6 +492,8 @@ Each is also reachable as `projekt template <command>` / `projekt boilerplate <c
 | [`t add`](doc/t_add.md) | Save an existing file or folder as a template |
 | [`t show`](doc/t_show.md) | Print the source of a template |
 | [`t path`](doc/t_path.md) | Print the store path, or one template's — handy for `$EDITOR` |
+| [`t init`](doc/t_init.md) | Clone a repository of templates into the store |
+| [`t sync`](doc/t_sync.md) | Bring the store up to date with its remote |
 | [`b new`](doc/b_new.md) | Create a project from a recipe, and register it |
 | [`b list`](doc/b_list.md) | List the recipes of the store, as a table, JSON or TSV |
 | [`b show`](doc/b_show.md) | Print a recipe as it is written |
