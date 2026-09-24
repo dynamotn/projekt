@@ -164,16 +164,48 @@ func fileTarget(o RenderOptions) (string, error) {
 	return filepath.Abs(dest)
 }
 
-// renderDir renders a folder template: every file is rendered, and so is every
-// path segment, so `{{ .Name }}/main.go.tmpl` lands under the project name.
-func renderDir(e *engine, o RenderOptions) ([]string, error) {
-	root := o.Dest
-	if root == "" {
-		root = "."
+// Rendered is one file a folder template produces, before anything is written.
+//
+// Collecting the whole tree first is what lets `t new`, `--dry-run`, `t diff`
+// and `t apply` be the same render seen four ways.
+type Rendered struct {
+	// Rel is the path relative to the destination, with "/" whatever the
+	// platform is.
+	Rel string
+	// Content is the rendered file, or the target of a symbolic link.
+	Content []byte
+	// Attrs are what the name asked the file to be.
+	Attrs Attributes
+	// IsDir reports whether this is a folder rather than a file.
+	IsDir bool
+}
+
+// Collect renders a folder template into memory, without touching the disk.
+func Collect(o RenderOptions) ([]Rendered, error) {
+	if !o.Template.IsDir() {
+		return nil, fmt.Errorf("%s is a file template, there is no tree to collect", o.Template.Name)
 	}
-	root, err := filepath.Abs(root)
+	if o.Values == nil {
+		o.Values = Values{}
+	}
+	values, err := WithData(o)
 	if err != nil {
-		return nil, fmt.Errorf("cannot resolve destination %s: %w", o.Dest, err)
+		return nil, err
+	}
+	o.Values = values
+
+	engine, err := newEngine(o)
+	if err != nil {
+		return nil, err
+	}
+	return collectDir(engine, o)
+}
+
+// collectDir walks the template and renders every name and every file.
+func collectDir(e *engine, o RenderOptions) ([]Rendered, error) {
+	root, err := destinationRoot(o)
+	if err != nil {
+		return nil, err
 	}
 
 	ignore, err := e.loadIgnore(o, context(o, ""))
@@ -181,7 +213,7 @@ func renderDir(e *engine, o RenderOptions) ([]string, error) {
 		return nil, err
 	}
 
-	var written []string
+	var files []Rendered
 	err = filepath.WalkDir(o.Template.Path, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -213,42 +245,109 @@ func renderDir(e *engine, o RenderOptions) ([]string, error) {
 			}
 			return nil
 		}
-		target := filepath.Join(root, filepath.FromSlash(rendered))
 
 		if entry.IsDir() {
-			if o.DryRun {
-				return nil
-			}
-			return os.MkdirAll(target, attrs.DirMode())
+			files = append(files, Rendered{Rel: rendered, Attrs: attrs, IsDir: true})
+			return nil
 		}
 
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("cannot read template file %s: %w", path, err)
 		}
+		target := filepath.Join(root, filepath.FromSlash(rendered))
 		content, err := e.execute(o.Template.Name+"/"+relative, string(data), context(o, target))
 		if err != nil {
 			return err
 		}
-
-		if o.DryRun {
-			if err := describe(o.Out, target, content, attrs); err != nil {
-				return err
-			}
-			written = append(written, target)
-			return nil
-		}
-
-		if err := writeFile(target, content, o.Force, attrs); err != nil {
-			return err
-		}
-		written = append(written, target)
+		files = append(files, Rendered{Rel: rendered, Content: content, Attrs: attrs})
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	return files, nil
+}
+
+// destinationRoot resolves where a folder template writes.
+func destinationRoot(o RenderOptions) (string, error) {
+	root := o.Dest
+	if root == "" {
+		root = "."
+	}
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("cannot resolve destination %s: %w", o.Dest, err)
+	}
+	return root, nil
+}
+
+// renderDir renders a folder template: every file is rendered, and so is every
+// path segment, so `{{ .Name }}/main.go.tmpl` lands under the project name.
+func renderDir(e *engine, o RenderOptions) ([]string, error) {
+	root, err := destinationRoot(o)
+	if err != nil {
+		return nil, err
+	}
+	files, err := collectDir(e, o)
+	if err != nil {
+		return nil, err
+	}
+
+	record := RenderRecord{
+		Template:   o.Template.Name,
+		Name:       nameOf(o),
+		RenderedAt: time.Now().UTC(),
+		Values:     o.Values,
+		Files:      map[string]string{},
+	}
+
+	var written []string
+	for _, file := range files {
+		target := filepath.Join(root, filepath.FromSlash(file.Rel))
+
+		if file.IsDir {
+			if o.DryRun {
+				continue
+			}
+			if err := os.MkdirAll(target, file.Attrs.DirMode()); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		if o.DryRun {
+			if err := describe(o.Out, target, file.Content, file.Attrs); err != nil {
+				return nil, err
+			}
+			written = append(written, target)
+			continue
+		}
+
+		if err := writeFile(target, file.Content, o.Force, file.Attrs); err != nil {
+			return nil, err
+		}
+		record.Files[file.Rel] = hashOf(file.Content)
+		written = append(written, target)
+	}
+
+	if o.DryRun {
+		return written, nil
+	}
+	// Remembering what was written, and what it was rendered from, is what
+	// makes `t diff` and `t apply` possible later.
+	if err := recordRender(root, record); err != nil {
+		return nil, err
+	}
 	return written, nil
+}
+
+// nameOf is the `.Name` a render used, for the record to replay it.
+func nameOf(o RenderOptions) string {
+	if name, ok := context(o, "")["Name"].(string); ok {
+		return name
+	}
+	return o.Name
 }
 
 // isReserved reports whether an entry of a folder template describes the

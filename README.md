@@ -271,6 +271,19 @@ template can ask a question at the point it needs the answer with
 `include`, `includeTemplate`, `output`, `lookPath`, `stat`, `toYaml` and
 `fromYaml`.
 
+A project keeps a record of what it was rendered from, in
+`.projekt/template.yaml` — the template, the values and the hash of every file
+written — so a template can be applied to it again when the template moves on:
+
+```bash
+t diff go-cli ./myapp     # what would change, as a unified diff; exits 1 if any
+t apply go-cli ./myapp    # do it, replaying the recorded values
+```
+
+A file that is byte for byte what was written is updated; one that was edited
+by hand is a `conflict` and kept, unless `--force`; one the template no longer
+writes is kept, unless `--prune`.
+
 `b` renders a template, works out where the project belongs and registers it,
 so starting something new ends with `pj`, not another `cd`:
 
@@ -473,6 +486,8 @@ Each is also reachable as `projekt template <command>` / `projekt boilerplate <c
 | Command | What it does |
 | --- | --- |
 | [`t new`](doc/t_new.md) | Render a template, with `--set`, `--values`, `--dry-run` |
+| [`t apply`](doc/t_apply.md) | Render a template over a project again, replaying its recorded values |
+| [`t diff`](doc/t_diff.md) | What `apply` would change, as a unified diff; exits 1 when it found something |
 | [`t list`](doc/t_list.md) | List the templates of the store, as a table, JSON or TSV |
 | [`t add`](doc/t_add.md) | Save an existing file or folder as a template |
 | [`t show`](doc/t_show.md) | Print the source of a template |

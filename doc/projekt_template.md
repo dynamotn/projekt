@@ -20,6 +20,8 @@ Create a template file from various sources
 
 * [projekt](projekt.md)	 - A smart command to work with your project folder
 * [projekt template add](projekt_template_add.md)	 - Save an existing file or folder as a template
+* [projekt template apply](projekt_template_apply.md)	 - Render a template over a project again
+* [projekt template diff](projekt_template_diff.md)	 - Show what applying a template would change
 * [projekt template list](projekt_template_list.md)	 - List all templates of your template folder
 * [projekt template new](projekt_template_new.md)	 - Create files from a template
 * [projekt template path](projekt_template_path.md)	 - Print the path of the template folder, or of one template
