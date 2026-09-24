@@ -15,7 +15,9 @@ function _safe_git_test_root {
     printf '%s\n' "BATS_TEST_TMPDIR does not exist: ${BATS_TEST_TMPDIR}" >&2
     return 1
   }
-  printf '%s\n' "${BATS_TEST_TMPDIR}"
+  # Git reports the physical path, and on macOS the temporary directory sits
+  # behind the `/var` -> `/private/var` link, so hand out the resolved form.
+  (cd "${BATS_TEST_TMPDIR}" && pwd -P)
 }
 
 function _new_git_repo_path {

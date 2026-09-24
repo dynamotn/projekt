@@ -71,7 +71,8 @@ and verify the corresponding predicates and lists.
 2. **Given** a configured remote, **When** remote helpers run, **Then** the URL
    is printed or existence succeeds
 3. **Given** a base ref and current worktree, **When** changed files are listed,
-   **Then** tracked and untracked paths are sorted and deduplicated
+   **Then** tracked and untracked paths are sorted byte-wise, whatever the
+   locale, and deduplicated
 4. **Given** a commit contained by one or more tags, **When** tag lookup runs,
    **Then** matching tag names are printed in sorted order
 

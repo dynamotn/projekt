@@ -667,6 +667,15 @@ _test_tool() { printf 'tool output\n'; }
   dybatpho::assert_file_mode "${directory}" 700
 }
 
+@test "the default counter directory is created under DRY_RUN" {
+  local state_home="${BATS_TEST_TMPDIR}/state"
+  DYBATPHO_AI_STATE_FILE=""
+  DRY_RUN=true
+  XDG_STATE_HOME="${state_home}" run_traced dybatpho::ai_ask "q"
+  assert_success
+  dybatpho::assert_dir "${state_home}/dybatpho"
+}
+
 @test "the counter file is refused when it is a symbolic link" {
   local victim="${BATS_TEST_TMPDIR}/victim"
   printf 'do not overwrite me\n' > "${victim}"

@@ -35,6 +35,36 @@ time.sleep(30)' > "${portfile}" 2> /dev/null &
   cat "${portfile}"
 }
 
+# Answer one HTTP request with an empty 200 on a free port, and print that port.
+#
+# A fixed port such as 8080 is often already taken by some local service, which
+# then answers instead, and a `nc` left behind by a failed run holds it for the
+# next one. The process id goes to the same file `teardown` reads.
+start_http_server() {
+  dybatpho::is command python3 || return 1
+  local portfile="${BATS_TEST_TMPDIR}/listener.port"
+  local pidfile="${BATS_TEST_TMPDIR}/listener.pid"
+  python3 -c 'import socket
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", 0))
+s.listen(1)
+s.settimeout(30)
+print(s.getsockname()[1], flush=True)
+c, _ = s.accept()
+c.recv(65536)
+c.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+c.close()' > "${portfile}" 2> /dev/null &
+  printf '%s\n' "$!" > "${pidfile}"
+  local waited=0
+  while [[ ! -s "${portfile}" ]] && ((waited < 100)); do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  [[ -s "${portfile}" ]] || return 1
+  cat "${portfile}"
+}
+
 @test "__dybatpho_network_get_http_code no arg" {
   run __dybatpho_network_get_http_code
   assert_failure
@@ -101,10 +131,9 @@ time.sleep(30)' > "${portfile}" 2> /dev/null &
 }
 
 @test "dybatpho::curl_do without stub" {
-  local temp_file="${BATS_TEST_TMPDIR}/curl_do"
-  echo -e "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n" | nc -l 8080 &
-  sleep 1
-  run_traced dybatpho::curl_do http://localhost:8080 "${temp_file}"
+  local temp_file="${BATS_TEST_TMPDIR}/curl_do" port
+  port="$(start_http_server)" || skip "python3 is required to serve HTTP"
+  run_traced dybatpho::curl_do "http://127.0.0.1:${port}" "${temp_file}"
   assert_success
   refute_output
 }

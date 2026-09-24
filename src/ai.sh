@@ -199,7 +199,9 @@ function __dybatpho_ai_state_path {
   if [[ -z "${DYBATPHO_AI_STATE_FILE}" ]]; then
     local directory
     directory="$(dybatpho::xdg_state_dir dybatpho)"
-    dybatpho::ensure_dir "${directory}" 700 > /dev/null
+    # The counters are bookkeeping, not an effect the caller asked for, so a dry
+    # run still needs the directory: without it the first count aborts.
+    DRY_RUN=false dybatpho::ensure_dir "${directory}" 700 > /dev/null
     DYBATPHO_AI_STATE_FILE="${directory}/ai_state_$$"
   fi
   printf '%s\n' "${DYBATPHO_AI_STATE_FILE}"

@@ -219,6 +219,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`ai` under `DRY_RUN` aborted on its first call on a fresh machine.** The
+  counter file moved to a 0700 directory under the XDG state home, but that
+  directory was created through `dybatpho::ensure_dir`, which only *prints* the
+  `mkdir` in a dry run. The first `dybatpho::ai_ask` then failed writing its
+  counters. The directory is bookkeeping, not an effect the caller asked for,
+  so it is now created even in a dry run.
+
+- **`dybatpho::agent_mcp` recorded the wrong command for the root tool with
+  `yq` 4.52.** Its `x-dybatpho-command` came out as
+  `["/usr/bin/mytool",["mytool"],"description"]` instead of
+  `["/usr/bin/mytool"]`, because that `yq` applies `.path[1:]` to the enclosing
+  object. The filter now reads `.path | .[1:]`, which both backends agree on.
+
+- **`dybatpho::git_changed_files` ordered its output by the caller's locale.**
+  Under a UTF-8 locale on macOS `notes.txt` came before `README.md`; under `C`
+  it came after. It now sorts byte-wise, so the order is the same everywhere.
+
 - **Passing the wrong variable name to an array helper did nothing, quietly.**
   A helper that writes into a variable the caller names binds it with
   `local -n`, and that has a failure mode with no error in it: when the name

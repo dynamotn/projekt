@@ -588,8 +588,10 @@ function dybatpho::agent_mcp {
     tool_name=$(__dybatpho_agent_tool_name "${entry}")
     input_schema=$(__dybatpho_agent_options_schema "$(dybatpho::json_eval "${entry}" '.options')")
     # The first path element is the root name, which the command already names.
+    # `.path | .[1:]` rather than `.path[1:]`: yq 4.52 applies the latter slice to
+    # the enclosing object, not to `.path`.
     argv=$(dybatpho::json_eval "${entry}" \
-      "[$(dybatpho::json_string "${command}")] + (.path[1:])")
+      "[$(dybatpho::json_string "${command}")] + (.path | .[1:])")
     definition=$(dybatpho::json_object \
       name "${tool_name}" \
       description "${description}" \

@@ -254,7 +254,8 @@ function dybatpho::git_has_remote {
 # @description List changed files relative to a base ref, including untracked.
 # @arg $1 string Optional repository path, default is `.`
 # @arg $2 string Optional base ref, default is `HEAD`
-# @stdout One changed file path per line, sorted and deduplicated
+# @stdout One changed file path per line, sorted byte-wise and deduplicated,
+#   so the order does not depend on the caller's locale
 #######################################
 function dybatpho::git_changed_files {
   local repo_path base_ref
@@ -263,7 +264,7 @@ function dybatpho::git_changed_files {
   {
     __dybatpho_git "${repo_path}" diff --name-only "${base_ref}" --
     __dybatpho_git "${repo_path}" ls-files --others --exclude-standard
-  } | awk 'NF' | sort -u
+  } | awk 'NF' | LC_ALL=C sort -u
 }
 
 #######################################

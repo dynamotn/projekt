@@ -356,7 +356,8 @@ List changed files relative to a base ref, including untracked.
 
 **📤 Output on stdout**
 
-- One changed file path per line, sorted and deduplicated
+- One changed file path per line, sorted byte-wise and deduplicated,
+  so the order does not depend on the caller's locale
 
 
 ---
