@@ -38,6 +38,8 @@ type CreateOptions struct {
 	Log io.Writer
 	// NoHooks skips the recipe's `after` commands.
 	NoHooks bool
+	// Interactive lets the template's prompt functions ask while it renders.
+	Interactive bool
 	// In, HookOut and HookErr are the streams a hook runs with. A hook is a
 	// command someone will want to watch, so these are the terminal.
 	In               io.Reader
@@ -187,18 +189,27 @@ func (p Plan) Vars() ([]tplutil.Var, error) {
 // BaseContext returns what a default is rendered with, so that a recipe can
 // say `default: "example.com/{{ .Name }}"`.
 func (p Plan) BaseContext() (map[string]any, error) {
-	return tplutil.BaseContext(p.renderOptions(nil, false, false, nil))
+	return tplutil.BaseContext(p.renderOptions(CreateOptions{}, nil, nil))
 }
 
-func (p Plan) renderOptions(values tplutil.Values, force, dryRun bool, out io.Writer) tplutil.RenderOptions {
+// Values returns what the template is rendered with: the data files of the
+// store and the template, under everything the recipe was given.
+func (p Plan) Values(values tplutil.Values) (tplutil.Values, error) {
+	return tplutil.WithData(p.renderOptions(CreateOptions{Values: values}, values, nil))
+}
+
+func (p Plan) renderOptions(o CreateOptions, values tplutil.Values, out io.Writer) tplutil.RenderOptions {
 	return tplutil.RenderOptions{
-		Template: p.Template,
-		Dest:     p.Path,
-		Name:     p.Name,
-		Values:   values,
-		Force:    force,
-		DryRun:   dryRun,
-		Out:      out,
+		Template:    p.Template,
+		Dest:        p.Path,
+		Name:        p.Name,
+		Values:      values,
+		Force:       o.Force,
+		DryRun:      o.DryRun,
+		Out:         out,
+		In:          o.In,
+		Prompt:      o.HookErr,
+		Interactive: o.Interactive,
 	}
 }
 
@@ -231,7 +242,7 @@ func Create(o CreateOptions) (Result, error) {
 	if plan.Recipe.Source.Repo != "" {
 		files, err = createFromRepo(plan, o, log)
 	} else {
-		files, err = tplutil.Render(plan.renderOptions(o.Values, o.Force, o.DryRun, out))
+		files, err = tplutil.Render(plan.renderOptions(o, o.Values, out))
 	}
 	if err != nil {
 		return Result{}, err

@@ -23,9 +23,21 @@ Variables available to a template:
   .Dir       Absolute destination folder
   .Path      Absolute path of the file being rendered
   .Template  Name of the template
-  .User      Current user name
+  .Source    Folder the template itself lives in
+  .Store     Template folder the store reads from
+  .User      Current user name, .Home its home folder
+  .Hostname  Name of this machine, .OS and .Arch what it runs
+  .Env       The environment, as .Env.EDITOR
   .Now       Current time, .Date (2006-01-02) and .Year
-  .Values    Everything given with --set and --values
+  .Values    The data files, --values and --set, in that order
+
+Besides the sprig functions a template can call include, includeTemplate,
+output, lookPath, stat, joinPath, toYaml, fromYaml and the prompt functions
+promptString, promptInt, promptBool and promptChoice.
+
+A folder template may also carry a .data.yaml of default values, a .ignore
+listing what not to write, and a .templates folder of shared pieces; a name
+may start with executable_, private_, readonly_, symlink_, dot_ or literal_.
 
 With --interactive the missing values are asked for, one question per value.
 A template says what to ask in its .vars.yaml; without one, the questions are
@@ -74,7 +86,15 @@ func NewTemplateNewCmd(out io.Writer) *cobra.Command {
 			}
 			// --set wins over --values, the same way a flag wins over a file.
 			o.Values = tplutil.MergeValues(fileValues, setValues)
+			// A data file sits under both, so what it holds is never asked
+			// for again.
+			if o.Values, err = tplutil.WithData(o); err != nil {
+				return err
+			}
 
+			o.In = cmd.InOrStdin()
+			o.Prompt = cmd.ErrOrStderr()
+			o.Interactive = interactive
 			if interactive {
 				if o.Values, err = askForValues(cmd, o); err != nil {
 					return err

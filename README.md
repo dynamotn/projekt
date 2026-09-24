@@ -242,15 +242,34 @@ templates/
     └── cmd/{{ .Name }}/main.go.tmpl  # becomes cmd/myapp/main.go
 ```
 
-Values come from repeatable `--set key=value` (dots nest, values keep their
+Values come from a `.data.yaml` of the store or the template (the things not
+worth typing twice), repeatable `--set key=value` (dots nest, values keep their
 YAML type), `--values file.yaml` (deep-merged, `--set` wins), or
 `--interactive`, which asks for what's missing — from the template's
 `.vars.yaml`, or else from the `.Values` keys in the template itself. Templates
-also get `.Name`, `.Project`, `.Dir`, `.Path`, `.Template`, `.User`, `.Now`,
-`.Date` and `.Year`. An unset value renders empty rather than failing, so
+also get `.Name`, `.Project`, `.Dir`, `.Path`, `.Template`, `.Source`, `.Store`,
+`.User`, `.Home`, `.Hostname`, `.OS`, `.Arch`, `.Env`, `.Now`, `.Date` and
+`.Year`. An unset value renders empty rather than failing, so
 `{{ .Values.license | default "MIT" }}` makes one optional. Nothing is
 overwritten without `--force`, and a path segment rendering to `..` or
 containing a separator is refused.
+
+Four names inside a folder template describe it rather than belong to it, and
+between them one template covers what would otherwise be four:
+
+| | |
+| --- | --- |
+| `.vars.yaml` | what to ask for |
+| `.data.yaml` | what is already known — the lowest layer of `.Values` |
+| `.ignore` | what *not* to write, rendered first: `{{ if not .Values.ci }}.github/{{ end }}` |
+| `.templates/` | pieces several templates share: `{{ template "header" . }}` |
+
+A prefix on a file name says what the file *is* rather than what is in it —
+`executable_`, `private_`, `readonly_`, `symlink_`, `dot_`, `literal_` — and a
+template can ask a question at the point it needs the answer with
+`promptString`, `promptInt`, `promptBool` and `promptChoice`, alongside
+`include`, `includeTemplate`, `output`, `lookPath`, `stat`, `toYaml` and
+`fromYaml`.
 
 `b` renders a template, works out where the project belongs and registers it,
 so starting something new ends with `pj`, not another `cd`:

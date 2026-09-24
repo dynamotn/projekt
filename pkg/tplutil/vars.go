@@ -127,7 +127,10 @@ func InferVars(tpl Template) ([]Var, error) {
 
 	scan := &varScan{seen: map[string]bool{}, containers: map[string]bool{}}
 	for name, text := range sources {
-		t, err := template.New(name).Funcs(sprig.TxtFuncMap()).Option("missingkey=zero").Parse(text)
+		// The scan only has to parse, but a template calling `promptString`
+		// does not parse at all unless the function is known.
+		t, err := template.New(name).Funcs(sprig.TxtFuncMap()).Funcs(parserFuncs()).
+			Option("missingkey=zero").Parse(text)
 		if err != nil {
 			return nil, fmt.Errorf("cannot parse template %s: %w", name, err)
 		}
@@ -172,12 +175,24 @@ func templateSources(tpl Template) (map[string]string, error) {
 		if relative == "." {
 			return nil
 		}
-		if entry.IsDir() && entry.Name() == ".git" {
-			return fs.SkipDir
+		if skip, isDir := isReserved(entry, relative); skip {
+			// The ignore file is the one piece of metadata that asks
+			// something: `{{ if not .Values.ci }}` is a question about the
+			// project, so it is read like any other file.
+			if entry.Name() != IgnoreFile {
+				if isDir {
+					return fs.SkipDir
+				}
+				return nil
+			}
+		} else {
+			// The path itself is a template too: `cmd/{{ .Name }}` names a
+			// folder. Its attribute prefixes are literal, so they are read off
+			// before it is scanned.
+			bare, _ := ParseAttributes(filepath.Base(relative))
+			sources["path:"+relative] = filepath.Join(filepath.Dir(relative), bare)
 		}
-		// The path itself is a template too: `cmd/{{ .Name }}` names a folder.
-		sources["path:"+relative] = relative
-		if entry.IsDir() || entry.Name() == VarsFile {
+		if entry.IsDir() {
 			return nil
 		}
 		data, err := os.ReadFile(path)

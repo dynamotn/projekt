@@ -79,6 +79,12 @@ func NewBoilerplateNewCmd(out io.Writer) *cobra.Command {
 				return err
 			}
 			o.Values = tplutil.MergeValues(fileValues, setValues)
+			o.Interactive = interactive
+			// A data file of the store or the template sits under both, so
+			// what it holds is never asked for again.
+			if o.Values, err = valuesWithData(o); err != nil {
+				return err
+			}
 
 			if interactive {
 				if o.Values, err = askForValues(cmd, o); err != nil {
@@ -105,6 +111,16 @@ func NewBoilerplateNewCmd(out io.Writer) *cobra.Command {
 	f.BoolVarP(&o.DryRun, "dry-run", "d", false, "Print the plan instead of creating anything")
 
 	return cmd
+}
+
+// valuesWithData folds the data files of the store and of the template under
+// what the recipe was given.
+func valuesWithData(o bplutil.CreateOptions) (tplutil.Values, error) {
+	plan, err := bplutil.Resolve(o)
+	if err != nil {
+		return nil, err
+	}
+	return plan.Values(o.Values)
 }
 
 // askForValues asks for whatever the recipe needs and is not already set.

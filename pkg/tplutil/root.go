@@ -5,6 +5,12 @@
 // template, every path segment go through text/template with the sprig
 // function set, so a template can name the files it creates.
 //
+// Four names describe a template rather than belong to it: .vars.yaml says what
+// to ask for, .data.yaml what is already known, .ignore what not to write, and
+// a .templates folder holds the pieces several templates share. A prefix on a
+// file name — executable_, private_, readonly_, symlink_, dot_, literal_ —
+// says what the rendered file is rather than what is in it.
+//
 // Example usage:
 //
 //	tpl, err := tplutil.Get("license")

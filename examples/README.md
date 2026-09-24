@@ -57,6 +57,7 @@ skeleton — so `--dry-run` is the fastest way to see what a template does:
 
 ```bash
 t --template-dir examples/templates new threat-model --dry-run
+t --template-dir examples/templates new go-cli ./myapp -n myapp --set ci=false --dry-run
 ```
 
 ## Things these templates demonstrate
@@ -65,6 +66,19 @@ t --template-dir examples/templates new threat-model --dry-run
   `cmd/{{ .Name }}/main.go`, because the path segments are rendered too. Its
   `.gitignore` shows that a dotfile is part of the project; only `.git` is left
   behind.
+- **Values a template already knows.** `go-cli/.data.yaml` sets the licence,
+  the CI runner and whether there is CI at all, so none of them is asked for
+  unless you want to change one. A `.data.yaml` at the root of the store would
+  apply to every template.
+- **One template, several shapes.** `go-cli/.ignore` is rendered before it is
+  read, so `--set ci=false` leaves the whole `.github` folder out instead of
+  needing a second template.
+- **Pieces shared between templates.** `.templates/license-header.tmpl` sits at
+  the root of the store, and `go-cli`'s `main.go` calls it with
+  `{{ template "license-header" . }}`.
+- **What a file is, not just what is in it.**
+  `go-cli/executable_scripts/executable_build.sh.tmpl` writes
+  `scripts/build.sh` runnable, because the prefix says so.
 - **Optional values.** `{{ .Values.module | default (printf "example.com/%s" .Name) }}`
   — a value nobody set renders empty, so `default` works.
 - **Lists and maps.** `docker-compose.yml` and `terraform-module` loop over

@@ -1,0 +1,2 @@
+# Rendered before it is read, so the values decide what the project gets.
+{{ if not .Values.ci }}.github/{{ end }}

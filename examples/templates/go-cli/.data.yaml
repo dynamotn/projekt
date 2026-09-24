@@ -1,0 +1,5 @@
+# What this template already knows. Everything here is a default: --values,
+# --set and --interactive all win over it.
+license: MIT
+ci: true
+runner: ubuntu-latest

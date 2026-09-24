@@ -33,8 +33,12 @@ Each entry of that folder is one template:
 - a **folder** template renders a whole tree. Every file is rendered, and so is
   every path segment, so a folder named `{{ .Name }}` becomes the project name.
 
-Entries starting with a dot are ignored, in the store and inside a folder
-template, so editor and VCS leftovers never end up in the output.
+Entries starting with a dot are ignored in the store, so editor and VCS
+leftovers never become a template. Inside a folder template a dotfile *is* part
+of what a project needs — `.gitignore`, `.github` — and is written like any
+other file, except for the four names that describe the template rather than
+belong to it: `.vars.yaml` (what to ask), `.data.yaml` (what is already known),
+`.ignore` (what not to write) and the `.templates` folder (what is shared).
 
 ```
 ~/.local/share/projekt/templates
@@ -90,7 +94,11 @@ Besides `.Values`, a template is given:
 | `.Dir`      | Absolute destination folder                                     |
 | `.Path`     | Absolute path of the file being rendered                        |
 | `.Template` | Name of the template                                            |
-| `.User`     | Current user name                                               |
+| `.Source`   | Folder the template itself lives in                             |
+| `.Store`    | Template folder the store is read from                          |
+| `.User`     | Current user name, with `.Home` besides it                      |
+| `.Hostname` | Name of this machine, with `.OS` and `.Arch` besides it         |
+| `.Env`      | The environment, as `.Env.EDITOR`                               |
 | `.Now`      | Current time, with `.Date` (`2006-01-02`) and `.Year` besides it |
 
 A value that was never set renders as empty rather than failing, so
@@ -154,6 +162,155 @@ A template without a manifest is still usable interactively: the questions are
 then the `.Values` keys read out of the template itself, in the order they
 appear. Keys the template loops over are left out — a list or a map is not
 something to type at a prompt, and belongs in a `--values` file.
+
+## Values a template already has
+
+Some values are not worth typing twice: your name, your company, the licence
+you always pick. A `.data.yaml` holds them.
+
+```
+~/.local/share/projekt/templates
+├── .data.yaml                # every template gets these
+├── license.tmpl
+├── license.data.yaml         # and the licence template these
+└── go-cli
+    └── .data.yaml            # and this folder template these
+```
+
+```yaml
+# ~/.local/share/projekt/templates/.data.yaml
+author: Jane Doe
+company: Acme GmbH
+license: MIT
+```
+
+They are read lowest first — the store, then the template — and everything
+given on the command line goes on top, so a data file is a default and never an
+override:
+
+```
+store .data.yaml  <  template .data.yaml  <  --values  <  --set  <  --interactive
+```
+
+A value a data file already holds is never asked for again, which is what makes
+one worth writing: `t new license LICENSE -i` then asks only for what is
+particular to this file. `.data.yml` and `.data.json` are read too, for a file
+generated from somewhere else.
+
+## Pieces several templates share
+
+A `.templates` folder holds the fragments templates call rather than repeat: a
+licence header, a CI job, a block of Makefile. One at the root of the store is
+reachable from every template; one inside a folder template travels with it and
+wins when both define the same name.
+
+```
+~/.local/share/projekt/templates
+├── .templates
+│   ├── header.tmpl             # {{ template "header" . }}
+│   └── ci/go.tmpl              # {{ template "ci/go" . }}
+└── go-cli
+    └── .templates/header.tmpl  # go-cli's own header
+```
+
+A fragment is called the way text/template calls one, and `includeTemplate`
+renders it into a string when it needs piping:
+
+```gotemplate
+{{ template "header" . }}
+
+{{ includeTemplate "ci/go" . | indent 4 }}
+```
+
+The folder is never listed as a template and never written to the output.
+
+## Leaving files out
+
+A folder template writes every file it holds. A `.ignore` says which ones it
+does not — and because it is rendered like everything else, that decision can
+be made from the values:
+
+```gotemplate
+# templates/go-cli/.ignore
+{{ if not .Values.ci }}.github/{{ end }}
+{{ if ne .Values.license "MIT" }}LICENSE{{ end }}
+*.local
+```
+
+The patterns read the way a `.gitignore` does: `#` starts a comment, a trailing
+`/` matches a folder, a leading or inner `/` anchors the pattern at the root of
+the output, `*` matches inside a segment and `**` any number of them, and a `!`
+line brings back what an earlier one dropped. They are matched against the
+paths the template *would have written*, after the names were rendered, and an
+ignored folder takes its contents with it.
+
+This is how one template covers the variants of a project, instead of four
+templates that drift apart.
+
+## What a file is
+
+A template says what is *in* a file. A prefix on its name says what the file
+*is*:
+
+| Prefix | What the rendered file becomes |
+| --- | --- |
+| `executable_` | runnable — mode `755`, or `700` with `private_` |
+| `private_` | readable by its owner alone — mode `600`, a folder `700` |
+| `readonly_` | not writable — the write bits are dropped |
+| `symlink_` | a symbolic link, pointing at whatever the file rendered to |
+| `dot_` | a dotfile: `dot_gitignore` is written as `.gitignore` |
+| `literal_` | nothing — it stops the reading, for a file really called `executable_x` |
+
+They combine, and they apply to folders as well as files:
+
+```
+templates/go-cli
+├── executable_scripts/executable_{{ .Name }}.sh.tmpl   # scripts/myapp.sh, 755
+├── private_dot_env.tmpl                                # .env, 600
+└── symlink_latest.tmpl                                 # a link to what it rendered
+```
+
+The prefixes are read off the template's own name *before* it is rendered, so a
+value can never turn a file into an executable or a link by accident:
+`--set file=executable_run.sh` writes a plain file honestly called
+`executable_run.sh`.
+
+## Asking while rendering
+
+`.vars.yaml` asks everything up front. A template can also ask at the point it
+needs the answer, which suits a question only one branch of the template
+reaches:
+
+```gotemplate
+module {{ promptString "Go module path" (printf "example.com/%s" .Name) }}
+
+{{ if promptBool "Add a Dockerfile" "no" }}...{{ end }}
+{{ promptChoice "Licence" (list "MIT" "Apache-2.0" "BSD-3-Clause") "MIT" }}
+{{ promptInt "Port" 8080 }}
+```
+
+The answer is remembered for the whole render, so the same question asked by
+ten files is asked once. Without `--interactive` the default is taken instead,
+and a question with no default is then an error rather than an empty file, so a
+scripted run cannot quietly write the wrong thing.
+
+## Functions
+
+On top of the [sprig](https://masterminds.github.io/sprig/) set:
+
+| Function | What it does |
+| --- | --- |
+| `include "path"` | the contents of a file of the template, unrendered |
+| `includeTemplate "name" .` | a shared template of `.templates`, rendered into a string |
+| `output "cmd" "arg"` | the standard output of a command |
+| `lookPath "git"` | where an executable is, or empty when it is not installed |
+| `stat "go.mod"` | what is at a path, or nothing — `{{ if stat "go.mod" }}` |
+| `joinPath "a" "b"` | `a/b` |
+| `toYaml` / `fromYaml` | a value as YAML, and YAML back as a value |
+| `promptString` / `promptInt` / `promptBool` / `promptChoice` | ask, as above |
+
+`include` reads relative to the template and refuses to leave it, so a template
+cannot be made to read a file somewhere else on the disk.
 
 ## Writing a template
 

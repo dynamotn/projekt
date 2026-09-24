@@ -21,6 +21,26 @@
   it runs and skippable with `--no-hooks`
 - **b**: point a new project at a remote with `register.remote`, and record it
   under the workspace with `inRepos`
+- **t**: keep the values you never want to type again in a `.data.yaml`, at the
+  root of the store for every template or inside one for itself; they sit under
+  `--values`, `--set` and `--interactive`, so a value they hold is never asked
+  for again
+- **t**: share pieces between templates in a `.templates` folder, called with
+  `{{ template "header" . }}` or `{{ includeTemplate "header" . | indent 2 }}`;
+  a folder template may bring its own, which wins
+- **t**: leave files out with a `.ignore`, rendered before it is read, so
+  `{{ if not .Values.ci }}.github/{{ end }}` makes one template cover the
+  variants of a project instead of four that drift apart
+- **t**: say what a rendered file *is* with a prefix on its name —
+  `executable_`, `private_`, `readonly_`, `symlink_`, `dot_` and `literal_`;
+  read off the template's own name, so no value can add one
+- **t**: ask a question at the point the answer is needed with `promptString`,
+  `promptInt`, `promptBool` and `promptChoice`, asked once however many files
+  ask it, and answered by the default when there is no `--interactive`
+- **t**: new functions `include`, `includeTemplate`, `output`, `lookPath`,
+  `stat`, `joinPath`, `toYaml` and `fromYaml`
+- **t**: new variables `.Source`, `.Store`, `.Home`, `.Hostname`, `.OS`,
+  `.Arch` and `.Env`
 
 ### Removed
 

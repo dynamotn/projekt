@@ -8,11 +8,9 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
-	"text/template"
 	"time"
-
-	"github.com/Masterminds/sprig"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 )
@@ -34,12 +32,26 @@ type RenderOptions struct {
 	DryRun bool
 	// Out receives the rendered content of a dry run.
 	Out io.Writer
+	// In is where the prompt functions read their answers from.
+	In io.Reader
+	// Prompt receives the questions a template asks while it renders. Nil
+	// means standard error, so a piped dry run still gets only the template.
+	Prompt io.Writer
+	// Interactive lets the prompt functions ask. Without it they take their
+	// default, and a question without one is an error.
+	Interactive bool
 }
 
 // BaseContext returns what a template is given before any value is asked for,
 // so that a default like `{{ .User }}` in a manifest renders the same way the
 // template itself would.
 func BaseContext(o RenderOptions) (map[string]any, error) {
+	values, err := WithData(o)
+	if err != nil {
+		return nil, err
+	}
+	o.Values = values
+
 	if o.Template.IsDir() {
 		return context(o, ""), nil
 	}
@@ -59,14 +71,28 @@ func Render(o RenderOptions) ([]string, error) {
 	if o.Values == nil {
 		o.Values = Values{}
 	}
-	if o.Template.IsDir() {
-		return renderDir(o)
+
+	// A data file is a default: it fills what nobody asked about, and loses to
+	// anything given on the command line.
+	values, err := WithData(o)
+	if err != nil {
+		return nil, err
 	}
-	return renderFile(o)
+	o.Values = values
+
+	engine, err := newEngine(o)
+	if err != nil {
+		return nil, err
+	}
+
+	if o.Template.IsDir() {
+		return renderDir(engine, o)
+	}
+	return renderFile(engine, o)
 }
 
 // renderFile renders a single file template.
-func renderFile(o RenderOptions) ([]string, error) {
+func renderFile(e *engine, o RenderOptions) ([]string, error) {
 	target, err := fileTarget(o)
 	if err != nil {
 		return nil, err
@@ -77,7 +103,7 @@ func renderFile(o RenderOptions) ([]string, error) {
 		return nil, fmt.Errorf("cannot read template %s: %w", o.Template.Path, err)
 	}
 
-	rendered, err := execute(o.Template.Name, string(data), context(o, target))
+	rendered, err := e.execute(o.Template.Name, string(data), context(o, target))
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +112,7 @@ func renderFile(o RenderOptions) ([]string, error) {
 		_, err = o.Out.Write(rendered)
 		return []string{target}, err
 	}
-	if err := writeFile(target, rendered, o.Force); err != nil {
+	if err := writeFile(target, rendered, o.Force, Attributes{}); err != nil {
 		return nil, err
 	}
 	return []string{target}, nil
@@ -123,7 +149,7 @@ func fileTarget(o RenderOptions) (string, error) {
 
 // renderDir renders a folder template: every file is rendered, and so is every
 // path segment, so `{{ .Name }}/main.go.tmpl` lands under the project name.
-func renderDir(o RenderOptions) ([]string, error) {
+func renderDir(e *engine, o RenderOptions) ([]string, error) {
 	root := o.Dest
 	if root == "" {
 		root = "."
@@ -131,6 +157,11 @@ func renderDir(o RenderOptions) ([]string, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("cannot resolve destination %s: %w", o.Dest, err)
+	}
+
+	ignore, err := e.loadIgnore(o, context(o, ""))
+	if err != nil {
+		return nil, err
 	}
 
 	var written []string
@@ -145,53 +176,53 @@ func renderDir(o RenderOptions) ([]string, error) {
 		if relative == "." {
 			return nil
 		}
-		// A dotfile is part of what a project needs — .gitignore, .github,
-		// .env.example — so only repository metadata is left out.
-		if entry.IsDir() && entry.Name() == ".git" {
-			return fs.SkipDir
-		}
-		// The manifest describes the template, it is not part of the output.
-		if !entry.IsDir() && entry.Name() == VarsFile {
+		if skip, dir := isReserved(entry, relative); skip {
+			if dir {
+				return fs.SkipDir
+			}
 			return nil
 		}
 
-		target, err := renderPath(o, root, relative)
+		rendered, attrs, err := renderRelative(e, o, relative)
 		if err != nil {
 			return err
 		}
+		// The ignore file names what the template writes, not what it is made
+		// of, so it is matched against the rendered path.
+		if ignore.Match(rendered, entry.IsDir()) {
+			cli.Debug("Ignored %s", rendered)
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		target := filepath.Join(root, filepath.FromSlash(rendered))
+
 		if entry.IsDir() {
 			if o.DryRun {
 				return nil
 			}
-			return os.MkdirAll(target, 0o755)
+			return os.MkdirAll(target, attrs.DirMode())
 		}
 
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("cannot read template file %s: %w", path, err)
 		}
-		rendered, err := execute(o.Template.Name+"/"+relative, string(data), context(o, target))
+		content, err := e.execute(o.Template.Name+"/"+relative, string(data), context(o, target))
 		if err != nil {
 			return err
 		}
 
 		if o.DryRun {
-			if _, err := fmt.Fprintf(o.Out, "# %s\n", target); err != nil {
+			if err := describe(o.Out, target, content, attrs); err != nil {
 				return err
-			}
-			if _, err := o.Out.Write(rendered); err != nil {
-				return err
-			}
-			if len(rendered) > 0 && !bytes.HasSuffix(rendered, []byte("\n")) {
-				if _, err := fmt.Fprintln(o.Out); err != nil {
-					return err
-				}
 			}
 			written = append(written, target)
 			return nil
 		}
 
-		if err := writeFile(target, rendered, o.Force); err != nil {
+		if err := writeFile(target, content, o.Force, attrs); err != nil {
 			return err
 		}
 		written = append(written, target)
@@ -203,30 +234,82 @@ func renderDir(o RenderOptions) ([]string, error) {
 	return written, nil
 }
 
-// renderPath renders the path segments of a folder template and strips the
-// .tmpl suffix from the last one.
-func renderPath(o RenderOptions, root, relative string) (string, error) {
-	segments := strings.Split(relative, string(os.PathSeparator))
-	for i, segment := range segments {
-		rendered, err := execute("path:"+relative, segment, context(o, ""))
-		if err != nil {
-			return "", err
+// isReserved reports whether an entry of a folder template describes the
+// template rather than belonging to what it creates, and whether skipping it
+// means skipping a whole folder.
+func isReserved(entry fs.DirEntry, relative string) (skip, dir bool) {
+	name := entry.Name()
+	if entry.IsDir() {
+		// Repository metadata, and the folder of shared pieces, which are
+		// rendered by the files that call them rather than on their own.
+		return name == ".git" || name == PartialsDir, true
+	}
+	// The manifest, the data file and the ignore list describe the template;
+	// they are not part of the output.
+	return name == VarsFile || name == IgnoreFile || isDataFile(name), false
+}
+
+// describe prints one file of a dry run, saying what it would be when the
+// name asked for more than plain content.
+func describe(out io.Writer, target string, content []byte, attrs Attributes) error {
+	header := "# " + target
+	switch {
+	case attrs.Symlink:
+		header += " -> " + strings.TrimSpace(string(content))
+	case attrs.Any():
+		header += fmt.Sprintf(" (%s)", attrs.FileMode())
+	}
+	if _, err := fmt.Fprintln(out, header); err != nil {
+		return err
+	}
+	if attrs.Symlink {
+		return nil
+	}
+	if _, err := out.Write(content); err != nil {
+		return err
+	}
+	if len(content) > 0 && !bytes.HasSuffix(content, []byte("\n")) {
+		if _, err := fmt.Fprintln(out); err != nil {
+			return err
 		}
-		segment = strings.TrimSpace(string(rendered))
-		if segment == "" {
-			return "", fmt.Errorf("path segment %q of %s renders to an empty name", segments[i], relative)
+	}
+	return nil
+}
+
+// renderRelative renders the path segments of a folder template, reads the
+// attribute prefixes off them and strips the .tmpl suffix from the last one.
+//
+// The prefixes are read before the segment is rendered, so a value can never
+// turn a file into an executable or a symbolic link.
+func renderRelative(e *engine, o RenderOptions, relative string) (string, Attributes, error) {
+	segments := strings.Split(relative, string(os.PathSeparator))
+	var attrs Attributes
+
+	for i, segment := range segments {
+		bare, segmentAttrs := ParseAttributes(segment)
+		if i == len(segments)-1 {
+			attrs = segmentAttrs
+		}
+
+		rendered, err := e.execute("path:"+relative, bare, context(o, ""))
+		if err != nil {
+			return "", attrs, err
+		}
+		name := strings.TrimSpace(string(rendered))
+		if name == "" {
+			return "", attrs, fmt.Errorf("path segment %q of %s renders to an empty name", segment, relative)
 		}
 		if i == len(segments)-1 {
-			segment = strings.TrimSuffix(segment, TemplateExt)
+			name = strings.TrimSuffix(name, TemplateExt)
 		}
 		// A rendered segment must stay one single folder level: a value
 		// containing "/" or ".." would escape the destination folder.
-		if segment != filepath.Base(segment) || segment == ".." {
-			return "", fmt.Errorf("path segment %q of %s renders to an invalid name %q", segments[i], relative, segment)
+		if name != filepath.Base(name) || name == ".." {
+			return "", attrs, fmt.Errorf("path segment %q of %s renders to an invalid name %q", segment, relative, name)
 		}
-		segments[i] = segment
+		segments[i] = name
 	}
-	return filepath.Join(append([]string{root}, segments...)...), nil
+	return strings.Join(segments, "/"), attrs, nil
 }
 
 // context builds the data a template is executed with.
@@ -261,6 +344,10 @@ func context(o RenderOptions, target string) map[string]any {
 		project = name
 	}
 
+	store, _ := Dir()
+	home, _ := os.UserHomeDir()
+	hostname, _ := os.Hostname()
+
 	now := time.Now()
 	return map[string]any{
 		"Name":     name,
@@ -268,12 +355,32 @@ func context(o RenderOptions, target string) map[string]any {
 		"Dir":      dir,
 		"Path":     target,
 		"Template": o.Template.Name,
+		"Source":   templateSource(o.Template),
+		"Store":    store,
 		"User":     currentUser(),
+		"Home":     home,
+		"Hostname": hostname,
+		"OS":       runtime.GOOS,
+		"Arch":     runtime.GOARCH,
+		"Env":      environment(),
 		"Now":      now,
 		"Date":     now.Format("2006-01-02"),
 		"Year":     now.Format("2006"),
 		"Values":   map[string]any(o.Values),
 	}
+}
+
+// environment is the process environment as a map, so a template can read
+// `{{ .Env.EDITOR }}` without shelling out.
+func environment() map[string]string {
+	env := map[string]string{}
+	for _, entry := range os.Environ() {
+		key, value, found := strings.Cut(entry, "=")
+		if found {
+			env[key] = value
+		}
+	}
+	return env
 }
 
 func currentUser() string {
@@ -283,27 +390,11 @@ func currentUser() string {
 	return os.Getenv("USER")
 }
 
-// execute parses and runs one template with the sprig function set.
-func execute(name, text string, data map[string]any) ([]byte, error) {
-	// missingkey=zero keeps `{{ .Values.foo | default "bar" }}` working for
-	// values the user did not set, instead of failing the whole render.
-	t, err := template.New(name).Funcs(sprig.TxtFuncMap()).Option("missingkey=zero").Parse(text)
-	if err != nil {
-		return nil, fmt.Errorf("cannot parse template %s: %w", name, err)
-	}
-
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, data); err != nil {
-		return nil, fmt.Errorf("cannot render template %s: %w", name, err)
-	}
-	return buf.Bytes(), nil
-}
-
 // writeFile writes the rendered content, refusing to clobber an existing file
 // unless --force was given.
-func writeFile(target string, content []byte, force bool) error {
+func writeFile(target string, content []byte, force bool, attrs Attributes) error {
 	if !force {
-		if _, err := os.Stat(target); err == nil {
+		if _, err := os.Lstat(target); err == nil {
 			return fmt.Errorf("%s already exists, use --force to overwrite it", target)
 		} else if !os.IsNotExist(err) {
 			return fmt.Errorf("cannot access %s: %w", target, err)
@@ -313,10 +404,42 @@ func writeFile(target string, content []byte, force bool) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return fmt.Errorf("cannot create folder %s: %w", filepath.Dir(target), err)
 	}
-	if err := os.WriteFile(target, content, 0o644); err != nil {
+
+	if attrs.Symlink {
+		return writeSymlink(target, string(content))
+	}
+
+	// The file may be there from an earlier run, read-only, or of another
+	// mode: replacing it is what --force asked for.
+	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("cannot replace %s: %w", target, err)
+	}
+	if err := os.WriteFile(target, content, attrs.FileMode()); err != nil {
 		return fmt.Errorf("cannot write %s: %w", target, err)
 	}
+	// WriteFile obeys the umask, which would drop the bits the name asked for.
+	if attrs.Any() {
+		if err := os.Chmod(target, attrs.FileMode()); err != nil {
+			return fmt.Errorf("cannot set the mode of %s: %w", target, err)
+		}
+	}
 	cli.Debug("Rendered %s", target)
+	return nil
+}
+
+// writeSymlink points a name at what the template rendered.
+func writeSymlink(target, link string) error {
+	link = strings.TrimSpace(link)
+	if link == "" {
+		return fmt.Errorf("%s is a symbolic link whose target renders empty", target)
+	}
+	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("cannot replace %s: %w", target, err)
+	}
+	if err := os.Symlink(link, target); err != nil {
+		return fmt.Errorf("cannot link %s: %w", target, err)
+	}
+	cli.Debug("Linked %s -> %s", target, link)
 	return nil
 }
 
