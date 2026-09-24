@@ -116,6 +116,7 @@ func PruneStale() ([]Stale, error) {
 		cli.Error("Failed to write config %v", err)
 		return nil, fmt.Errorf("cannot write the configuration: %w", err)
 	}
+	refreshEffective()
 
 	return stale, nil
 }

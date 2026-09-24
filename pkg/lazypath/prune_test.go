@@ -26,20 +26,20 @@ func prunableConfig(t *testing.T) (configFile, here string) {
 	configFile = filepath.Join(root, "config.yaml")
 	previous := CfgFile
 	CfgFile = configFile
-	c = Config{}
-	loadErr = nil
+	ResetTestConfig()
 	InitConfig()
 	t.Cleanup(func() {
 		CfgFile = previous
-		c = Config{}
-		loadErr = nil
+		ResetTestConfig()
 		// Writing the configuration goes through viper.Set, which overrides
 		// the file for the rest of the process. Left behind, it would be read
 		// by the next test in this package as if it were its own.
 		viper.Reset()
 	})
 
-	c = Config{
+	// Both what gets written and what gets read: FindStale goes through
+	// GetConfig, which serves the effective configuration.
+	SetTestConfig(Config{
 		Folders: []Folder{
 			{Path: here, Tags: []string{"work"}},
 			{Path: filepath.Join(root, "gone")},
@@ -48,7 +48,7 @@ func prunableConfig(t *testing.T) (configFile, here string) {
 			{Project: "here", Name: "wt", Branch: "main", Path: worktree},
 			{Project: "here", Name: "vanished", Branch: "main", Path: filepath.Join(here, "vanished")},
 		},
-	}
+	})
 
 	return configFile, here
 }
