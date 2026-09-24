@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`helpers` — asking the library about itself, from the running shell.** The
+  library documents itself in `doc/`, which answers the question while you are
+  reading it. It does not answer it while you are writing: at a prompt, or
+  halfway through a script, the question is what a function is called, which
+  module it is in, and what it takes — and the answer is in a browser tab.
+
+  ```sh
+  dybatpho::provides semver_valid        # semver
+  dybatpho::provides --path cache_run    # /path/to/src/cache.sh:245
+  dybatpho::describe cache_run           # the comment block, rendered
+  dybatpho::function_list cache          # everything that module exports
+  ```
+
+  These ask Bash rather than the filesystem. `declare -F` under `extdebug`
+  reports the file and line a function was defined at, and the documentation
+  comment is sitting just above that line in the source that was loaded — so
+  the answer describes the code that will actually run, and it is there whether
+  or not `doc/` was ever generated. `extdebug` is switched on for the one call
+  and put back exactly as it was found, since it also changes how `DEBUG` and
+  `RETURN` traps behave.
+
+  The name may be given with or without the `dybatpho::` prefix, because the
+  prefix is what you have already typed when you stop to ask. Nothing external
+  is called, so these work on a host with nothing installed but Bash. They live
+  in `helpers`, a core module, because a helper you have to remember to load is
+  one you will not reach for at a prompt.
+
+  Inside a bundle every module lives in one file, so no function can be
+  attributed to one. `dybatpho::describe` and `--path` still work there;
+  `dybatpho::provides` fails rather than naming the bundle file as the module,
+  and `dybatpho::function_list <module>` stops with an explanation rather than
+  returning an empty list that would read as "this module exports nothing".
+
 - **`cache` — remembering a slow answer on disk until it goes stale.** A script
   that asks a slow question twice writes the same four lines every time: work
   out a file name, read how old the file is, compare that to a number of

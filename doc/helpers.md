@@ -21,6 +21,18 @@ modules rely on:
 - assigning default env values
 - retrying flaky commands
 - opening an interactive breakpoint
+- asking the library about itself
+
+
+That last one is `dybatpho::provides`, `dybatpho::describe` and
+`dybatpho::function_list`. The library documents itself in `doc/`, which
+answers the question while you are reading; these answer it from the
+running shell, where the question actually comes up. They ask Bash rather
+than the filesystem: `declare -F` under `extdebug` reports the file and line
+a function was defined at, and the documentation comment is sitting just
+above that line in the source that was loaded. They live here, in a core
+module, because a helper you have to remember to load is one you will not
+reach for at a prompt.
 
 ### 🌍 Environment
 
@@ -48,6 +60,12 @@ modules rely on:
 - [`dybatpho::retry`](#dybatphoretry) — Retry a shell command with escalating delays until it succeeds or retries are exhausted.
 - [`dybatpho::retry_until`](#dybatphoretry_until) — Retry a shell command until it succeeds or the retry budget is exhausted, using a fixed delay.
 - [`dybatpho::breakpoint`](#dybatphobreakpoint) — Open an interactive breakpoint for debugging a running script.
+- [`__dybatpho_helpers_locate`](#__dybatpho_helpers_locate) — Print the file and line a function was defined at. `declare -F` names the file only while `extdebug` is on, and that option also changes how `DEBUG` and `RETURN` traps behave, so it is switched on for the one call and put back exactly as it was found. `shopt -p` reports a non-zero status when the option is off, which under `errexit` would end the caller before anything was looked up.
+- [`__dybatpho_helpers_qualify`](#__dybatpho_helpers_qualify) — Print a function name with the `dybatpho::` prefix it may have been given without.
+- [`__dybatpho_helpers_module_of`](#__dybatpho_helpers_module_of) — Print the module a loaded source file belongs to. A module is recognised by its place rather than its name: a file directly inside a `src` directory is that module, and the bootstrap is `init`. Anything else is refused, because a bundle holds every module in one file and answering with that file's name would attribute every function in the library to a module called `dybatpho.bundle`.
+- [`dybatpho::provides`](#dybatphoprovides) — Print the module that defines a function. The answer comes from where Bash says the function was defined, so it describes the code that is actually loaded rather than what a directory listing suggests. Functions the bootstrap defines report `init`.
+- [`dybatpho::describe`](#dybatphodescribe) — Print the documentation comment of a function. The library documents itself in `doc/`, which answers the question when you are reading it. At a prompt, mid-script, the question is what a function takes and what it returns, and the answer is in a browser tab. This reads it out of the source the shell actually loaded, so it describes the code that will run, and it is there whether or not `doc/` was ever generated. The banner rules and any `shellcheck` directive between the comment and the function are dropped, one `#` and the space after it are taken off each line, and the `@description` marker is removed from the prose it introduces. Everything else, `@arg` and `@exitcode` tags included, is printed as the source wrote it.
+- [`dybatpho::function_list`](#dybatphofunction_list) — Print the public functions this shell has loaded. Without an argument this is the whole loaded API; with one it is what a single module exports, which is the list to skim when reaching for a module for the first time. Only `dybatpho::` names are listed. The `__dybatpho_` helpers are internal, and `declare -F` is right there for anyone debugging one.
 
 <a id="usage"></a>
 ## 🚀 Usage
@@ -520,4 +538,202 @@ _Function has no arguments._
 | Variable | Type | Description |
 | --- | --- | --- |
 | **`DYBATPHO_REPL_HISTORY_FILE`** | string | Override where REPL history is persisted between breakpoint sessions |
+
+
+---
+
+### `__dybatpho_helpers_locate`
+
+Print the file and line a function was defined at.
+  `declare -F` names the file only while `extdebug` is on, and that option
+  also changes how `DEBUG` and `RETURN` traps behave, so it is switched on for
+  the one call and put back exactly as it was found. `shopt -p` reports a
+  non-zero status when the option is off, which under `errexit` would end the
+  caller before anything was looked up.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Function name, in full |
+
+**📤 Output on stdout**
+
+- Two lines: the file, then the line number
+
+**🚦 Exit codes**
+
+- `1`: No such function, or Bash could not say where it came from
+
+
+---
+
+### `__dybatpho_helpers_qualify`
+
+Print a function name with the `dybatpho::` prefix it may have
+  been given without.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Function name, with or without a prefix |
+
+**📤 Output on stdout**
+
+- The full function name
+
+
+---
+
+### `__dybatpho_helpers_module_of`
+
+Print the module a loaded source file belongs to.
+  A module is recognised by its place rather than its name: a file directly
+  inside a `src` directory is that module, and the bootstrap is `init`.
+  Anything else is refused, because a bundle holds every module in one file
+  and answering with that file's name would attribute every function in the
+  library to a module called `dybatpho.bundle`.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Path of a file the library was loaded from |
+
+**📤 Output on stdout**
+
+- The module name
+
+**🚦 Exit codes**
+
+- `1`: The file is not a module source
+
+
+---
+
+### `dybatpho::provides`
+
+Print the module that defines a function.
+  The answer comes from where Bash says the function was defined, so it
+  describes the code that is actually loaded rather than what a directory
+  listing suggests. Functions the bootstrap defines report `init`.
+
+**🧪 Example**
+
+```bash
+dybatpho::provides semver_valid            # semver
+dybatpho::provides dybatpho::cache_run     # cache
+dybatpho::provides --path cache_run        # /path/to/src/cache.sh:245
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | `--path` to print `file:line` instead of the module name |
+| `$@` | string | Function name, with or without the `dybatpho::` prefix |
+
+**📝 Notes**
+
+- A bundle holds every module in one file, so only `--path` can answer there, and it still points at the right line
+
+**📤 Output on stdout**
+
+- The module name, or `file:line` with `--path`
+
+**🚦 Exit codes**
+
+- `1`: The function is not defined in this shell, or it came from a bundle, where there are no module sources to name
+
+**🔗 See also**
+
+- [- `dybatpho::describe` - `dybatpho::function_list](#dybatphodescribe-dybatphofunction_list)
+
+
+---
+
+### `dybatpho::describe`
+
+Print the documentation comment of a function.
+  The library documents itself in `doc/`, which answers the question when you
+  are reading it. At a prompt, mid-script, the question is what a function
+  takes and what it returns, and the answer is in a browser tab. This reads it
+  out of the source the shell actually loaded, so it describes the code that
+  will run, and it is there whether or not `doc/` was ever generated.
+
+
+  The banner rules and any `shellcheck` directive between the comment and the
+  function are dropped, one `#` and the space after it are taken off each
+  line, and the `@description` marker is removed from the prose it introduces.
+  Everything else, `@arg` and `@exitcode` tags included, is printed as the
+  source wrote it.
+
+**🧪 Example**
+
+```bash
+dybatpho::describe cache_run
+dybatpho::describe dybatpho::semver_satisfies
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Function name, with or without the `dybatpho::` prefix |
+
+**📤 Output on stdout**
+
+- A heading naming the function and where it came from, then the comment
+
+**🚦 Exit codes**
+
+- `1`: The function is not defined in this shell, or its source is no longer readable
+
+**🔗 See also**
+
+- [- `dybatpho::provides](#dybatphoprovides)
+
+
+---
+
+### `dybatpho::function_list`
+
+Print the public functions this shell has loaded.
+  Without an argument this is the whole loaded API; with one it is what a
+  single module exports, which is the list to skim when reaching for a module
+  for the first time.
+
+
+  Only `dybatpho::` names are listed. The `__dybatpho_` helpers are internal,
+  and `declare -F` is right there for anyone debugging one.
+
+**🧪 Example**
+
+```bash
+dybatpho::function_list              # everything loaded
+dybatpho::function_list cache        # just that module
+dybatpho::function_list | wc -l
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Optional module name to limit the list to |
+
+**📤 Output on stdout**
+
+- One function name per line, in alphabetical order
+
+**🚦 Exit codes**
+
+- `1`: Stop the script when the named module is not loaded, or when the library came from a bundle, where no function can be attributed to a module
+
+**🔗 See also**
+
+- [- `dybatpho::module_list` - `dybatpho::provides](#dybatphomodule_list-dybatphoprovides)
 

@@ -170,6 +170,18 @@ _deploy prod "${DEPLOY_TOKEN:-}"
 - **FR-016**: The module MUST provide an interactive breakpoint with controls
   for runtime options, variables, arrays, source display, and quitting.
 
+- **FR-016**: The module MUST report which module defines a loaded function, accepting the name with or without the `dybatpho::` prefix, and MUST report `init` for a function the bootstrap defines.
+- **FR-016a**: The lookup MUST use what Bash knows about the running shell rather than the contents of a directory, so the answer describes the code that is actually loaded.
+- **FR-016b**: The lookup MUST switch `extdebug` on only for the one call it needs and MUST restore the option exactly as it found it, because that option also changes how `DEBUG` and `RETURN` traps behave.
+- **FR-016c**: The module MUST also be able to report the file and line a function was defined at, and that line MUST be the line holding the definition.
+- **FR-016d**: A function whose defining file is not a module source MUST NOT be attributed to a module. A bundle holds every module in one file, and naming that file as the module would be a wrong answer rather than a missing one.
+- **FR-017**: The module MUST print the documentation comment of a loaded function, read out of the source the shell loaded, so it is available whether or not the generated documentation was ever produced or shipped.
+- **FR-017a**: Rendering MUST drop the banner rules and any `shellcheck` directive standing between the comment and the definition, MUST remove one comment marker and the space after it from each line, and MUST remove the `@description` marker from the prose it introduces, leaving every other tag as written.
+- **FR-017b**: The output MUST open with a heading naming the function and where it came from, including the module when one can be named.
+- **FR-018**: The module MUST list the public functions the shell has loaded, in order, excluding the internal helpers, and MUST be able to limit that list to one module.
+- **FR-018a**: Listing MUST NOT depend on an external command, since its purpose is to answer when nothing else is at hand.
+- **FR-018b**: Listing for a module MUST stop the script when that module is not loaded, and when no function can be attributed to a module at all, rather than returning an empty list that would read as "this module exports nothing".
+
 ### Key Entities *(include if feature involves data)*
 
 - **Expectation Contract**: The named-variable input contract declared by a reusable shell function.
@@ -200,6 +212,13 @@ _deploy prod "${DEPLOY_TOKEN:-}"
 - **IT-004a**: Verify the command check accepts a command inside its range and rejects one outside it, naming the version it found, with the default and a custom exit code.
 - **IT-004b**: Verify a version that is not full SemVer, and one carrying a distribution's build marker, are judged on the release they are.
 - **IT-004c**: Verify a bare second argument still means an exit code, that a missing command is reported before any version is asked for, and that an unreadable version stops the script.
+- **IT-005a**: Verify the module reporter names the right module for a module function, a core function, one of its own, and a bootstrap function, with and without the name prefix, and fails for a function that is not defined.
+- **IT-005b**: Verify the path reporter names the file and a line that really holds the definition.
+- **IT-005c**: Verify `extdebug` is left off when it was off and on when it was on.
+- **IT-005d**: Verify the describer prints the prose and the tags, strips the comment markers and the `@description` marker, and steps over a `shellcheck` directive standing above the function.
+- **IT-005e**: Verify the function list is in order, excludes the internal helpers, and that limiting it to a module yields only functions that report that module.
+- **IT-005f**: Verify listing an unloaded module stops the script.
+- **IT-005g**: Inside a generated bundle, verify the describer still prints the comment, the path reporter still names the line, the module reporter fails rather than naming the bundle file, and listing a module stops the script with an explanation.
 - **IT-005**: Verify command coalescing, default environment assignment, any/all
   environment checks, assertions, and fixed-delay retry behavior.
 

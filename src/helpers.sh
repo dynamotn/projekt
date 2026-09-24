@@ -13,6 +13,17 @@
 #   - assigning default env values
 #   - retrying flaky commands
 #   - opening an interactive breakpoint
+#   - asking the library about itself
+#
+#   That last one is `dybatpho::provides`, `dybatpho::describe` and
+#   `dybatpho::function_list`. The library documents itself in `doc/`, which
+#   answers the question while you are reading; these answer it from the
+#   running shell, where the question actually comes up. They ask Bash rather
+#   than the filesystem: `declare -F` under `extdebug` reports the file and line
+#   a function was defined at, and the documentation comment is sitting just
+#   above that line in the source that was loaded. They live here, in a core
+#   module, because a helper you have to remember to load is one you will not
+#   reach for at a prompt.
 # @usage
 #   ### When to use this module
 #
@@ -580,4 +591,258 @@ function dybatpho::breakpoint {
       *) continue ;;
     esac
   done # kcov(skip)
+}
+
+#######################################
+# @description Print the file and line a function was defined at.
+#   `declare -F` names the file only while `extdebug` is on, and that option
+#   also changes how `DEBUG` and `RETURN` traps behave, so it is switched on for
+#   the one call and put back exactly as it was found. `shopt -p` reports a
+#   non-zero status when the option is off, which under `errexit` would end the
+#   caller before anything was looked up.
+# @arg $1 string Function name, in full
+# @stdout Two lines: the file, then the line number
+# @exitcode 1 No such function, or Bash could not say where it came from
+#######################################
+function __dybatpho_helpers_locate {
+  local restore
+  restore="$(shopt -p extdebug || true)"
+  shopt -s extdebug
+  local spec
+  spec="$(declare -F "$1" 2> /dev/null || true)"
+  eval "${restore}"
+
+  # `declare -F` answers `name line file`, and the path may hold spaces while
+  # the first two fields cannot.
+  local remainder="${spec#* }"
+  local line="${remainder%% *}"
+  local file="${remainder#* }"
+  [[ -n "${spec}" && -n "${file}" && "${line}" =~ ^[0-9]+$ ]] || return 1
+  # Bash reports the path as it was written when the file was sourced, so a
+  # module loaded as `test/../init.sh` is named that way here. Tidying it up
+  # makes the answer readable and keeps `..` out of a path a caller may print.
+  file="$(dybatpho::path_normalize "${file}" 2> /dev/null || printf '%s' "${file}")"
+  printf '%s\n%s\n' "${file}" "${line}"
+}
+
+#######################################
+# @description Print a function name with the `dybatpho::` prefix it may have
+#   been given without.
+# @arg $1 string Function name, with or without a prefix
+# @stdout The full function name
+#######################################
+function __dybatpho_helpers_qualify {
+  local name="${1-}"
+  if [[ "${name}" == dybatpho::* || "${name}" == __dybatpho_* ]]; then
+    printf '%s\n' "${name}"
+  else
+    printf 'dybatpho::%s\n' "${name}"
+  fi
+}
+
+#######################################
+# @description Print the module a loaded source file belongs to.
+#   A module is recognised by its place rather than its name: a file directly
+#   inside a `src` directory is that module, and the bootstrap is `init`.
+#   Anything else is refused, because a bundle holds every module in one file
+#   and answering with that file's name would attribute every function in the
+#   library to a module called `dybatpho.bundle`.
+# @arg $1 string Path of a file the library was loaded from
+# @stdout The module name
+# @exitcode 1 The file is not a module source
+#######################################
+function __dybatpho_helpers_module_of {
+  local file="$1"
+  local name="${file##*/}"
+  # The bootstrap is recognised by its own name rather than by comparing against
+  # `DYBATPHO_DIR`: that variable is fully resolved while the path Bash reports
+  # is whatever was written at the `source`, and a library reached through a
+  # symlink would never match.
+  if [[ "${name}" == "init.sh" ]]; then
+    printf 'init\n'
+    return 0
+  fi
+  local directory="${file%/*}"
+  [[ "${directory##*/}" == "src" ]] || return 1
+  printf '%s\n' "${name%.sh}"
+}
+
+#######################################
+# @description Print the module that defines a function.
+#   The answer comes from where Bash says the function was defined, so it
+#   describes the code that is actually loaded rather than what a directory
+#   listing suggests. Functions the bootstrap defines report `init`.
+# @example
+#   dybatpho::provides semver_valid            # semver
+#   dybatpho::provides dybatpho::cache_run     # cache
+#   dybatpho::provides --path cache_run        # /path/to/src/cache.sh:245
+#
+# @arg $1 string `--path` to print `file:line` instead of the module name
+# @arg $@ string Function name, with or without the `dybatpho::` prefix
+# @stdout The module name, or `file:line` with `--path`
+# @exitcode 1 The function is not defined in this shell, or it came from a
+#   bundle, where there are no module sources to name
+# @note A bundle holds every module in one file, so only `--path` can answer
+#   there, and it still points at the right line
+# @see
+#   - `dybatpho::describe`
+#   - `dybatpho::function_list`
+#######################################
+function dybatpho::provides {
+  local want_path=false
+  if [[ "${1-}" == "--path" ]]; then
+    want_path=true
+    shift
+  fi
+  local name
+  dybatpho::expect_args name -- "$@"
+  name="$(__dybatpho_helpers_qualify "${name}")"
+
+  local -a location=()
+  mapfile -t location < <(__dybatpho_helpers_locate "${name}")
+  ((${#location[@]} == 2)) || return 1
+
+  if [[ "${want_path}" == true ]]; then
+    printf '%s:%s\n' "${location[0]}" "${location[1]}"
+    return 0
+  fi
+  __dybatpho_helpers_module_of "${location[0]}"
+}
+
+#######################################
+# @description Print the documentation comment of a function.
+#   The library documents itself in `doc/`, which answers the question when you
+#   are reading it. At a prompt, mid-script, the question is what a function
+#   takes and what it returns, and the answer is in a browser tab. This reads it
+#   out of the source the shell actually loaded, so it describes the code that
+#   will run, and it is there whether or not `doc/` was ever generated.
+#
+#   The banner rules and any `shellcheck` directive between the comment and the
+#   function are dropped, one `#` and the space after it are taken off each
+#   line, and the `@description` marker is removed from the prose it introduces.
+#   Everything else, `@arg` and `@exitcode` tags included, is printed as the
+#   source wrote it.
+# @example
+#   dybatpho::describe cache_run
+#   dybatpho::describe dybatpho::semver_satisfies
+#
+# @arg $1 string Function name, with or without the `dybatpho::` prefix
+# @stdout A heading naming the function and where it came from, then the comment
+# @exitcode 1 The function is not defined in this shell, or its source is no
+#   longer readable
+# @see
+#   - `dybatpho::provides`
+#######################################
+function dybatpho::describe {
+  local name
+  dybatpho::expect_args name -- "$@"
+  name="$(__dybatpho_helpers_qualify "${name}")"
+
+  local -a location=()
+  mapfile -t location < <(__dybatpho_helpers_locate "${name}")
+  ((${#location[@]} == 2)) || return 1
+  local file="${location[0]}" line="${location[1]}"
+  dybatpho::is readable "${file}" || return 1
+
+  # Only the part of the file above the definition is needed, and a module can
+  # be long, so reading stops there rather than slurping the whole file.
+  local -a lines=()
+  local text count=0
+  while IFS= read -r text; do
+    ((count < line)) || break
+    lines+=("${text}")
+    count=$((count + 1))
+  done < "${file}"
+
+  # The comment block is the run of comment lines directly above the definition.
+  local -a block=()
+  local index
+  for ((index = line - 2; index >= 0; index--)); do
+    text="${lines[${index}]}"
+    [[ "${text}" == '#'* ]] || break
+    block=("${text}" ${block[@]+"${block[@]}"})
+  done
+
+  local origin
+  if origin="$(__dybatpho_helpers_module_of "${file}")"; then
+    printf '%s  (%s, %s:%s)\n' "${name}" "${origin}" "${file}" "${line}"
+  else
+    printf '%s  (%s:%s)\n' "${name}" "${file}" "${line}"
+  fi
+  ((${#block[@]} > 0)) || return 0
+
+  printf '\n'
+  for text in "${block[@]}"; do
+    # The banner rules carry no text, and a directive addressed to ShellCheck
+    # is not documentation.
+    if [[ "${text}" =~ ^#+$ || "${text}" == '# shellcheck '* ]]; then
+      continue
+    fi
+    # One `#` and the space after it are the comment marker; anything further
+    # in is the shape of the comment and is kept.
+    text="${text#\#}"
+    text="${text# }"
+    text="${text#@description }"
+    printf '%s\n' "${text}"
+  done
+}
+
+#######################################
+# @description Print the public functions this shell has loaded.
+#   Without an argument this is the whole loaded API; with one it is what a
+#   single module exports, which is the list to skim when reaching for a module
+#   for the first time.
+#
+#   Only `dybatpho::` names are listed. The `__dybatpho_` helpers are internal,
+#   and `declare -F` is right there for anyone debugging one.
+# @example
+#   dybatpho::function_list              # everything loaded
+#   dybatpho::function_list cache        # just that module
+#   dybatpho::function_list | wc -l
+#
+# @arg $1 string Optional module name to limit the list to
+# @stdout One function name per line, in alphabetical order
+# @exitcode 1 Stop the script when the named module is not loaded, or when the
+#   library came from a bundle, where no function can be attributed to a module
+# @see
+#   - `dybatpho::module_list`
+#   - `dybatpho::provides`
+#######################################
+function dybatpho::function_list {
+  local module="${1-}"
+  if [[ -n "${module}" && "${module}" != "init" ]]; then
+    dybatpho::module_loaded "${module}" \
+      || dybatpho::die "${FUNCNAME[0]}: Module '${module}' is not loaded"
+  fi
+
+  # `declare -F` prints `declare -f <name>`, already in order, so the list needs
+  # no external command to build -- which is the point of a helper meant to
+  # answer when nothing else is at hand.
+  local -a names=()
+  local candidate
+  while read -r _ _ candidate; do
+    [[ "${candidate}" == dybatpho::* ]] || continue
+    names+=("${candidate}")
+  done < <(declare -F)
+  ((${#names[@]} > 0)) || return 0
+
+  if [[ -z "${module}" ]]; then
+    printf '%s\n' "${names[@]}"
+    return 0
+  fi
+
+  local name owner attributable=false
+  for name in "${names[@]}"; do
+    if owner="$(dybatpho::provides "${name}" 2> /dev/null)"; then
+      attributable=true
+      if [[ "${owner}" == "${module}" ]]; then
+        printf '%s\n' "${name}"
+      fi
+    fi
+  done
+  # An empty list would read as "that module exports nothing", which is not what
+  # happened: a bundle holds every module in one file and none of them can be
+  # told apart.
+  [[ "${attributable}" == true ]] \
+    || dybatpho::die "${FUNCNAME[0]}: No function can be attributed to a module, which is how a bundle looks; ask without a module name"
 }

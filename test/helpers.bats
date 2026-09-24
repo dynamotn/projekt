@@ -663,3 +663,89 @@ EOF
   dybatpho::retry_until 1 0 "false" "always failing" || status=$?
   assert_equal "${status}" "1"
 }
+
+@test "dybatpho::provides names the module a function came from" {
+  assert_equal "$(dybatpho::provides semver_valid)" "semver"
+  # The prefix is what you have already typed when you stop to ask, so it is
+  # accepted either way.
+  assert_equal "$(dybatpho::provides dybatpho::semver_valid)" "semver"
+  assert_equal "$(dybatpho::provides trim)" "string"
+  assert_equal "$(dybatpho::provides provides)" "helpers"
+  # The bootstrap defines functions of its own.
+  assert_equal "$(dybatpho::provides version)" "init"
+  run ! dybatpho::provides no_such_function_at_all
+}
+
+@test "dybatpho::provides --path points at the line that defines the function" {
+  local location file line
+  location="$(dybatpho::provides --path semver_valid)"
+  file="${location%:*}"
+  line="${location##*:}"
+  assert_equal "${file}" "${DYBATPHO_DIR}/src/semver.sh"
+  # The claim is only worth something if the line really holds the definition.
+  assert_equal "$(sed -n "${line}p" "${file}")" "function dybatpho::semver_valid {"
+}
+
+@test "dybatpho::provides leaves extdebug as it found it" {
+  # The lookup needs `extdebug`, which also changes how DEBUG and RETURN traps
+  # behave, so a caller must not be able to tell it was ever on.
+  shopt -u extdebug
+  dybatpho::provides semver_valid > /dev/null
+  run ! shopt -p extdebug
+  shopt -s extdebug
+  dybatpho::provides semver_valid > /dev/null
+  run -0 shopt -p extdebug
+  shopt -u extdebug
+}
+
+@test "dybatpho::describe prints the comment the source carries" {
+  run -0 dybatpho::describe semver_valid
+  assert_line --index 0 --partial "dybatpho::semver_valid  (semver,"
+  assert_output --partial "Return success when the string is a valid semver"
+  assert_output --partial '@arg $1 string Version string to validate'
+  assert_output --partial "@exitcode 0 Valid semver"
+  # The marker introducing the prose is noise once the prose is on screen.
+  refute_output --partial "@description"
+  # The comment markers themselves are not documentation either.
+  refute_line --regexp '^#'
+}
+
+@test "dybatpho::describe steps over a shellcheck directive above the function" {
+  # `dybatpho::trim` carries one between its comment and its definition, and it
+  # is addressed to a linter rather than to a reader.
+  run -0 dybatpho::describe trim
+  refute_output --partial "shellcheck"
+  assert_output --partial "Trim leading and trailing whitespace"
+}
+
+@test "dybatpho::describe refuses a function this shell does not have" {
+  run ! dybatpho::describe no_such_function_at_all
+}
+
+@test "dybatpho::function_list lists the loaded public API in order" {
+  run -0 dybatpho::function_list
+  assert_line "dybatpho::semver_valid"
+  assert_line "dybatpho::trim"
+  # Internals are not the API, and `declare -F` is right there for them.
+  refute_line --regexp '^__dybatpho_'
+  local listed sorted
+  listed="${output}"
+  sorted="$(printf '%s\n' "${listed}" | LC_ALL=C sort)"
+  assert_equal "${listed}" "${sorted}"
+}
+
+@test "dybatpho::function_list limits itself to one module" {
+  run -0 dybatpho::function_list semver
+  assert_line "dybatpho::semver_valid"
+  refute_line "dybatpho::trim"
+  # Everything it listed really does belong to that module.
+  local name
+  while read -r name; do
+    assert_equal "$(dybatpho::provides "${name}")" "semver"
+  done <<< "${output}"
+}
+
+@test "dybatpho::function_list rejects a module that is not loaded" {
+  run --separate-stderr ! dybatpho::function_list not_a_loaded_module
+  assert_stderr --partial "is not loaded"
+}

@@ -119,3 +119,27 @@ bundle() {
   run -0 grep -c '^#!/usr/bin/env bash' "${OUTPUT}"
   assert_output "1"
 }
+
+@test "introspection inside a bundle answers what it can and refuses the rest" {
+  run -0 bundle --modules semver
+
+  # The documentation travels with the code, so this is the part that still
+  # works when there is no `src/` and no `doc/` to read.
+  run -0 use_bundle 'dybatpho::describe semver_valid'
+  assert_output --partial "Return success when the string is a valid semver"
+  assert_output --partial '@arg $1 string Version string to validate'
+
+  # A bundle holds every module in one file, so no function can be attributed
+  # to a module. Naming the bundle file as the module would be a wrong answer
+  # rather than a missing one.
+  run ! use_bundle 'dybatpho::provides semver_valid'
+  assert_output ""
+
+  # The line is still exactly where the function is, inside the bundle.
+  run -0 use_bundle 'dybatpho::provides --path semver_valid'
+  assert_output --partial "${OUTPUT}:"
+
+  # And an empty list would read as "that module exports nothing".
+  run --separate-stderr ! use_bundle 'dybatpho::function_list semver'
+  assert_stderr --partial "which is how a bundle looks"
+}

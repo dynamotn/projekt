@@ -40,4 +40,25 @@ DYBATPHO_RETRY_JITTER=true
 dybatpho::print "same attempt, three draws with jitter on:"
 dybatpho::print "  $(__dybatpho_helpers_backoff 4)s $(__dybatpho_helpers_backoff 4)s $(__dybatpho_helpers_backoff 4)s"
 
+dybatpho::header "ASKING THE LIBRARY ABOUT ITSELF"
+# The question that comes up mid-script is what a function takes, and the
+# answer is otherwise in a browser tab.
+dybatpho::print "retry lives in the $(dybatpho::provides retry) module, at $(dybatpho::provides --path retry)"
+dybatpho::print "the whole loaded API is $(dybatpho::function_list | wc -l) functions across $(dybatpho::module_list loaded | wc -l) modules"
+dybatpho::print "what the string module exports:"
+# The list is collected first rather than piped into `head`: closing the pipe
+# early would send SIGPIPE upstream, and `pipefail` would end the script.
+mapfile -t STRING_FUNCTIONS < <(dybatpho::function_list string)
+for fn in "${STRING_FUNCTIONS[@]:0:5}"; do
+  dybatpho::print "  ${fn}"
+done
+dybatpho::print "  ..."
+dybatpho::print ""
+dybatpho::print "and what one of them does, read out of the source that was loaded:"
+# The prefix is optional, because it is what you have already typed when you
+# stop to ask.
+dybatpho::describe string_pad | while IFS= read -r line; do
+  dybatpho::print "  ${line}"
+done
+
 dybatpho::success "Helper demo complete for ${EXAMPLE_NAME}"
