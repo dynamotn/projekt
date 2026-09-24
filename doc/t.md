@@ -13,6 +13,8 @@ Create a template file from various sources
 ### SEE ALSO
 
 * [t add](t_add.md)	 - Save an existing file or folder as a template
+* [t apply](t_apply.md)	 - Render a template over a project again
+* [t diff](t_diff.md)	 - Show what applying a template would change
 * [t list](t_list.md)	 - List all templates of your template folder
 * [t new](t_new.md)	 - Create files from a template
 * [t path](t_path.md)	 - Print the path of the template folder, or of one template

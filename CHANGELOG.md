@@ -41,6 +41,12 @@
   `stat`, `joinPath`, `toYaml` and `fromYaml`
 - **t**: new variables `.Source`, `.Store`, `.Home`, `.Hostname`, `.OS`,
   `.Arch` and `.Env`
+- **t**: apply a template to a project again with `t apply`, and see what it
+  would do with `t diff` — a unified diff, exiting non-zero when a project has
+  drifted, so CI can gate on it. A project records what it was rendered from in
+  `.projekt/template.yaml`, so the values are replayed without being given
+  again, a file edited by hand is a conflict and kept unless `--force`, and one
+  the template no longer writes is kept unless `--prune`
 - **t**: run commands once the files are there with `after:` in the manifest —
   `go mod tidy`, `git init` — rendered first so a command can be conditional,
   printed before it runs, and skippable with `--no-hooks`. `b` runs a

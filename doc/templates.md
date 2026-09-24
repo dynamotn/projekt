@@ -367,6 +367,74 @@ On top of the [sprig](https://masterminds.github.io/sprig/) set:
 `include` reads relative to the template and refuses to leave it, so a template
 cannot be made to read a file somewhere else on the disk.
 
+## Applying a template again
+
+`t new` writes a project once. A template is not written once: the CI job gets
+a step, the Makefile gets a target, the licence header changes. `t apply`
+writes the project again, which is how that reaches the projects already made
+from it.
+
+```bash
+t diff go-cli                    # what would change, as a unified diff
+t diff go-cli ./myapp            # somewhere other than here
+t apply go-cli                   # do it
+t apply go-cli --set ci=true     # change one answer, replay the rest
+```
+
+### What the project remembers
+
+`t new` leaves a record in the project, at `.projekt/template.yaml`:
+
+```yaml
+version: 1
+renders:
+  - template: go-cli
+    name: myapp
+    renderedAt: 2026-09-24T09:54:52Z
+    values:
+      module: example.com/myapp
+      ci: true
+    files:
+      Makefile: sha256:80d32196…
+      cmd/myapp/main.go: sha256:0d0ccec0…
+```
+
+It lives in the project rather than in your configuration, so cloning the
+project brings it along and a colleague's `t apply` reaches the same answer as
+yours. Commit it.
+
+Two things come out of it. The **values** are replayed, so applying needs no
+flags — `--set` and `--values` change one answer and keep the rest. And the
+**hashes** are what tell an out-of-date file apart from one somebody edited:
+
+| Status | What it means | What `apply` does |
+| --- | --- | --- |
+| `added` | the template writes it, the project has not got it | writes it |
+| `updated` | the template writes it differently, and it is byte for byte what was written last time | writes it |
+| `unchanged` | it is already what the template says | nothing |
+| `conflict` | it differs *and* it was edited since | keeps it, unless `--force` |
+| `removed` | the template no longer writes it | keeps it, unless `--prune` |
+
+Nothing that was edited by hand is touched without `--force`, and nothing is
+deleted without `--prune`. A file left alone stays in the record exactly as it
+was written, so the next apply reaches the same conclusion instead of
+forgetting the file.
+
+A project with no record at all — one created before there was one — is not a
+problem: every file it already has comes out as a `conflict` and is left alone,
+so the first apply only fills in what is missing.
+
+### Gating on it
+
+`t diff` changes nothing and exits non-zero when there is something to do,
+which is what a CI job wants:
+
+```bash
+t diff go-cli || echo "this project has drifted from its template"
+t diff go-cli --name-only          # the paths alone, for a script
+t diff go-cli -U0                  # no context around the changes
+```
+
 ## Writing a template
 
 The quickest start is to import a file or a folder you already have; its
