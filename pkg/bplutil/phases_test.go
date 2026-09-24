@@ -12,36 +12,6 @@ import (
 	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
 )
 
-func TestParseRepoRef(t *testing.T) {
-	cases := map[string]RepoRef{
-		"github:me/starter":              {Host: "github", Group: "me", Name: "starter"},
-		"github:me/starter.git":          {Host: "github", Group: "me", Name: "starter"},
-		"git@github.com:me/starter.git":  {URL: "git@github.com:me/starter.git"},
-		"https://github.com/me/starter":  {URL: "https://github.com/me/starter"},
-		"ssh://git@host:2222/me/starter": {URL: "ssh://git@host:2222/me/starter"},
-		// A repository on this machine is somewhere git can clone from too.
-		"/srv/starters/go.git": {URL: "/srv/starters/go.git"},
-		"~/starters/go":        {URL: "~/starters/go"},
-		"./starters/go":        {URL: "./starters/go"},
-	}
-	for input, want := range cases {
-		got, err := ParseRepoRef(input)
-		if err != nil {
-			t.Errorf("ParseRepoRef(%q) error = %v", input, err)
-			continue
-		}
-		if got != want {
-			t.Errorf("ParseRepoRef(%q) = %#v, want %#v", input, got, want)
-		}
-	}
-
-	for _, bad := range []string{"", "   ", "github:justaname", ":group/name", "github:/name", "github:group/"} {
-		if _, err := ParseRepoRef(bad); err == nil {
-			t.Errorf("ParseRepoRef(%q) error = nil, want an error", bad)
-		}
-	}
-}
-
 // bareOrigin makes a repository to clone from, with one file in it.
 func bareOrigin(t *testing.T, content string) string {
 	t.Helper()

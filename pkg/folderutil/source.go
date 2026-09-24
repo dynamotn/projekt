@@ -41,12 +41,78 @@ func IsGitURL(value string) bool {
 	return at >= 0 && colon > at
 }
 
+// RepoRef is a repository, however it was written: a boilerplate's starting
+// point, or the repository a template store lives in.
+type RepoRef struct {
+	// URL is set when the recipe gave one outright.
+	URL string
+	// Host, Group and Name are set when it gave the shorthand
+	// `server:group/name`, resolved against the configured git servers.
+	Host, Group, Name string
+}
+
+// ParseRepoRef reads a repository however it was written.
+//
+// A URL is taken as it is. Anything else is `server:group/name`, where the
+// server is one of the configured gitServers, so that what names a repository
+// can be shared between people whose remotes differ in scheme or host.
+func ParseRepoRef(repo string) (RepoRef, error) {
+	repo = strings.TrimSpace(repo)
+	if repo == "" {
+		return RepoRef{}, fmt.Errorf("the reference is empty")
+	}
+	if IsGitURL(repo) {
+		return RepoRef{URL: repo}, nil
+	}
+
+	host, rest, ok := strings.Cut(repo, ":")
+	if !ok || strings.TrimSpace(host) == "" {
+		return RepoRef{}, fmt.Errorf("the reference %q is neither a URL nor server:group/name", repo)
+	}
+	group, name, ok := strings.Cut(strings.Trim(rest, "/"), "/")
+	if !ok || strings.TrimSpace(group) == "" || strings.TrimSpace(name) == "" {
+		return RepoRef{}, fmt.Errorf("the reference %q is missing the group or the repository", repo)
+	}
+
+	return RepoRef{Host: host, Group: group, Name: strings.TrimSuffix(name, ".git")}, nil
+}
+
+// String describes the reference, for a listing.
+func (r RepoRef) String() string {
+	if r.URL != "" {
+		return r.URL
+	}
+	return fmt.Sprintf("%s:%s/%s", r.Host, r.Group, r.Name)
+}
+
+// URLs returns the URLs to clone from, the preferred one first.
+func (r RepoRef) URLs() (primary, fallback string, err error) {
+	if r.URL != "" {
+		return r.URL, "", nil
+	}
+	return GitURLs(r.Host, r.Group, r.Name)
+}
+
 // CloneInto clones a repository into a folder, shallowly and at one ref.
 //
 // Shallow because a starting point is wanted for its files, not its history;
 // what happens to the history afterwards is the caller's business.
 func CloneInto(url, ref, target string) error {
-	args := []string{"clone", "--quiet", "--depth", "1"}
+	return clone(url, ref, target, true)
+}
+
+// CloneFull clones a repository with its history, for a folder that is going
+// to be worked in and pushed from rather than copied out of.
+func CloneFull(url, ref, target string) error {
+	return clone(url, ref, target, false)
+}
+
+// clone is the one place git clone is spelled out.
+func clone(url, ref, target string, shallow bool) error {
+	args := []string{"clone", "--quiet"}
+	if shallow {
+		args = append(args, "--depth", "1")
+	}
 	if strings.TrimSpace(ref) != "" {
 		args = append(args, "--branch", ref)
 	}
@@ -109,6 +175,27 @@ func SetRemote(path, name, url string) error {
 	}
 	if err := runGit(path, "remote", "add", name, url); err != nil {
 		return fmt.Errorf("cannot add the remote %s: %w", name, err)
+	}
+	return nil
+}
+
+// RemoteURL returns where a remote of a repository points, or an empty string
+// when it has no such remote.
+func RemoteURL(path, name string) string {
+	remotes, err := gitRemotes(path)
+	if err != nil {
+		return ""
+	}
+	return remotes[name]
+}
+
+// Pull brings a repository up to date, fast-forward only.
+//
+// Only: a repository with local work is something to sort out by hand, and a
+// merge nobody asked for is worse than a message saying so.
+func Pull(path string) error {
+	if err := runGit(path, "pull", "--quiet", "--ff-only"); err != nil {
+		return fmt.Errorf("cannot update %s: %w", path, err)
 	}
 	return nil
 }
