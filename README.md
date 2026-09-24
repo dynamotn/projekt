@@ -5,38 +5,23 @@
 [![Latest release](https://img.shields.io/github/release/dynamotn/projekt.svg)](https://github.com/dynamotn/projekt/releases/latest)
 [![License](https://img.shields.io/github/license/dynamotn/projekt.svg)](LICENSE)
 
-> **projekt** – Stop `cd`-ing around your disk.
-> One short name reaches any project you own — including the ones it clones for
-> you, the ones it scaffolds from your own templates, and the second branch it
-> checks out beside the one you are on.
-
----
-
-## ✨ From this
+> **projekt** – Stop `cd`-ing around your disk. One short name reaches any
+> project you own — including the ones it clones for you, the ones it scaffolds
+> from your templates, and the second branch it checks out beside your work.
 
 ```bash
-cd ~/work/clients/acme/services/backend-api || exit
-cd ../../../../oss/some-library || exit
-git clone git@github.com:myorg/myteam/frontend.git ~/work/myorg/frontend
-mkdir -p ~/work/myorg/new-service && cd "$_" || exit # then copy a Makefile from a
-cp -r ../old-service/{Makefile,.github} .            # sibling and edit every name in it
-git stash && git checkout review/PROJ-123            # just to look at a pull request
+pj backend-api                  # jump, from anywhere, in any shell
+pj oss-some-library             # workspaces get a prefix, so names never collide
+pj -                            # back where you came from, like `cd -`
+projekt folder sync             # clone every repo your config declares
+projekt folder status --dirty   # what did I leave half-done
+b new go-cli new-service        # scaffolded, registered, jumpable
+t new adr doc/adr/0007-db.md    # a file from your own template store
+projekt worktree add backend-api review/PROJ-123 && pj backend-api@PROJ-123
 ```
 
-## To this
-
-```bash
-pj backend-api               # anywhere on your machine, from any shell
-pj oss-some-library          # workspaces get a prefix, so names never collide
-projekt folder sync          # clone every repo your config knows about, you don't
-b new go-cli new-service     # created, filled in, and jumpable straight away
-t new adr doc/adr/0007-db.md # a file from your own template, not a copy
-projekt worktree add backend-api review/PROJ-123
-pj backend-api@PROJ-123 # the pull request, beside your own work
-```
-
-Three binaries. The last two are also `projekt template` and `projekt
-boilerplate`, if you would rather type one name:
+Three static Go binaries, no daemon, no index to rebuild — your config file *is*
+the index. `t` and `b` are also `projekt template` and `projekt boilerplate`.
 
 | | |
 | --- | --- |
@@ -44,90 +29,35 @@ boilerplate`, if you would rather type one name:
 | `t` | render a file, or a whole tree, from your own template store |
 | `b` | create a project from a boilerplate and put it in your config |
 
-A single static Go binary each, no daemon, no index to rebuild — your config file *is* the index.
+*(`projekt` is simply *project* in German; the shell function is `pj`, because
+you'll type it a hundred times a day.)*
 
-## 🚀 Why projekt?
+## ⚡️ Quick start
 
-- **Jump, don't navigate** — `pj <short-name>` resolves a project folder and takes you there. Deep trees stop mattering.
-- **And back again** — `pj -` returns to the project you came from, and toggles, the way `cd -` does.
-- **Or skip the jump** — `folder open backend-api` opens it in your editor from wherever you are.
-- **Workspaces, not just folders** — point at a parent directory once and every child inside it becomes a jumpable project, filtered by your own regex.
-- **Git-aware** — declare your Git servers and repositories in config; `folder check` tells you what's missing or drifted, `folder sync` clones it — several repos at a time. Already have them cloned? `--discover` writes that config for you.
-- **Predictable names** — prefixes keep names unique across workspaces, and `priority` decides the winner when two folders still collide.
-- **A jump list that stays short** — `folder archive` moves a finished project out of the way, and refuses while anything in it is uncommitted or unpushed.
-- **Tagged, not just named** — label folders `work`, `oss`, `go`, then point any command at a subset with `--tags`.
-- **What did I leave half-done** — `folder status --dirty` lists every project with changes, unpushed commits or a forgotten stash, in one table.
-- **One command, every project** — `folder exec -- git status --short` answers the question jumping cannot: which of them did I leave in a mess.
-- **New projects that are already on the map** — `b new` renders a boilerplate into the right workspace and registers it, so the next thing you type is `pj`.
-- **Templates that name their own files** — `t new` renders a Go template, or a whole folder of them, from a store you own; the path segments are templates too, and `-i` asks you for the rest.
-- **Two branches at once** — `worktree add` checks out a branch beside your work and gives it a name, so `pj myapp@PROJ-123` is the whole context switch.
-- **Your config is safe** — an unreadable or malformed config file is never silently overwritten, and `config check` tells you what is wrong with it.
-- **One config, two machines** — `include` composes it from shared files, and `config.<hostname>.yaml` holds what only this machine has. Writes only ever touch your own file.
-- **Shell-native** — a one-line `eval` for bash, zsh or fish, with completion. No plugin manager required.
-- **Boring to install** — `make all`, or grab a release binary. Linux and macOS, amd64 and arm64.
-
-## 📖 What does the name mean?
-
-`projekt` is simply *project* in German — everything here is about one, from
-starting it to reaching it, and the name says so.
-The shell function it installs is `pj`, because you'll type it a hundred times a day.
-
-## ⚡️ Quick Start
-
-**1. Install it**
-
-From source — you need a working Go ≥ 1.24 environment:
+**1. Install** — from source, with Go ≥ 1.24. Binaries land in
+`$HOME/.local/bin`; override with `INSTALL_PATH`. Release binaries exist for
+Linux and macOS, amd64 and arm64.
 
 ```bash
 make all
 ```
 
-Binaries land in `$HOME/.local/bin`. Override with `INSTALL_PATH` for a system-wide install:
+**2. Wire up your shell** — `pj` is a shell function, since a binary cannot
+change its parent's directory:
 
 ```bash
-sudo make all INSTALL_PATH=/usr/local/bin
+eval "$(projekt init bash)"   # ~/.bashrc
+eval "$(projekt init zsh)"    # ~/.zshrc — anywhere, before or after compinit
+projekt init fish | source    # ~/.config/fish/config.fish
 ```
 
-**2. Wire up your shell**
+Completion reads your projects at tab time, so something you just created with
+`b new` or `worktree add` is offered without reloading anything.
 
-`pj` is a shell function, so it has to be sourced — a binary cannot change its parent's directory:
-
-```bash
-# ~/.bashrc
-eval "$(projekt init bash)"
-```
-
-```zsh
-# ~/.zshrc
-eval "$(projekt init zsh)"
-```
-
-```fish
-# ~/.config/fish/config.fish
-projekt init fish | source
-```
-
-The zsh line can go anywhere in your `.zshrc`: when it runs before `compinit`,
-the completion registers itself at the first prompt instead of being lost.
-
-Completion reads your projects when you press tab, in all three shells, so a
-project you have just created with `b new` or `worktree add` is offered without
-reloading anything.
-
-**3. Check it took**
-
-```console
-$ projekt doctor
-[ok] git: git version 2.55.0
-[ok] binaries: projekt, t and b are on PATH
-[ok] shell integration: sourced for fish
-[warn] configuration: ~/.config/projekt/config.yaml: 0 folder(s), 0 worktree(s), 0 git server(s); nothing to jump to yet, start with `projekt folder add`
-```
-
-It checks git, the binaries, whether the integration is really sourced, the
-configuration and its diagnostics, whether the configured folders are still on
-disk, and the template and boilerplate stores. It changes nothing, and exits
-non-zero when something will not work, so a setup script can gate on it.
+**3. Check it took** — `projekt doctor` verifies git, the binaries, the shell
+integration, the config and its folders, and the template and boilerplate
+stores. It changes nothing and exits non-zero when something won't work, so a
+setup script can gate on it.
 
 **4. Register your first folder**
 
@@ -142,26 +72,17 @@ That's it. Everything below is optional.
 
 ## ⚙️ Configuration
 
-The config file lives at `$XDG_CONFIG_HOME/projekt/config.yaml`
-(`~/.config/projekt/config.yaml` by default) and can be overridden with `--config`.
-It is created empty on the first run.
+`$XDG_CONFIG_HOME/projekt/config.yaml` (`~/.config/projekt/config.yaml`),
+overridable with `--config`, created empty on first run.
 
 ```yaml
 folders:
-  # A single project folder, reachable as `pj projekt`
-  - path: /home/me/work/projekt
-    prefix: ""
-    is_workspace: false
-    priority: 0
+  - path: /home/me/work/projekt   # reachable as `pj projekt`
 
-  # A folder with an explicit short name, reachable as `pj dot`
-  - path: /home/me/Dotfiles
+  - path: /home/me/Dotfiles       # reachable as `pj dot`
     name: dot
-    is_workspace: false
 
-  # A workspace: every matching child folder becomes a project,
-  # reachable as `pj oss-<child>`
-  - path: /home/me/oss
+  - path: /home/me/oss            # every child is a project: `pj oss-<child>`
     prefix: oss
     is_workspace: true
     regex: '^[^.].+'
@@ -169,92 +90,70 @@ folders:
     tags: [oss, go]
 ```
 
-| Key            | What it does                                                                        |
-| -------------- | ----------------------------------------------------------------------------------- |
-| `path`         | The folder itself, or the parent folder when `is_workspace` is set                    |
-| `name`         | Short name for the folder itself. Defaults to the last element of `path`; ignored for a workspace, whose children are named after their own directory |
-| `prefix`       | Prepended to the short name, separated by a `-`                                       |
-| `is_workspace` | Treat every child folder as its own project                                           |
-| `regex`        | Workspace only — which children count. Defaults to `^[^.].+`, so dotfiles are skipped |
-| `priority`     | Tie-breaker: when two folders resolve to the same short name, the higher one wins     |
-| `tags`         | Labels to filter on later. A workspace passes its tags to every folder inside it      |
+| Key | What it does |
+| --- | --- |
+| `path` | The folder itself, or the parent folder when `is_workspace` is set |
+| `name` | Short name. Defaults to the last element of `path`; ignored for a workspace, whose children are named after their own directory |
+| `prefix` | Prepended to the short name, separated by a `-` |
+| `is_workspace` | Treat every child folder as its own project |
+| `regex` | Workspace only — which children count. Defaults to `^[^.].+` |
+| `priority` | Tie-breaker when two folders resolve to the same short name |
+| `tags` | Labels to filter on. A workspace passes its tags to its children |
 
-| Top-level key | What it does |
-| ------------- | ------------ |
-| `include`     | Other configuration files to merge after this one, read only |
+Top-level `include:` merges other config files (read only), and a
+`worktrees:` section holds what `projekt worktree` creates
+([doc/worktrees.md](doc/worktrees.md)).
 
-A `worktrees:` section holds the working trees `projekt worktree` creates; see
-[doc/worktrees.md](doc/worktrees.md).
-
-## 🏷 Tags
-
-`prefix` decides what a folder is *called*; `tags` decide which folders a command
-*acts on*. Every command that selects folders takes the same `--tags`/`-t` flag:
+**Tags** decide which folders a command *acts on*, where `prefix` decides what
+they're *called*. Every selecting command takes `--tags`/`-t`, and asking for
+several narrows — `-t go,work` keeps the folders carrying **both**:
 
 ```bash
-projekt folder add ~/oss -W -p oss -t oss,go # tag on the way in
-projekt folder list -t work                  # only work folders
-projekt folder sync -t work                  # only clone work repos
-projekt folder check -t work
+projekt folder add ~/oss -W -p oss -t oss,go
+projekt folder list -t work
+projekt folder sync -t work
 ```
 
-Asking for several tags narrows the selection — `-t go,work` keeps the folders
-carrying **both**, not either. Tags are matched exactly and are case sensitive;
-surrounding whitespace is forgiven, and blank tags are ignored rather than
-treated as a filter that matches nothing. `--tags` completes from the tags
-already in your config, so a typo shows up as a missing suggestion.
-
-## 🩺 Checking and editing the config
-
-The config file is hand-written often enough to be worth checking on purpose,
-rather than finding out from the next command that behaves oddly:
+**Checking and pruning.** `config check` reports every problem rather than
+stopping at the first, separating **errors** (an invalid regex, two repos
+checking out to the same path) from **warnings** (a folder that doesn't exist
+yet). Only errors fail the command, which makes it a CI gate; `--strict`
+tightens that. It is also the one command that still runs when the file cannot
+be parsed at all. `config edit` re-reads the file when the editor exits.
 
 ```bash
-projekt config check          # every problem, exits non-zero on an error
-projekt config check --strict # warnings count as errors too
-projekt config edit           # open it in $VISUAL / $EDITOR / vi
+projekt config check --strict
+projekt config edit
+projekt folder prune --dry-run  # drop entries whose folder is gone
 ```
 
-`config check` reports the whole list rather than stopping at the first
-problem, and separates the two kinds: an **error** makes an entry unusable (an
-invalid regex, two repos checking out to the same path, a worktree with no
-branch), a **warning** is worth knowing but harmless (a folder that does not
-exist yet, an unknown git server). Only errors fail the command, which makes it
-a usable CI gate; `--strict` tightens that.
+Prune only drops a path that is definitely absent — a folder on an unmounted
+drive reads as an error and is left alone.
 
-It is also the one command that still runs when the file cannot be parsed at
-all — every other command refuses, and this one tells you why:
+> `config check` validates the configuration; `folder check` inspects the Git
+> repositories on disk. Different jobs, similar names.
 
-```
-$ projekt config check
-Checking /home/me/.config/projekt/config.yaml
-[ERROR] failed to read config file ...: yaml: line 1: did not find expected ',' or ']'
-```
+**One config, two machines.** `include` composes configuration instead of
+forking it, and a `config.<hostname>.yaml` beside the main file is merged
+without being listed. Includes are **read only** — everything that writes
+writes the main file and nothing else.
 
-`config edit` re-reads the file once the editor exits, so a mistake is reported
-straight away instead of on your next `pj`.
-
-A configuration also grows stale on its own — a project archived, a clone
-deleted, a machine reinstalled — and each leftover costs a wrong suggestion in
-completion and a jump that lands nowhere:
-
-```bash
-projekt folder prune --dry-run # what would go
-projekt folder prune           # and go it does
+```yaml
+include:
+  - ~/dotfiles/projekt/shared.yaml
+  - team.yaml # relative to the file that names it
 ```
 
-Only a path that is definitely not there is dropped. A folder on a drive that
-is not mounted right now reads as an error rather than as absent, and is left
-alone: not here and not there are different things. Working trees are pruned
-too, since one removed with plain git leaves the same kind of leftover.
-
-> Note: `projekt config check` validates the configuration. `projekt folder
-> check` inspects the Git repositories on disk. Different jobs, similar names.
+The file you're looking at comes first, then its includes in order — the order
+`priority` already resolves collisions in. A file is read once even when two
+others include it, a cycle is harmless, and a missing include is a warning.
 
 ## 🔗 Git integration
 
-Declare your Git servers once, list the repositories a workspace should contain, and
-let projekt reconcile the difference:
+Declare your servers once, list what a workspace should contain, and let
+projekt reconcile the difference. Extra `remotes` and per-repo `worktrees` are
+declared the same way and reconciled on **every** sync, existing clones
+included.
 
 ```yaml
 gitServers:
@@ -274,164 +173,89 @@ folders:
       repos:
         - name: backend
           path: api # local folder name, defaults to the repository name
+          remotes:
+            upstream: git@github.com:upstream/backend.git
+          worktrees:
+            - path: api-next
+              branch: next
         - name: frontend
 ```
 
 ```bash
-projekt folder check          # [OK] / [MISSING] / [NOT GIT] / [WARNING] per repo
-projekt folder sync --dry-run # what would be cloned
-projekt folder sync           # clone the missing ones, 4 at a time
-projekt folder sync --forks 1 # one after another instead
+projekt folder check          # [OK] / [MISSING] / [NOT GIT] / [REMOTE MISMATCH] / …
+projekt folder sync --dry-run # what would be cloned and set up
+projekt folder sync           # clone the missing ones, 4 at a time (--forks)
 ```
 
-SSH and HTTPS are both supported, including `ssh://host:port` URLs, and
-`preferGitSSH` decides which one is tried first — the other stays as a fallback.
-Full details in [doc/git-integration.md](doc/git-integration.md).
+An existing worktree is left alone — it may have work in progress — and an
+existing branch is checked out rather than recreated.
 
-### 🔍 Don't type that list — discover it
-
-If the repositories are already on disk, `--discover` writes the `git` section
-for you instead of making you transcribe it:
+**Don't type that list.** If the repos are already on disk, `--discover` writes
+the `git` section for you: each child holding a `.git` is read, its `origin`
+matched against your configured servers, and the group, name and any differing
+`path` recorded. A folder names one host and one group, so when a workspace
+mixes several, the majority wins and the rest are reported and skipped.
 
 ```bash
 projekt folder add ~/work/myorg -W -p myorg --discover
 ```
 
-Every child folder holding a `.git` is read, its `origin` remote decides which
-configured server it belongs to, and the group and repository name are peeled
-off the URL. A checkout whose directory name differs from the repository gets
-its `path` recorded. A folder names one host and one group, so when the
-workspace mixes several, the one most repositories share wins and the rest are
-reported and skipped rather than quietly misfiled.
-
-Configure your `gitServers` first — that is what a remote URL is matched
-against. `--discover` needs `--as-workspace`, since it scans a workspace's
-children.
-### 🔀 Extra remotes and worktrees
-
-A clone gives you `origin`. A fork-based workflow needs more than that, and a
-long-running branch is easier to keep in its own working tree than to stash
-around. Both are declared per repository and reconciled on every sync:
-
-```yaml
-      repos:
-        - name: backend
-          path: api
-          remotes:
-            upstream: git@github.com:upstream/backend.git
-          worktrees:
-            - path: api-next # beside the repos, like `path` above
-              branch: next
-```
-
-| Key         | What it does                                                            |
-| ----------- | ------------------------------------------------------------------------ |
-| `remotes`   | Extra remotes by name. Added when missing, repointed when the URL changed |
-| `worktrees` | Extra working trees. `path` is relative to the folder, `branch` required  |
-
-```bash
-projekt folder sync --dry-run # also reports the remotes and worktrees it would set up
-projekt folder sync           # add them, on existing clones too
-projekt folder check          # [REMOTE MISSING] / [REMOTE MISMATCH] / [WORKTREE MISSING]
-```
-
-Adding a remote to a repository you cloned last year is the ordinary case, so
-sync reconciles every repository it knows about, not only the ones it just
-cloned. An existing worktree is left alone — it may well have work in progress
-in it — and a branch that already exists is checked out rather than recreated.
-Listing `origin` under `remotes` overrides what the clone set up.
+Full details in [doc/git-integration.md](doc/git-integration.md).
 
 ## 🌳 Working trees
 
 Reviewing a pull request while your own branch is half-finished is the moment
-`git stash` was invented for, and the moment it is worst at. A working tree is
-another checkout of the same repository, on another branch — nothing to stash,
-nothing to rebuild:
+`git stash` was invented for, and the moment it is worst at:
 
 ```bash
 projekt worktree add myapp feature/PROJ-123
 pj myapp@PROJ-123
-```
-
-The name after the `@` comes from the last element of the branch, because that
-is the part that tells two branches apart. They live in
-`<project>/.worktrees/` unless `--path` says otherwise, and the branch is
-created from HEAD when it does not exist yet.
-
-```bash
-projekt worktree list # with what git makes of each one
+projekt worktree list
 projekt worktree remove myapp@PROJ-123
 ```
 
-Nothing in the shell integration knows about them: a working tree resolves
-through the same short names as everything else, so `pj`, its completion and
-`--tags` pick it up on their own. See
-[doc/worktrees.md](doc/worktrees.md).
+The name after the `@` is the last element of the branch. Trees live in
+`<project>/.worktrees/` unless `--path` says otherwise, and the branch is
+created from HEAD when it doesn't exist. Nothing in the shell integration knows
+about them — they resolve through the same short names as everything else, so
+`pj`, completion and `--tags` pick them up ([doc/worktrees.md](doc/worktrees.md)).
 
-## 🧩 Templates
+## 🧩 Templates and 🧱 boilerplates
 
-`t` (also `projekt template`) renders [Go templates](https://pkg.go.dev/text/template),
-with the [sprig](https://masterminds.github.io/sprig/) functions on top, from a
-folder of templates you own — `$XDG_DATA_HOME/projekt/templates` by default,
-or wherever `--template-dir` / `PROJEKT_TEMPLATE_DIR` points.
+`t` writes files into a project; `b` creates the project.
 
-```bash
-t add ./LICENSE # turn a file you already have into a template
-t list          # what the store holds
-t new license LICENSE --set author='Jane Doe'
-t new go-cli ./myapp --name myapp --set module=example.com/myapp
-t new invoice ./INV-001.md -i # or let it ask you
-t new dockerfile --dry-run    # render to stdout, write nothing
-```
-
-A template is either one file or a whole folder. In a folder template the
-**path segments are rendered too**, so the template names the files it creates:
+`t` renders [Go templates](https://pkg.go.dev/text/template) with
+[sprig](https://masterminds.github.io/sprig/) from a store you own
+(`$XDG_DATA_HOME/projekt/templates`, or `--template-dir` /
+`PROJEKT_TEMPLATE_DIR`). A template is one file or a whole folder — and in a
+folder template the **path segments are rendered too**, so the template names
+the files it creates:
 
 ```
-~/.local/share/projekt/templates
-├── license.tmpl                 # t new license
-└── go-cli                       # t new go-cli ./myapp --name myapp
+templates/
+├── license.tmpl          # t new license LICENSE --set author='Jane Doe'
+└── go-cli                # t new go-cli ./myapp --name myapp
     ├── go.mod.tmpl
-    └── cmd
-        └── {{ .Name }}          # becomes cmd/myapp/
-            └── main.go.tmpl     # becomes main.go
+    └── cmd/{{ .Name }}/main.go.tmpl  # becomes cmd/myapp/main.go
 ```
 
-Values come from repeatable `--set key=value` (dots nest, and the value keeps
-its YAML type, so `port=8080` is a number), `--values file.yaml`, merged deeply
-with `--set` winning, or `--interactive`, which asks for whatever is still
-missing — from the template's `.vars.yaml` when it has one, and otherwise from
-the `.Values` keys read out of the template itself. A template reaches them through `.Values`, and is
-handed `.Name`, `.Project`, `.Dir`, `.Path`, `.Template`, `.User`, `.Now`,
-`.Date` and `.Year` besides. A value nobody set renders empty rather than
-failing, so `{{ .Values.license | default "MIT" }}` makes one optional.
+Values come from repeatable `--set key=value` (dots nest, values keep their
+YAML type), `--values file.yaml` (deep-merged, `--set` wins), or
+`--interactive`, which asks for what's missing — from the template's
+`.vars.yaml`, or else from the `.Values` keys in the template itself. Templates
+also get `.Name`, `.Project`, `.Dir`, `.Path`, `.Template`, `.User`, `.Now`,
+`.Date` and `.Year`. An unset value renders empty rather than failing, so
+`{{ .Values.license | default "MIT" }}` makes one optional. Nothing is
+overwritten without `--force`, and a path segment rendering to `..` or
+containing a separator is refused.
 
-Nothing is overwritten without `--force`, and a path segment that renders to a
-`..` or to anything containing a separator is refused — a value can never write
-outside the destination.
-
-A starter set ships with the repository — Go CLI, ADR, pre-commit, GitHub
-Actions, Compose, Terraform module, SECURITY.md, security pipeline, threat
-model, incident report, daily note, zettel, budget, invoice:
+`b` renders a template, works out where the project belongs and registers it,
+so starting something new ends with `pj`, not another `cd`:
 
 ```bash
-t --template-dir examples/templates list
-```
-
-See [examples/README.md](examples/README.md) for what each one does, and
-[doc/templates.md](doc/templates.md) for the rest.
-
-## 🧱 Boilerplates
-
-`t` writes files into a project; `b` (also `projekt boilerplate`) creates the
-project. It renders a template, works out where the project belongs, and
-registers it — so starting something new ends with `pj`, not another `cd`.
-
-```bash
-b list                       # the recipes you have
 b new go-cli myapp           # ~/work/myapp, registered, then pj work-myapp
-b new go-cli myapp -i        # ask for what the recipe needs
 b new go-cli ./scratch/myapp # a path is created exactly there
+b new go-cli myapp -i        # ask for what the recipe needs
 b new go-cli myapp --dry-run # the whole plan, nothing written
 ```
 
@@ -440,265 +264,148 @@ A recipe is one YAML file in `$XDG_DATA_HOME/projekt/boilerplates`:
 ```yaml
 description: Go CLI with a Makefile, a README and CI-ready layout
 source:
-  template: go-cli # a folder template of the `t` store
+  template: go-cli
 vars: # the same shape as a template's .vars.yaml
   - name: module
     default: "example.com/{{ .Name }}"
     required: true
 register:
   workspace: ~/work # a plain name is created in here
-  prefix: work # so it answers to `pj work-myapp`
+  prefix: work      # so it answers to `pj work-myapp`
   tags: [go, work]
 ```
 
-The project is added to your config once the files are there — unless it lands
-inside a workspace that already reaches it, in which case there is nothing to
-add and `b` tells you the name it already answers to. A starter set of recipes
-ships in [examples/boilerplates](examples/boilerplates); see
-[doc/boilerplates.md](doc/boilerplates.md) for the rest.
+If the project lands inside a workspace that already reaches it, there is
+nothing to add and `b` tells you the name it already answers to.
 
-## 🧷 One config, two machines
+A starter set of both ships with the repository — Go CLI, ADR, pre-commit,
+GitHub Actions, Compose, Terraform module, SECURITY.md, security pipeline,
+threat model, incident report, daily note, zettel, budget, invoice
+([examples/README.md](examples/README.md)). See [doc/templates.md](doc/templates.md)
+and [doc/boilerplates.md](doc/boilerplates.md).
 
-A work laptop and a personal one share a dotfiles repository and disagree about
-half their folders. `include` composes the configuration instead of forking it:
+## 🩹 Across every project
 
-```yaml
-# ~/.config/projekt/config.yaml
-include:
-  - ~/dotfiles/projekt/shared.yaml # the folders both machines have
-  - team.yaml # relative to the file that names it
-folders:
-  - path: /home/me/scratch # and this machine's own
-```
-
-A file named `config.<hostname>.yaml` beside the main one is merged too,
-without being listed — that is the machine-specific half, and it needs no
-condition:
-
-```
-~/.config/projekt/config.yaml            # everywhere
-~/.config/projekt/config.work-laptop.yaml # only here
-```
-
-**Includes are read only.** `folder add`, `worktree add` and everything else
-that writes writes the main file and nothing else, so an included folder is
-never copied into your local configuration and a shared file is never edited
-behind your back. `projekt config check` prints what it is reading:
-
-```console
-$ projekt config check
-Checking /home/me/.config/projekt/config.yaml
-Including /home/me/dotfiles/projekt/shared.yaml
-Including /home/me/.config/projekt/config.work-laptop.yaml
-7 folder(s), 1 worktree(s), 2 git server(s): 0 error(s), 0 warning(s)
-```
-
-The file you are looking at comes first, then its includes in order, which is
-the order `priority` already resolves collisions in. A file is read once even
-when two others include it, a cycle is harmless, and an include that is missing
-or malformed is a warning rather than the end of the configuration.
-## ↩️ Back where you were
+`folder status` looks at every folder it can reach — workspace children and
+working trees included, which have no config entry of their own:
 
 ```bash
-pj backend-api
-pj oss-some-library
-pj - # back to backend-api
-pj - # and back again, the way `cd -` does
-```
-
-Every jump is remembered, one entry per project, so `pj -` toggles between the
-two you are actually working on rather than walking back through the same one
-twice.
-
-```bash
-projekt folder recent # what you have been working on, most recent first
-projekt folder recent --limit 5
-projekt folder recent --clear # forget all of it
-```
-
-The history lives in `$XDG_STATE_HOME/projekt/history.tsv` — state, not
-configuration: losing it costs you the order of a listing and nothing else. It
-is capped at 200 projects. `projekt folder get --no-record` looks a project up
-without counting it as a jump, for a script that is not going there.
-## 🩹 What did I leave half-done
-
-`folder check` verifies the repositories your config declares. `folder status`
-looks at every folder it can reach — including the children of a workspace,
-which have no config entry of their own, and your working trees:
-
-```bash
-projekt folder status         # one row per project
-projekt folder status --dirty # only what wants attention
-projekt folder status -t work
+projekt folder status --dirty
 projekt folder status -o json | jq -r '.[] | select(.behind > 0) | .name'
 ```
 
-| | |
-| --- | --- |
-| `BRANCH` | what is checked out, or `detached` |
-| `CHANGED` | how many files git would mention, untracked ones included |
-| `AHEAD` / `BEHIND` | how far the branch is from its upstream |
-| `STASH` | how many entries are waiting, which is the easiest thing to forget |
-| `LAST COMMIT` | how long ago, in git's own words |
+Columns: `BRANCH` (or `detached`), `CHANGED` (untracked included), `AHEAD` /
+`BEHIND` of upstream, `STASH`, `LAST COMMIT`. A missing folder says `missing`,
+a non-repository says `not a repo`, and `--dirty` keeps both.
 
-A folder that is not there says `missing`, one that is not a repository says
-`not a repo`, and `--dirty` keeps both — they want attention as much as an
-unpushed commit does.
-## 📦 When a project is done
-
-A finished project still costs a name in completion, a row in every listing and
-a wrong guess when you meant the other one. Deleting it is a bigger decision
-than you want to make on a Friday:
-
-```bash
-projekt folder archive old-service --dry-run
-projekt folder archive old-service
-projekt folder archive old-service --to ~/archive/2026
-```
-
-The folder is **moved, not deleted**, and the entry is dropped afterwards, so a
-move that fails leaves the project where it was. Bringing one back is `mv` and
-`projekt folder add`.
-
-Archiving is refused while the repository has changes that are not committed,
-commits that are not pushed, no upstream at all, or something on the stash —
-that is the one mistake here that moving the folder back does not undo.
-`--force` says you mean it. A folder that is not a repository is archived
-without an opinion, since there is no way to tell what finished means for it.
-
-The archive folder is `$XDG_DATA_HOME/projekt/archive`, or `--archive-dir`,
-`$PROJEKT_ARCHIVE_DIR` or `--to`.
-## 🔁 One command, every project
-
-Jumping answers "where is it". `folder exec` answers the question you cannot
-jump to: *which of them*.
-
-```bash
-projekt folder exec -- git status --short       # what did I leave dirty
-projekt folder exec -t work -- git fetch -q     # only the work ones
-projekt folder exec --quiet -- git diff --quiet # just the names of the dirty ones
-projekt folder exec -- rg -l "old-api"          # who still uses it
-```
-
-Everything after `--` is the command. Folders are worked on several at a time
+`folder exec` answers the question you cannot jump to: *which of them*.
+Everything after `--` is the command. Folders are worked several at a time
 (`--forks`, 4 by default) but **reported in configuration order**, so two runs
-can be compared instead of arriving shuffled. A folder that is not on disk is
-reported as missing rather than as a failure of the command, and the exit code
-is non-zero when the command failed anywhere — which makes it a usable check:
+can be compared. A folder that isn't on disk is reported as missing rather than
+as a failure, and the exit code is non-zero when the command failed anywhere:
 
 ```bash
+projekt folder exec -- git status --short
 projekt folder exec -t work --quiet -- git diff --quiet || echo "something is dirty"
 ```
 
-Working trees are projects too, so they are included.
+**When a project is done**, `folder archive` **moves** it (never deletes) and
+drops the entry afterwards, so a failed move leaves the project where it was.
+It refuses while the repo has uncommitted changes, unpushed commits, no
+upstream or a stash — the one mistake here that moving the folder back doesn't
+undo; `--force` says you mean it. Destination: `$XDG_DATA_HOME/projekt/archive`,
+or `--archive-dir` / `$PROJEKT_ARCHIVE_DIR` / `--to`.
+
+**Where you've been**: every jump is remembered, one entry per project, so
+`pj -` toggles between the two you're actually working on. `projekt folder
+recent [--limit N|--clear]` lists them. The history lives in
+`$XDG_STATE_HOME/projekt/history.tsv` — state, not configuration — capped at
+200 projects. `folder get --no-record` looks a project up without counting it.
 
 ## 📚 Commands
 
 ### 📁 `projekt` — project folders
 
-| Command                                              | What it does                                              |
-| ---------------------------------------------------- | --------------------------------------------------------- |
-| [`folder add`](doc/projekt_folder_add.md)            | Register a folder or workspace; `--discover` reads its repos off disk |
-| [`folder list`](doc/projekt_folder_list.md)          | List every project folder, as a table, JSON or TSV         |
-| [`folder get`](doc/projekt_folder_get.md)            | Resolve a short name to a path — what `pj` calls           |
-| [`folder recent`](doc/projekt_folder_recent.md)      | The projects you jumped to, most recent first               |
-| [`folder open`](doc/projekt_folder_open.md)          | Open a project in `$VISUAL`, `$EDITOR` or vi                |
-| [`folder remove`](doc/projekt_folder_remove.md)      | Drop a folder from the config                              |
-| [`folder prune`](doc/projekt_folder_prune.md)        | Drop every entry whose folder is gone, with `--dry-run`     |
-| [`folder archive`](doc/projekt_folder_archive.md)    | Move a finished project away and drop it from the config    |
-| [`folder check`](doc/projekt_folder_check.md)        | Verify configured Git repos, remotes and worktrees on disk |
-| [`folder status`](doc/projekt_folder_status.md)      | Branch, changes, ahead/behind, stashes, across every folder  |
-| [`folder sync`](doc/projekt_folder_sync.md)          | Clone missing repositories in parallel, with `--dry-run`   |
-| [`folder exec`](doc/projekt_folder_exec.md)          | Run one command in every project folder, several at a time  |
-| [`worktree add`](doc/projekt_worktree_add.md)        | Check out a branch beside your work, reachable as `pj p@name` |
-| [`worktree list`](doc/projekt_worktree_list.md)      | List the working trees, and what git makes of them          |
-| [`worktree remove`](doc/projekt_worktree_remove.md)  | Put one away; the branch is left alone                      |
-| [`config check`](doc/projekt_config_check.md)        | Validate the config file; exits non-zero, for CI           |
-| [`config edit`](doc/projekt_config_edit.md)          | Open the config in `$EDITOR`, re-validate on exit          |
-| [`init`](doc/projekt_init.md)                        | Emit the shell integration for bash, zsh or fish      |
-| [`doctor`](doc/projekt_doctor.md)                    | Check this machine is set up; exits non-zero, for a script |
-| [`version`](doc/projekt_version.md)                  | Version, commit, tree state and build time                 |
+| Command | What it does |
+| --- | --- |
+| [`folder add`](doc/projekt_folder_add.md) | Register a folder or workspace; `--discover` reads its repos off disk |
+| [`folder list`](doc/projekt_folder_list.md) | List every project folder, as a table, JSON or TSV |
+| [`folder get`](doc/projekt_folder_get.md) | Resolve a short name to a path — what `pj` calls |
+| [`folder recent`](doc/projekt_folder_recent.md) | The projects you jumped to, most recent first |
+| [`folder open`](doc/projekt_folder_open.md) | Open a project in `$VISUAL`, `$EDITOR` or vi |
+| [`folder remove`](doc/projekt_folder_remove.md) | Drop a folder from the config |
+| [`folder prune`](doc/projekt_folder_prune.md) | Drop every entry whose folder is gone, with `--dry-run` |
+| [`folder archive`](doc/projekt_folder_archive.md) | Move a finished project away and drop it from the config |
+| [`folder check`](doc/projekt_folder_check.md) | Verify configured Git repos, remotes and worktrees on disk |
+| [`folder status`](doc/projekt_folder_status.md) | Branch, changes, ahead/behind, stashes, across every folder |
+| [`folder sync`](doc/projekt_folder_sync.md) | Clone missing repositories in parallel, with `--dry-run` |
+| [`folder exec`](doc/projekt_folder_exec.md) | Run one command in every project folder, several at a time |
+| [`worktree add`](doc/projekt_worktree_add.md) | Check out a branch beside your work, reachable as `pj p@name` |
+| [`worktree list`](doc/projekt_worktree_list.md) | List the working trees, and what git makes of them |
+| [`worktree remove`](doc/projekt_worktree_remove.md) | Put one away; the branch is left alone |
+| [`config check`](doc/projekt_config_check.md) | Validate the config file; exits non-zero, for CI |
+| [`config edit`](doc/projekt_config_edit.md) | Open the config in `$EDITOR`, re-validate on exit |
+| [`init`](doc/projekt_init.md) | Emit the shell integration for bash, zsh or fish |
+| [`doctor`](doc/projekt_doctor.md) | Check this machine is set up; exits non-zero, for a script |
+| [`version`](doc/projekt_version.md) | Version, commit, tree state and build time |
 
-### 🧩 `t` — templates
+### 🧩 `t` — templates · 🧱 `b` — boilerplates
 
-Every one of these is also reachable as `projekt template <command>`.
+Each is also reachable as `projekt template <command>` / `projekt boilerplate <command>`.
 
-| Command                          | What it does                                                |
-| -------------------------------- | ------------------------------------------------------------ |
-| [`t new`](doc/t_new.md)          | Render a template, with `--set`, `--values`, `--dry-run`     |
-| [`t list`](doc/t_list.md)        | List the templates of the store, as a table, JSON or TSV     |
-| [`t add`](doc/t_add.md)          | Save an existing file or folder as a template                |
-| [`t show`](doc/t_show.md)        | Print the source of a template                               |
-| [`t path`](doc/t_path.md)        | Print the store path, or one template's — handy for `$EDITOR` |
+| Command | What it does |
+| --- | --- |
+| [`t new`](doc/t_new.md) | Render a template, with `--set`, `--values`, `--dry-run` |
+| [`t list`](doc/t_list.md) | List the templates of the store, as a table, JSON or TSV |
+| [`t add`](doc/t_add.md) | Save an existing file or folder as a template |
+| [`t show`](doc/t_show.md) | Print the source of a template |
+| [`t path`](doc/t_path.md) | Print the store path, or one template's — handy for `$EDITOR` |
+| [`b new`](doc/b_new.md) | Create a project from a recipe, and register it |
+| [`b list`](doc/b_list.md) | List the recipes of the store, as a table, JSON or TSV |
+| [`b show`](doc/b_show.md) | Print a recipe as it is written |
+| [`b path`](doc/b_path.md) | Print the store path, or one recipe's — handy for `$EDITOR` |
 
-### 🧱 `b` — boilerplates
+### 📤 Output and logging
 
-Every one of these is also reachable as `projekt boilerplate <command>`.
-
-| Command                          | What it does                                                 |
-| -------------------------------- | ------------------------------------------------------------- |
-| [`b new`](doc/b_new.md)          | Create a project from a recipe, and register it               |
-| [`b list`](doc/b_list.md)        | List the recipes of the store, as a table, JSON or TSV        |
-| [`b show`](doc/b_show.md)        | Print a recipe as it is written                               |
-| [`b path`](doc/b_path.md)        | Print the store path, or one recipe's — handy for `$EDITOR`   |
-
-### 📤 Output formats
-
-`folder list` renders as a table for reading, and in two machine-readable
-formats for everything else:
+Listings render as a bordered table by default, plus JSON and TSV. JSON keeps
+real types (`priority` a number, `isWorkspace` a boolean) and an empty listing
+is `[]`, never `null`. TSV is what the shell integration uses for completion.
 
 ```bash
-projekt folder list                                  # bordered table (default)
-projekt folder list -o json | jq -r '.[].shortName'  # array of objects
-projekt folder list -o tsv --short-only --no-headers # one short name per line
+projekt folder list -o json | jq -r '.[].shortName'
+projekt folder list -o tsv --short-only --no-headers
 ```
 
-JSON keeps real types — `priority` is a number, `isWorkspace` a boolean — and
-an empty listing is `[]`, never `null`. TSV is what the shell integration uses
-for `pj` completion: a folder whose name contains a `|` would be mangled by
-anything that tried to read the table instead.
-
-### 🔊 Logging
-
-Every command takes `--verbose`/`-v`, and honours `LOG_LEVEL` (or `PROJEKT_LOG_LEVEL`)
-from the environment. Levels: `trace`, `debug`, `info`, `warn`, `error`, `fatal` —
-`info` by default.
-
-## 🗂 Directory Structure
-
-```
-.
-├── bin/           # Built binaries (make build)
-├── cmd/           # Entry points: projekt, t, b
-├── doc/           # Generated command reference + guides
-├── internal/      # Version stamping
-├── pkg/
-│   ├── cli/         # Root command, logging, output, version
-│   ├── folderutil/  # Folder parsing, discovery, Git helpers
-│   ├── lazypath/    # Config loading and XDG paths
-│   ├── bplutil/     # Boilerplate recipes: create a project and register it
-│   ├── templates/   # Shell integration templates
-│   └── tplutil/     # Template store and Go template rendering
-└── Makefile       # build, install, lint, test, doc
-```
+Every command takes `--verbose`/`-v` and honours `LOG_LEVEL` (or
+`PROJEKT_LOG_LEVEL`): `trace`, `debug`, `info` (default), `warn`, `error`, `fatal`.
 
 ## 🛠 Development
+
+```
+cmd/          # entry points: projekt, t, b
+pkg/cli/      # root command, logging, output, version
+pkg/folderutil/  # folder parsing, discovery, Git helpers
+pkg/lazypath/    # config loading and XDG paths
+pkg/bplutil/     # boilerplate recipes
+pkg/tplutil/     # template store and rendering
+pkg/templates/   # shell integration templates
+doc/          # generated command reference + guides
+```
 
 ```bash
 make lint  # gofmt + go vet
 make test  # go test -race ./...
 make build # all three binaries into bin/
-make doc   # regenerate the doc folder from the cobra commands
-make info  # tag, commit and tree state of this checkout
+make doc   # regenerate doc/ from the cobra commands
 ```
 
-CI runs formatting, vet, build and the race-enabled test suite on every push and
-pull request; tagged pushes are released with GoReleaser.
+CI runs formatting, vet, build and the race-enabled test suite on every push
+and pull request; tagged pushes are released with GoReleaser.
 
-## 💬 Contribution & Support
+## 💬 Contributing
 
-- Open an Issue or Pull Request — ideas, bug reports and new commands are all welcome.
-- Found a folder layout `projekt` can't express? That's a bug report worth filing.
+Issues and pull requests welcome — ideas, bug reports and new commands alike.
+Found a folder layout `projekt` can't express? That's a bug report worth filing.
 
 ---
 
