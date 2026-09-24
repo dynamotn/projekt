@@ -10,3 +10,8 @@ vars:
   - name: goVersion
     prompt: Go version
     default: "1.24"
+
+# Run once the files are there. Each line is rendered first, so a command can
+# ask whether it is worth running at all, and an empty line is skipped.
+after:
+  - '{{ if lookPath "go" }}go mod tidy{{ end }}'

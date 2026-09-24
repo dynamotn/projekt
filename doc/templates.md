@@ -163,6 +163,36 @@ then the `.Values` keys read out of the template itself, in the order they
 appear. Keys the template loops over are left out — a list or a map is not
 something to type at a prompt, and belongs in a `--values` file.
 
+### Running something afterwards
+
+A rendered project is rarely finished: a Go project wants `go mod tidy`, a
+repository wants `git init`, a hook config wants installing. The manifest says
+so, and `t new` runs them in the folder it just wrote:
+
+```yaml
+# templates/go-cli/.vars.yaml
+after:
+  - '{{ if lookPath "go" }}go mod tidy{{ end }}'
+  - '{{ if .Values.git }}git init -q && git add -A{{ end }}'
+```
+
+Each line is rendered with the values first, so a command can ask whether it is
+worth running, and a line that renders empty is skipped rather than run. They
+go through a shell, so a pipe or an `&&` works, and they run with
+`PROJEKT_NAME`, `PROJEKT_PATH` and `PROJEKT_TEMPLATE` in the environment.
+
+Each command is printed before it runs — a hook that runs out of sight is one
+nobody can debug — and the first failure stops the rest, because the second
+command usually assumes the first one worked. `--dry-run` describes them
+without running them, and `--no-hooks` skips them:
+
+```bash
+t new go-cli ./myapp --no-hooks
+```
+
+`b` runs them too, before the recipe's own `after:`, because they belong to the
+template rather than to the recipe.
+
 ### Delimiters of your own
 
 A template that writes GitHub Actions expressions, a Helm chart or another Go

@@ -41,6 +41,10 @@
   `stat`, `joinPath`, `toYaml` and `fromYaml`
 - **t**: new variables `.Source`, `.Store`, `.Home`, `.Hostname`, `.OS`,
   `.Arch` and `.Env`
+- **t**: run commands once the files are there with `after:` in the manifest —
+  `go mod tidy`, `git init` — rendered first so a command can be conditional,
+  printed before it runs, and skippable with `--no-hooks`. `b` runs a
+  template's own commands too, before the recipe's
 - **t**: give a template delimiters of its own with `delims: ["<%", "%>"]` in
   its `.vars.yaml`, so one that writes GitHub Actions, Helm charts or other Go
   templates stops escaping its own syntax
