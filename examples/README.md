@@ -88,7 +88,9 @@ t --template-dir examples/templates new go-cli ./myapp -n myapp --set ci=false -
   into a YAML list; printing it directly would give Go's `[redis-server --save]`.
 - **Escaping a foreign `{{ }}`.** GitHub Actions spells expressions the same way
   Go templates do, so `github-ci` writes them as template strings —
-  `{{ "${{ matrix.version }}" }}` — and they come out untouched.
+  `{{ "${{ matrix.version }}" }}` — and they come out untouched. A template with
+  a lot of them is better off moving its own delimiters out of the way with
+  `delims: ["<%", "%>"]` in its `.vars.yaml`.
 - **Exact money.** `invoice` and `monthly-budget` keep amounts in minor units
   (cents) and format with `div`/`mod`, so no total is off by a rounding step.
 - **Dates.** `.Date`, `.Year` and `.Now` come for free; `dateModify` shifts them,

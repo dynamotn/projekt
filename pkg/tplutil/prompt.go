@@ -16,6 +16,9 @@ import (
 type Prompter struct {
 	In  io.Reader
 	Out io.Writer
+	// Delims are the delimiters a default is written with. The zero value
+	// means the usual `{{` and `}}`.
+	Delims [2]string
 }
 
 // Ask walks the variables and returns the values, the ones already given left
@@ -116,11 +119,15 @@ func (p Prompter) ask(reader *bufio.Reader, v Var, fallback string) (string, err
 // renderDefault runs the default through the engine, so that a manifest can
 // say `default: "{{ .User }}"` or `default: "{{ .Name }}-api"`.
 func (p Prompter) renderDefault(v Var, base map[string]any) (string, error) {
-	if v.Default == "" || !strings.Contains(v.Default, "{{") {
+	delims := p.Delims
+	if delims[0] == "" || delims[1] == "" {
+		delims = DefaultDelims
+	}
+	if v.Default == "" || !strings.Contains(v.Default, delims[0]) {
 		return v.Default, nil
 	}
 
-	rendered, err := execute("default:"+v.Name, v.Default, base)
+	rendered, err := executeWith(delims, "default:"+v.Name, v.Default, base)
 	if err != nil {
 		return "", fmt.Errorf("default of %s: %w", v.Name, err)
 	}
