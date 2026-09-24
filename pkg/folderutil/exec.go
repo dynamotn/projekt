@@ -188,13 +188,3 @@ func execFailure(err error) string {
 	}
 	return err.Error()
 }
-
-// outputLines splits a command's output, dropping the trailing blank line
-// every well-behaved command leaves behind.
-func outputLines(output string) []string {
-	trimmed := strings.TrimRight(output, "\n")
-	if trimmed == "" {
-		return nil
-	}
-	return strings.Split(trimmed, "\n")
-}
