@@ -41,10 +41,17 @@ var RecipeDir string
 type Source struct {
 	// Template renders a folder template of the `t` store.
 	Template string `yaml:"template"`
-	// Repo clones a starting point. Not supported yet.
+	// Repo clones a starting point: a URL, or `server:group/name` resolved
+	// against the configured git servers.
 	Repo string `yaml:"repo"`
-	// Ref is the branch or tag of Repo. Not supported yet.
+	// Ref is the branch or tag of Repo.
 	Ref string `yaml:"ref"`
+	// Render runs a cloned starting point through the template engine.
+	//
+	// Off by default: someone else's repository is full of braces that are
+	// its own, and copying it verbatim is what a starting point usually
+	// means. A repository written to be a template says so here.
+	Render bool `yaml:"render"`
 	// Command delegates to a generator of the language itself, such as
 	// `cargo new`. Not supported yet.
 	Command []string `yaml:"command"`
@@ -62,6 +69,27 @@ type Register struct {
 	// Skip leaves the configuration alone, for a project that is not meant to
 	// be jumped to.
 	Skip bool `yaml:"skip"`
+	// Remote makes the new project a git repository and points it at one.
+	Remote *Remote `yaml:"remote"`
+}
+
+// Remote is where a new project will be pushed.
+//
+// The repository is not created on the server: that needs an API, a token and
+// a network, none of which this tool has any business holding. `gh repo
+// create` in an `after` hook is the way, and it is the way on purpose.
+type Remote struct {
+	// Host is one of the configured gitServers.
+	Host string `yaml:"host"`
+	// Group is the organisation or user the repository belongs to.
+	Group string `yaml:"group"`
+	// Name defaults to the project name.
+	Name string `yaml:"name"`
+	// Branch is the initial branch, when the project is not a repository yet.
+	Branch string `yaml:"branch"`
+	// InRepos records the new repository under the workspace's git section,
+	// so `folder sync` reproduces it on the next machine.
+	InRepos bool `yaml:"inRepos"`
 }
 
 // Recipe is one entry of the boilerplate store.
@@ -76,6 +104,13 @@ type Recipe struct {
 	Source      Source        `yaml:"source"`
 	Vars        []tplutil.Var `yaml:"vars"`
 	Register    Register      `yaml:"register"`
+	// After are commands run in the new project once it exists. They are
+	// rendered like anything else, so they can use the values.
+	//
+	// A recipe that runs commands is a recipe that runs commands: every one
+	// is printed before it runs, `b show` prints them, `--dry-run` lists them
+	// without running any, and `--no-hooks` skips them.
+	After []string `yaml:"after"`
 }
 
 // DefaultRecipeDir returns the folder recipes live in when no override is
@@ -233,13 +268,24 @@ func (r Recipe) Validate() error {
 		return fmt.Errorf("source declares more than one origin, expected exactly one")
 	}
 
-	// The other two origins are recognised so that a recipe written for them
-	// fails with a straight answer instead of being quietly ignored.
 	if r.Source.Repo != "" {
-		return fmt.Errorf("source.repo is not supported yet, use source.template")
+		if _, err := ParseRepoRef(r.Source.Repo); err != nil {
+			return err
+		}
 	}
+	// Delegating to a generator of the language itself is recognised so that a
+	// recipe written for it fails with a straight answer rather than being
+	// quietly ignored.
 	if len(r.Source.Command) > 0 {
-		return fmt.Errorf("source.command is not supported yet, use source.template")
+		return fmt.Errorf("source.command is not supported yet, use source.template or source.repo")
+	}
+	if r.Register.Remote != nil {
+		if strings.TrimSpace(r.Register.Remote.Host) == "" {
+			return fmt.Errorf("register.remote has no host")
+		}
+		if strings.TrimSpace(r.Register.Remote.Group) == "" {
+			return fmt.Errorf("register.remote has no group")
+		}
 	}
 
 	for i, v := range r.Vars {

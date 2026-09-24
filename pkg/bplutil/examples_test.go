@@ -54,6 +54,14 @@ func TestExampleRecipesCreate(t *testing.T) {
 
 	for _, recipe := range recipes {
 		t.Run(recipe.Name, func(t *testing.T) {
+			if recipe.Source.Repo != "" {
+				// Creating from one would clone it, and a test that needs the
+				// network is a test that fails on a train.
+				t.Skip("creates from a repository")
+			}
+			if len(recipe.After) > 0 {
+				t.Skip("runs commands of its own")
+			}
 			target := filepath.Join(t.TempDir(), "project")
 
 			result, err := Create(CreateOptions{

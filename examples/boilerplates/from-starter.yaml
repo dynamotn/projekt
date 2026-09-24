@@ -1,0 +1,26 @@
+# b new from-starter mytool
+#
+# A starting point cloned from a repository rather than rendered from a
+# template. The clone is shallow and its .git is left behind: the new project
+# is not a fork, and its first commit is its own.
+#
+# Point `repo` at a URL, at `server:group/name` resolved against your
+# configured gitServers, or at a repository on this machine.
+description: Clone a starting point, keep its files, start its history fresh
+source:
+  repo: https://github.com/golang-standards/project-layout
+  ref: master
+  # Off, because someone else's repository is full of braces that are its own.
+  # A repository written to be a template sets this.
+  render: false
+vars:
+  - name: summary
+    prompt: What does it do, in one line
+after:
+  # Every command here is printed before it runs, `--dry-run` lists them
+  # without running any, and `--no-hooks` skips them.
+  - git init -q -b main
+  - git add -A
+  - git commit -q -m "Start {{ .Name }} from a template"
+register:
+  tags: [go]

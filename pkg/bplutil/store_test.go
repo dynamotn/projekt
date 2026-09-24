@@ -150,8 +150,11 @@ func TestValidate(t *testing.T) {
 	cases := map[string]string{
 		"nothing to create from": "description: x\n",
 		"more than one origin":   "source:\n  template: app\n  repo: github:me/x\n",
-		"repo is not supported":  "source:\n  repo: github:me/x\n",
+		"repo with no group":     "source:\n  repo: github:justaname\n",
+		"repo with no server":    "source:\n  repo: \":group/name\"\n",
 		"command not supported":  "source:\n  command: [cargo, new]\n",
+		"remote with no host":    "source:\n  template: app\nregister:\n  remote:\n    group: me\n",
+		"remote with no group":   "source:\n  template: app\nregister:\n  remote:\n    host: gh\n",
 		"nameless variable":      "source:\n  template: app\nvars:\n  - prompt: hi\n",
 		"choice with no choices": "source:\n  template: app\nvars:\n  - name: pick\n    type: choice\n",
 	}
@@ -170,14 +173,28 @@ func TestValidate(t *testing.T) {
 
 func TestValidate_UnsupportedOriginSaysSo(t *testing.T) {
 	recipes, _ := useStores(t)
-	write(t, filepath.Join(recipes, "later.yaml"), "source:\n  repo: github:me/starter\n")
+	write(t, filepath.Join(recipes, "later.yaml"), "source:\n  command: [cargo, new]\n")
 
 	_, err := Get("later")
 	if err == nil {
 		t.Fatal("Get() error = nil, want an error")
 	}
 	// The message has to say what to do instead, not just refuse.
-	if !strings.Contains(err.Error(), "source.template") {
-		t.Errorf("Get() error = %v, want it to point at source.template", err)
+	if !strings.Contains(err.Error(), "source.template") || !strings.Contains(err.Error(), "source.repo") {
+		t.Errorf("Get() error = %v, want it to point at what is supported", err)
+	}
+}
+
+func TestValidate_RepoIsSupported(t *testing.T) {
+	recipes, _ := useStores(t)
+	write(t, filepath.Join(recipes, "starter.yaml"),
+		"source:\n  repo: git@github.com:me/starter.git\n  ref: main\n")
+
+	recipe, err := Get("starter")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if recipe.Origin() != "repo:git@github.com:me/starter.git" {
+		t.Errorf("Origin() = %v", recipe.Origin())
 	}
 }

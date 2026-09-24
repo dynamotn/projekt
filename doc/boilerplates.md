@@ -58,9 +58,78 @@ register:
   that adds files to something that already exists, and has no project of its
   own to register.
 
-`source.repo` and `source.command` are recognised and refused with a message
-saying so: cloning a starting point and delegating to `cargo new` are not
-implemented yet.
+`source.command` — delegating to `cargo new` and friends — is recognised and
+refused with a message saying so; it is not implemented.
+
+## Starting from a repository
+
+A recipe can clone a starting point instead of rendering one:
+
+```yaml
+source:
+  repo: github:dynamotn/go-starter   # or a URL, or a path on this machine
+  ref: main
+  render: false
+```
+
+`repo` takes a URL (`https://…`, `git@host:group/name`, `ssh://…`), a path on
+this machine, or `server:group/name` resolved against your configured
+`gitServers` — so a shared recipe works for people whose remotes differ in
+scheme or host.
+
+The clone is **shallow**, and its `.git` is left behind: the new project is not
+a fork of the starting point, and its first commit is its own.
+
+`render` is **off by default**. Someone else's repository is full of braces
+that are its own, and copying it verbatim is what a starting point usually
+means. A repository written to be a template sets `render: true`, and then
+every file and every path segment goes through the engine as a folder template
+would.
+
+## Running commands afterwards
+
+```yaml
+after:
+  - go mod tidy
+  - git init -q -b main
+  - git add -A && git commit -q -m "Start {{ .Name }}"
+```
+
+Each line runs in the new project, through your shell, so pipes and `&&` work.
+Each one is **rendered first**, so it can use the values, and **printed before
+it runs** — a recipe that runs commands should never do so out of sight.
+`PROJEKT_NAME`, `PROJEKT_PATH` and `PROJEKT_BOILERPLATE` are in the
+environment.
+
+The first failure stops the rest, because the second command of a recipe
+usually assumes the first one worked. The files stay: only the hook failed.
+
+> A recipe runs commands. `b show <name>` prints them, `b new --dry-run` lists
+> them without running any, and `--no-hooks` skips them. Read a recipe you did
+> not write before you run it.
+
+## Pointing at a remote
+
+```yaml
+register:
+  remote:
+    host: github      # one of your gitServers
+    group: dynamotn
+    name: myapp       # defaults to the project name
+    branch: main      # the initial branch, when it is not a repository yet
+    inRepos: true     # record it under the workspace's git section
+```
+
+This runs `git init` when the project is not a repository yet and points
+`origin` at the URL built from your configured server.
+
+**The repository is not created on the server.** That needs an API, a token and
+a network, none of which this tool holds — `gh repo create` or `glab repo
+create` in an `after` hook is the way, and it is the way on purpose.
+
+`inRepos` records the new repository under the workspace's `git:` section, so
+`projekt folder sync` reproduces it on the next machine and `folder check`
+notices when it goes missing.
 
 ## Creating
 

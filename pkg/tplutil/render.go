@@ -319,3 +319,16 @@ func writeFile(target string, content []byte, force bool) error {
 	cli.Debug("Rendered %s", target)
 	return nil
 }
+
+// RenderString runs one piece of text through the engine, with the same
+// functions and the same missing-value behaviour as a template file.
+//
+// It is what a command line in a recipe goes through, so that `{{ .Name }}`
+// means there what it means everywhere else.
+func RenderString(name, text string, data map[string]any) (string, error) {
+	rendered, err := execute(name, text, data)
+	if err != nil {
+		return "", err
+	}
+	return string(rendered), nil
+}

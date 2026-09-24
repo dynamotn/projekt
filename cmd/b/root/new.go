@@ -63,7 +63,12 @@ func NewBoilerplateNewCmd(out io.Writer) *cobra.Command {
 			}
 			o.Recipe = recipe
 			o.Target = args[1]
+			// The rendered content of a dry run is a lot of text nobody asked
+			// for; what it would do is the point, and that goes to the caller.
 			o.Out = io.Discard
+			o.Log = out
+			// A hook is a command someone will want to watch run.
+			o.In, o.HookOut, o.HookErr = cmd.InOrStdin(), out, cmd.ErrOrStderr()
 
 			fileValues, err := tplutil.LoadValuesFiles(valueFiles)
 			if err != nil {
@@ -94,6 +99,7 @@ func NewBoilerplateNewCmd(out io.Writer) *cobra.Command {
 	f.StringArrayVarP(&sets, "set", "s", nil, "Set a value, like -s key=value or -s author.name=me (repeatable)")
 	f.StringArrayVarP(&valueFiles, "values", "f", nil, "YAML file of values (repeatable)")
 	f.BoolVarP(&interactive, "interactive", "i", false, "Ask for the values the boilerplate needs")
+	f.BoolVar(&o.NoHooks, "no-hooks", false, "Don't run the recipe's `after` commands")
 	f.BoolVarP(&o.NoRegister, "no-register", "", false, "Don't add the project to the projekt config")
 	f.BoolVarP(&o.Force, "force", "F", false, "Create into a folder that is not empty, overwriting files")
 	f.BoolVarP(&o.DryRun, "dry-run", "d", false, "Print the plan instead of creating anything")

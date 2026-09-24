@@ -46,6 +46,7 @@ projekt boilerplate new [boilerplate] [name or path] [flags]
   -F, --force                Create into a folder that is not empty, overwriting files
   -h, --help                 help for new
   -i, --interactive          Ask for the values the boilerplate needs
+      --no-hooks after       Don't run the recipe's after commands
       --no-register          Don't add the project to the projekt config
   -s, --set stringArray      Set a value, like -s key=value or -s author.name=me (repeatable)
   -f, --values stringArray   YAML file of values (repeatable)

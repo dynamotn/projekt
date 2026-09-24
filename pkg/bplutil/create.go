@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
 	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
 	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
@@ -29,8 +30,18 @@ type CreateOptions struct {
 	DryRun bool
 	// NoRegister leaves the configuration alone.
 	NoRegister bool
-	// Out receives the rendered content of a dry run.
+	// Out receives the rendered content of a dry run, which is a lot of text
+	// and is usually thrown away.
 	Out io.Writer
+	// Log receives what is being done, or would be: the clone, each command,
+	// the remote. A dry run is worth nothing if it goes somewhere unread.
+	Log io.Writer
+	// NoHooks skips the recipe's `after` commands.
+	NoHooks bool
+	// In, HookOut and HookErr are the streams a hook runs with. A hook is a
+	// command someone will want to watch, so these are the terminal.
+	In               io.Reader
+	HookOut, HookErr io.Writer
 }
 
 // Plan is what `b new` is about to do, worked out before anything happens.
@@ -64,16 +75,22 @@ type Result struct {
 
 // Resolve works out what a create would do, without doing any of it.
 func Resolve(o CreateOptions) (Plan, error) {
-	if o.Recipe.Source.Template == "" {
-		if err := o.Recipe.Validate(); err != nil {
-			return Plan{}, err
-		}
-		return Plan{}, fmt.Errorf("boilerplate %q has nothing to create from", o.Recipe.Name)
+	if err := o.Recipe.Validate(); err != nil {
+		return Plan{}, err
 	}
 
-	tpl, err := tplutil.Get(o.Recipe.Source.Template)
-	if err != nil {
-		return Plan{}, fmt.Errorf("boilerplate %q: %w", o.Recipe.Name, err)
+	var tpl tplutil.Template
+	if o.Recipe.Source.Template != "" {
+		found, err := tplutil.Get(o.Recipe.Source.Template)
+		if err != nil {
+			return Plan{}, fmt.Errorf("boilerplate %q: %w", o.Recipe.Name, err)
+		}
+		tpl = found
+	} else {
+		// A clone is a folder of files like any other, so the rest of the plan
+		// — the name, the destination, the context a default renders with —
+		// works out the same way.
+		tpl = tplutil.Template{Name: o.Recipe.Name, Kind: tplutil.KindDir}
 	}
 
 	path, name, err := destination(o)
@@ -205,12 +222,28 @@ func Create(o CreateOptions) (Result, error) {
 	if out == nil {
 		out = io.Discard
 	}
-	files, err := tplutil.Render(plan.renderOptions(o.Values, o.Force, o.DryRun, out))
+	log := o.Log
+	if log == nil {
+		log = io.Discard
+	}
+
+	var files []string
+	if plan.Recipe.Source.Repo != "" {
+		files, err = createFromRepo(plan, o, log)
+	} else {
+		files, err = tplutil.Render(plan.renderOptions(o.Values, o.Force, o.DryRun, out))
+	}
 	if err != nil {
 		return Result{}, err
 	}
 
 	result := Result{Plan: plan, Files: files}
+
+	if !o.DryRun || len(plan.Recipe.After) > 0 || plan.Recipe.Register.Remote != nil {
+		if err := finish(log, plan, o); err != nil {
+			return result, err
+		}
+	}
 	if o.DryRun || !plan.Register {
 		return result, nil
 	}
@@ -256,4 +289,21 @@ func (p Plan) ShortName() string {
 		return p.Name
 	}
 	return prefix + "-" + p.Name
+}
+
+// finish does what happens once the files are there: point the project at a
+// remote, then run the recipe's commands.
+//
+// In that order, because a hook that pushes needs somewhere to push to.
+func finish(out io.Writer, plan Plan, o CreateOptions) error {
+	if err := SetUpRemote(out, plan, o); err != nil {
+		return err
+	}
+	if o.NoHooks {
+		if len(plan.Recipe.After) > 0 {
+			cli.Debug("Skipping %d command(s): --no-hooks", len(plan.Recipe.After))
+		}
+		return nil
+	}
+	return RunAfter(out, plan, o.Values, o)
 }

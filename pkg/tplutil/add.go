@@ -75,7 +75,7 @@ func Add(o AddOptions) (string, error) {
 		if source == dir || strings.HasPrefix(source+string(os.PathSeparator), dir+string(os.PathSeparator)) {
 			return "", fmt.Errorf("cannot add %s: it is inside the template folder %s", source, dir)
 		}
-		if err := copyTree(source, target); err != nil {
+		if err := CopyTree(source, target); err != nil {
 			return "", err
 		}
 		return target, nil
@@ -128,7 +128,9 @@ func ShowTemplate(out io.Writer, tpl Template) error {
 	})
 }
 
-func copyTree(source, target string) error {
+// CopyTree copies a folder, leaving out the repository metadata: what is
+// being copied is the files, not where they came from.
+func CopyTree(source, target string) error {
 	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err

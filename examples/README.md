@@ -101,6 +101,7 @@ whole project from a template and registers it:
 | ------ | ------------ |
 | `go-cli` | Renders the `go-cli` template; no workspace, so a plain name lands in the current folder |
 | `oss-tool` | The same template, but into `~/oss` with the `oss` prefix and tags — and when `~/oss` is a workspace in your config, nothing is added to it, because the workspace already reaches the new project |
+| `from-starter` | Clones a starting point from a repository instead of rendering one, then makes its first commit — needs the network |
 | `repo-ci` | Drops the `github-ci` workflow into a repository that already exists, and sets `register.skip`, because there is no new project to register |
 
 ```bash

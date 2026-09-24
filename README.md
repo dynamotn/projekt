@@ -30,7 +30,7 @@ the index. `t` and `b` are also `projekt template` and `projekt boilerplate`.
 | --- | --- |
 | `projekt` | folders, working trees, git, config — and the `pj` shell function |
 | `t` | render a file, or a whole tree, from your own template store |
-| `b` | create a project from a boilerplate and put it in your config |
+| `b` | create a project from a template or a repository, and put it in your config |
 
 *(`projekt` is simply *project* in German; the shell function is `pj`, because
 you'll type it a hundred times a day.)*
