@@ -21,6 +21,14 @@ teardown() {
   assert_file_contains "${out}" "no color"
   NO_COLOR=""
 
+  # A log message is data: backslashes must survive it. `echo -e` used to turn
+  # `C:\new\table` into a newline and a tab.
+  NO_COLOR=true __dybatpho_log info 'path C:\new\table \d+' > "${out}"
+  assert_equal "$(cat "${out}")" 'path C:\new\table \d+'
+  __dybatpho_log info 'colored C:\new' > "${out}"
+  assert_equal "$(dybatpho::text_strip_ansi "$(cat "${out}")")" 'colored C:\new'
+  NO_COLOR=""
+
   assert_equal "$(__dybatpho_log_json_escape 'a"b\c')" 'a\"b\\c'
   assert_equal "$(__dybatpho_log_json_escape $'tab\tnew\nret\r')" 'tab\tnew\nret\r'
   [[ "$(__dybatpho_log_timestamp)" =~ ^[0-9]{4}- ]]

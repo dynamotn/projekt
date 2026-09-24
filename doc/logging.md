@@ -26,11 +26,11 @@ appended to a rotating log file at an independent verbosity level.
 | **`LOG_FILE_LEVEL`** | string | Verbosity threshold applied only to `LOG_FILE` output. Default is `LOG_LEVEL` |
 | **`LOG_FILE_MAX_BYTES`** | number | Rotate `LOG_FILE` once it reaches this size in bytes. `0` disables rotation. Default `10485760` (10 MiB) |
 | **`LOG_FILE_MAX_BACKUPS`** | number | Number of rotated `LOG_FILE` backups to keep. Default `5` |
+| __dybatpho_log_char_width_cache |  |  |
 
 ### 🚀 Highlights
 
 - [`__dybatpho_log`](#__dybatpho_log) — Log a message to stdout or stderr, optionally with ANSI color.
-- [`__dybatpho_log_check_color`](#__dybatpho_log_check_color) — Render the current log message with ANSI color unless `NO_COLOR` is set.
 - [`__dybatpho_log_json_escape`](#__dybatpho_log_json_escape) — Escape a string for use as a JSON string value.
 - [`__dybatpho_log_timestamp`](#__dybatpho_log_timestamp) — Return an RFC 3339 timestamp for a log event.
 - [`__dybatpho_log_now_ms`](#__dybatpho_log_now_ms) — Return the current time in milliseconds since the epoch, using the most precise portable source available.
@@ -47,6 +47,8 @@ appended to a rotating log file at an independent verbosity level.
 - [`__dybatpho_log_text_n`](#__dybatpho_log_text_n) — Translate a piece of dybatpho's own user interface that counts something, letting the target language pick the plural form rather than the English call site.
 - [`__dybatpho_log_inspect`](#__dybatpho_log_inspect) — Log a structured diagnostic message with timestamp and call-site information. Also appends a JSON event to `LOG_FILE` when configured, independently of `LOG_FORMAT`.
 - [`__dybatpho_log_get_terminal_width`](#__dybatpho_log_get_terminal_width) — Return the effective terminal width used by boxed logging helpers.
+- [`__dybatpho_log_is_plain_ascii`](#__dybatpho_log_is_plain_ascii) — Return success when a string holds nothing but printable ASCII, which is the case where one character is exactly one terminal column and Bash can measure it on its own. `LC_ALL=C` is local to this function so the bracket range means bytes 0x20..0x7E rather than whatever the caller's collation makes of it.
+- [`__dybatpho_log_learn_widths`](#__dybatpho_log_learn_widths) — Fill the character-width cache for every non-ASCII character in a string that is not in it yet, in a single `python3` call. Width used to cost one process per measured string, so a twenty-row table paid eighty of them and a boxed `dybatpho::success` paid one per line. Caching per character rather than per string is what makes that cost amortize away: the library's own labels hold about ten distinct glyphs, and CJK text reuses its characters heavily, so a long run settles into no processes at all while still answering exactly what `python3` answers. Without `python3` every unknown character is recorded as one column, which is the answer the previous fallback gave.
 - [`__dybatpho_log_string_display_width`](#__dybatpho_log_string_display_width) — Return the display width of a string, accounting for wide Unicode glyphs when possible.
 - [`__dybatpho_log_wrap_line`](#__dybatpho_log_wrap_line) — Wrap one text line to the requested width using word boundaries when possible.
 - [`__dybatpho_log_box`](#__dybatpho_log_box) — Render a boxed message sized to its content while respecting terminal width.
@@ -97,19 +99,6 @@ Log a message to stdout or stderr, optionally with ANSI color.
 **📤 Output on stderr**
 
 - Show the formatted message when the level passes filtering and $3 is `stderr`
-
-
----
-
-### `__dybatpho_log_check_color`
-
-Render the current log message with ANSI color unless `NO_COLOR` is set.
-
-_Function has no arguments._
-
-**📤 Output on stdout**
-
-- Message text for the active log call
 
 
 ---
@@ -406,6 +395,60 @@ Return the effective terminal width used by boxed logging helpers.
 **📤 Output on stdout**
 
 - Terminal width, falling back to 80 columns
+
+
+---
+
+### `__dybatpho_log_is_plain_ascii`
+
+Return success when a string holds nothing but printable ASCII,
+  which is the case where one character is exactly one terminal column and
+  Bash can measure it on its own.
+
+
+  `LC_ALL=C` is local to this function so the bracket range means bytes
+  0x20..0x7E rather than whatever the caller's collation makes of it.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Text to classify |
+
+**🚦 Exit codes**
+
+- `0`: The text is printable ASCII, optionally with tabs
+- `1`: The text holds a character that may not be one column wide
+
+
+---
+
+### `__dybatpho_log_learn_widths`
+
+Fill the character-width cache for every non-ASCII character in
+  a string that is not in it yet, in a single `python3` call.
+
+
+  Width used to cost one process per measured string, so a twenty-row table
+  paid eighty of them and a boxed `dybatpho::success` paid one per line.
+  Caching per character rather than per string is what makes that cost
+  amortize away: the library's own labels hold about ten distinct glyphs, and
+  CJK text reuses its characters heavily, so a long run settles into no
+  processes at all while still answering exactly what `python3` answers.
+
+
+  Without `python3` every unknown character is recorded as one column, which
+  is the answer the previous fallback gave.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Text whose characters to learn |
+
+**🧩 Variable sets**
+
+- __dybatpho_log_char_width_cache
 
 
 ---

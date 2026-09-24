@@ -23,7 +23,7 @@ Every helper takes an array by name and changes it in place, with a final
 
 - [`dybatpho::array_print`](#dybatphoarray_print) — Print each element of an array on its own line.
 - [`dybatpho::array_reverse`](#dybatphoarray_reverse) — Reverse an array in place.
-- [`dybatpho::array_unique`](#dybatphoarray_unique) — Remove duplicate elements from an array in place.
+- [`dybatpho::array_unique`](#dybatphoarray_unique) — Remove duplicate elements from an array in place, keeping the first occurrence of each value. The surviving elements stay in the order they arrived in, which is what `dybatpho::array_union` already does and what a caller deduplicating a list of hosts or services expects to print. An earlier version collected the values as the keys of an associative array and handed back whatever order Bash happened to hash them into, so `1 2 3 4 5` came out as `5 4 3 2 1` and the order changed with the contents. Empty elements are dropped, as before.
 - [`dybatpho::array_contains`](#dybatphoarray_contains) — Return success when an array contains the given element.
 - [`dybatpho::array_index_of`](#dybatphoarray_index_of) — Print the first index of an array element that matches exactly.
 - [`dybatpho::array_compact`](#dybatphoarray_compact) — Remove empty-string elements from an array in place.
@@ -90,7 +90,19 @@ Reverse an array in place.
 
 ### `dybatpho::array_unique`
 
-Remove duplicate elements from an array in place.
+Remove duplicate elements from an array in place, keeping the
+  first occurrence of each value.
+
+
+  The surviving elements stay in the order they arrived in, which is what
+  `dybatpho::array_union` already does and what a caller deduplicating a list
+  of hosts or services expects to print. An earlier version collected the
+  values as the keys of an associative array and handed back whatever order
+  Bash happened to hash them into, so `1 2 3 4 5` came out as `5 4 3 2 1` and
+  the order changed with the contents.
+
+
+  Empty elements are dropped, as before.
 
 **🧾 Arguments**
 

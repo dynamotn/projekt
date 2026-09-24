@@ -23,7 +23,7 @@ to be written into shell code that will be evaluated later.
 ### 🚀 Highlights
 
 - [`dybatpho::trim`](#dybatphotrim) — Trim leading and trailing whitespace from a string.
-- [`dybatpho::split`](#dybatphosplit) — Split a string on an exact delimiter.
+- [`dybatpho::split`](#dybatphosplit) — Split a string on an exact delimiter. The delimiter is matched literally, never as a glob pattern, so `*`, `?` and `[` are ordinary characters in it. An empty delimiter prints the input unchanged. A run of `n` delimiters yields `n + 1` fields, including the empty ones at either end: splitting `a,b,,` on `,` gives `a`, `b`, an empty field and a trailing empty field. Consumers that do not want the empty fields drop them themselves, because only the caller knows whether an empty field is data.
 - [`dybatpho::string_starts_with`](#dybatphostring_starts_with) — Return success when a string starts with the given prefix.
 - [`dybatpho::string_ends_with`](#dybatphostring_ends_with) — Return success when a string ends with the given suffix.
 - [`dybatpho::string_contains`](#dybatphostring_contains) — Return success when a string contains the given substring.
@@ -77,6 +77,15 @@ Trim leading and trailing whitespace from a string.
 ### `dybatpho::split`
 
 Split a string on an exact delimiter.
+  The delimiter is matched literally, never as a glob pattern, so `*`, `?`
+  and `[` are ordinary characters in it. An empty delimiter prints the input
+  unchanged.
+
+
+  A run of `n` delimiters yields `n + 1` fields, including the empty ones at
+  either end: splitting `a,b,,` on `,` gives `a`, `b`, an empty field and a
+  trailing empty field. Consumers that do not want the empty fields drop them
+  themselves, because only the caller knows whether an empty field is data.
 
 **🧾 Arguments**
 

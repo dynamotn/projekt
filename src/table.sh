@@ -81,6 +81,14 @@ function __dybatpho_table_measure_widths {
   local row cell_width index
   local -a cells=()
   widths_ref=()
+  # Measuring a cell happens inside `$(...)`, and a subshell cannot hand its
+  # learned character widths back, so the whole table is learned once here, in
+  # this shell, before any measuring starts.
+  if dybatpho::is function __dybatpho_log_learn_widths; then
+    for row in "${rows_ref[@]}"; do
+      __dybatpho_log_learn_widths "${row}"
+    done
+  fi
 
   for row in "${rows_ref[@]}"; do
     __dybatpho_table_split_row "${row}" "${delimiter}" cells

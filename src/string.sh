@@ -30,13 +30,32 @@ function dybatpho::trim {
 
 #######################################
 # @description Split a string on an exact delimiter.
+#   The delimiter is matched literally, never as a glob pattern, so `*`, `?`
+#   and `[` are ordinary characters in it. An empty delimiter prints the input
+#   unchanged.
+#
+#   A run of `n` delimiters yields `n + 1` fields, including the empty ones at
+#   either end: splitting `a,b,,` on `,` gives `a`, `b`, an empty field and a
+#   trailing empty field. Consumers that do not want the empty fields drop them
+#   themselves, because only the caller knows whether an empty field is data.
 # @arg $1 string String to split
 # @arg $2 string Delimiter string
 # @stdout Print each split part on its own line
 #######################################
 function dybatpho::split {
-  IFS=$'\n' read -d "" -ra arr <<< "${1//$2/$'\n'}" || true
-  printf '%s\n' "${arr[@]}"
+  local input="${1-}" delimiter="${2-}"
+  if [[ -z "${delimiter}" ]]; then
+    printf '%s\n' "${input}"
+    return 0
+  fi
+  local -a parts=()
+  local rest="${input}"
+  while [[ "${rest}" == *"${delimiter}"* ]]; do
+    parts+=("${rest%%"${delimiter}"*}")
+    rest="${rest#*"${delimiter}"}"
+  done
+  parts+=("${rest}")
+  printf '%s\n' "${parts[@]}"
 }
 
 #######################################

@@ -39,6 +39,41 @@ EOF
   assert_equal "$(dybatpho::split "hello" "")" "hello"
 }
 
+@test "dybatpho::split treats a glob metacharacter delimiter literally" {
+  assert_equal "$(dybatpho::split "a*b*c" "*")" "a
+b
+c"
+  assert_equal "$(dybatpho::split "a?b?c" "?")" "a
+b
+c"
+  assert_equal "$(dybatpho::split "a[x]b[x]c" "[x]")" "a
+b
+c"
+}
+
+@test "dybatpho::split keeps empty fields, including trailing ones" {
+  # A command substitution eats trailing newlines, so the fields are counted
+  # through `mapfile` instead of compared as one string.
+  local -a fields=()
+  mapfile -t fields < <(dybatpho::split "a,b,," ",")
+  assert_equal "${#fields[@]}" 4
+  assert_equal "${fields[0]}" "a"
+  assert_equal "${fields[1]}" "b"
+  assert_equal "${fields[2]}" ""
+  assert_equal "${fields[3]}" ""
+
+  mapfile -t fields < <(dybatpho::split ",a" ",")
+  assert_equal "${#fields[@]}" 2
+  assert_equal "${fields[0]}" ""
+  assert_equal "${fields[1]}" "a"
+}
+
+@test "dybatpho::split does not leak a global named arr" {
+  arr="untouched"
+  dybatpho::split "x-y" "-" > /dev/null
+  assert_equal "${arr}" "untouched"
+}
+
 @test "dybatpho::split with empty string" {
   assert_equal "$(dybatpho::split "" ",")" ""
 }

@@ -163,7 +163,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   UPDATE_SNAPSHOTS=1 bats test/
   ```
 
+### Fixed
+
+- **`dybatpho::split` matched its delimiter as a glob pattern.** The function
+  documents an *exact* delimiter, but it reached the separator through
+  `${1//$2/…}` with `$2` unquoted, which is pattern position. A delimiter
+  holding `*`, `?` or `[` was therefore matched as a wildcard and the result was
+  silently wrong rather than an error:
+
+  ```sh
+  dybatpho::split "a*b*c" "*"   # was: one empty line.   now: a, b, c
+  dybatpho::split "a[x]b" "[x]" # was: "a[" and "]b".    now: a, b
+  ```
+
+  Splitting now walks the string with `${rest%%"${delimiter}"*}`, so the
+  delimiter is always literal. Two things follow from the rewrite. Empty fields
+  survive, including the trailing ones the old `read`-based version dropped, so
+  `n` delimiters give `n + 1` fields and `a,b,,` splits into four. And the
+  function no longer leaks a global named `arr` into the caller's shell, which
+  it did on every call.
+
+- **Log messages no longer lose their backslashes.** `__dybatpho_log` rendered
+  through `echo -e`, which interprets escapes, so any message carrying a
+  backslash was quietly corrupted — a Windows path, a regular expression, a
+  `sed` script. `dybatpho::info 'C:\new\table'` printed `C:` followed by a
+  newline and a tab. Rendering goes through `printf '%s'` now, and
+  `dybatpho::debug_command` carries a real newline instead of the `\n` it used
+  to rely on `echo -e` expanding.
+
+- **`dybatpho::array_unique` returned its result in Bash's hash order.** It
+  collected values as the keys of an associative array, so deduplicating
+  `1 2 3 4 5` gave back `5 4 3 2 1`, and the order changed with the contents.
+  It keeps the first occurrence of each value in place now, which is what
+  `dybatpho::array_union` already did.
+
 ### Changed
+
+- **Boxed output and tables stopped spawning a `python3` per line.** Measuring
+  the display width of a string — what aligns a table cell and sizes a box —
+  ran a `python3` child *per measured string*. A twenty-row, four-column
+  `dybatpho::table_box` paid eighty of them and took 3.5 seconds; fifty boxed
+  `dybatpho::success` lines took 3.8.
+
+  Width is now answered from a per-character cache that `python3` fills in one
+  batched call for the characters it has not seen yet, and pure ASCII — nearly
+  every log line and table cell — never consults it at all. `__dybatpho_log_box`
+  and the table measuring pass warm that cache in the calling shell first,
+  because the measuring itself happens inside `$(...)` and a subshell cannot
+  hand back what it learned. Line wrapping is pure Bash for the same reason, and
+  is measured in columns rather than characters, so a CJK or emoji line breaks
+  where it actually reaches the edge.
+
+  The rendered output is unchanged — the widths are still the ones
+  `unicodedata` gives — and `python3` remains optional, with an unknown
+  character counting as one column exactly as the old fallback did. The same
+  table now takes 0.8 seconds and the same fifty boxes 1.7.
 
 - **CI now runs the whole suite on macOS, and a new job runs it on BusyBox.**
   The portable job ran three of thirty-seven files, so everything that touches

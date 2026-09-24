@@ -72,23 +72,21 @@ function __dybatpho_log {
     dybatpho::metrics_counter_inc dybatpho_log_messages_total 1 "level=${show_log_level}"
   fi
 
-  #######################################
-  # @description Render the current log message with ANSI color unless `NO_COLOR` is set.
-  # @noargs
-  # @stdout Message text for the active log call
-  #######################################
-  __dybatpho_log_check_color() {
-    if [[ "${NO_COLOR}" != "" ]]; then
-      echo -e "${msg}"
-    else
-      echo -e "\e[${color}m${msg}\e[0m"
-    fi
-  }
+  # `printf '%s'` rather than `echo -e`: a log message is data, and a Windows
+  # path, a regular expression or a `sed` script carries backslashes that
+  # `echo -e` would silently eat -- `C:\new\table` came out as a newline and a
+  # tab. Callers that want a line break put a real one in the message.
+  local rendered
+  if [[ -n "${NO_COLOR}" ]]; then
+    printf -v rendered '%s\n' "${msg}"
+  else
+    printf -v rendered '\033[%sm%s\033[0m\n' "${color}" "${msg}"
+  fi
 
   if [[ "${out}" == "stderr" ]]; then
-    __dybatpho_log_check_color >&2
+    printf '%s' "${rendered}" >&2
   else
-    __dybatpho_log_check_color
+    printf '%s' "${rendered}"
   fi
 }
 
@@ -429,6 +427,86 @@ function __dybatpho_log_get_terminal_width {
 }
 
 #######################################
+# @description Return success when a string holds nothing but printable ASCII,
+#   which is the case where one character is exactly one terminal column and
+#   Bash can measure it on its own.
+#
+#   `LC_ALL=C` is local to this function so the bracket range means bytes
+#   0x20..0x7E rather than whatever the caller's collation makes of it.
+# @arg $1 string Text to classify
+# @exitcode 0 The text is printable ASCII, optionally with tabs
+# @exitcode 1 The text holds a character that may not be one column wide
+#######################################
+function __dybatpho_log_is_plain_ascii {
+  local LC_ALL=C
+  case "${1-}" in
+    *[!$'\t'\ -~]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# Display width of each non-ASCII character seen so far, keyed by the character.
+# @env __dybatpho_log_char_width_cache
+declare -gA __dybatpho_log_char_width_cache=()
+
+#######################################
+# @description Fill the character-width cache for every non-ASCII character in
+#   a string that is not in it yet, in a single `python3` call.
+#
+#   Width used to cost one process per measured string, so a twenty-row table
+#   paid eighty of them and a boxed `dybatpho::success` paid one per line.
+#   Caching per character rather than per string is what makes that cost
+#   amortize away: the library's own labels hold about ten distinct glyphs, and
+#   CJK text reuses its characters heavily, so a long run settles into no
+#   processes at all while still answering exactly what `python3` answers.
+#
+#   Without `python3` every unknown character is recorded as one column, which
+#   is the answer the previous fallback gave.
+# @arg $1 string Text whose characters to learn
+# @set __dybatpho_log_char_width_cache
+#######################################
+function __dybatpho_log_learn_widths {
+  local text="${1-}"
+  local -a unknown=()
+  local index character
+
+  for ((index = 0; index < ${#text}; index++)); do
+    character="${text:index:1}"
+    __dybatpho_log_is_plain_ascii "${character}" && continue
+    [[ -v "__dybatpho_log_char_width_cache[${character}]" ]] && continue
+    __dybatpho_log_char_width_cache["${character}"]=1
+    unknown+=("${character}")
+  done
+
+  ((${#unknown[@]})) || return 0
+  dybatpho::is command python3 || return 0
+
+  local joined
+  printf -v joined '%s' "${unknown[@]}"
+
+  local -a widths=()
+  mapfile -t widths < <(TEXT="${joined}" python3 - << 'PY'
+import os
+import unicodedata
+
+text = os.environ.get("TEXT", "")
+for char in text:
+    if unicodedata.combining(char):
+        print(0)
+    else:
+        print(2 if unicodedata.east_asian_width(char) in ("F", "W") else 1)
+PY
+  )
+
+  # A short answer means python3 failed part way through; the characters it did
+  # not reach keep the one-column default recorded above.
+  for ((index = 0; index < ${#unknown[@]} && index < ${#widths[@]}; index++)); do
+    [[ "${widths[index]}" =~ ^[0-9]+$ ]] || continue
+    __dybatpho_log_char_width_cache["${unknown[index]}"]="${widths[index]}"
+  done
+}
+
+#######################################
 # @description Return the display width of a string, accounting for wide Unicode glyphs when possible.
 # @arg $1 string Input text
 # @stdout Display width of the input
@@ -436,23 +514,23 @@ function __dybatpho_log_get_terminal_width {
 function __dybatpho_log_string_display_width {
   local text="${1:-}"
 
-  if dybatpho::is command python3; then
-    TEXT="${text}" python3 - << 'PY'
-import os
-import unicodedata
-
-text = os.environ.get("TEXT", "")
-width = 0
-for char in text:
-    if unicodedata.combining(char):
-        continue
-    width += 2 if unicodedata.east_asian_width(char) in ("F", "W") else 1
-print(width)
-PY
+  if __dybatpho_log_is_plain_ascii "${text}"; then
+    printf '%s\n' "${#text}"
     return 0
   fi
 
-  printf '%s\n' "${#text}"
+  __dybatpho_log_learn_widths "${text}"
+
+  local width=0 index character
+  for ((index = 0; index < ${#text}; index++)); do
+    character="${text:index:1}"
+    if __dybatpho_log_is_plain_ascii "${character}"; then
+      width=$((width + 1))
+    else
+      width=$((width + ${__dybatpho_log_char_width_cache[${character}]:-1}))
+    fi
+  done
+  printf '%s\n' "${width}"
 }
 
 #######################################
@@ -473,94 +551,65 @@ function __dybatpho_log_wrap_line {
     return 0
   fi
 
-  if dybatpho::is command python3; then
-    LINE="${line}" MAX_WIDTH="${max_width}" python3 - << 'PY'
-import os
-import unicodedata
+  # Wrapping is measured in columns rather than characters, so a CJK or emoji
+  # line breaks where it actually reaches the edge of the terminal. The widths
+  # come from the character cache, which `__dybatpho_log_learn_widths` fills in
+  # one shot here rather than once per line in a `python3` child.
+  __dybatpho_log_learn_widths "${line}"
 
-line = os.environ.get("LINE", "")
-max_width = int(os.environ["MAX_WIDTH"])
+  local total="${#line}"
+  local -a widths=()
+  local index character
+  for ((index = 0; index < total; index++)); do
+    character="${line:index:1}"
+    if __dybatpho_log_is_plain_ascii "${character}"; then
+      widths[index]=1
+    else
+      widths[index]="${__dybatpho_log_char_width_cache[${character}]:-1}"
+    fi
+  done
 
-def char_width(char):
-    if unicodedata.combining(char):
-        return 0
-    return 2 if unicodedata.east_asian_width(char) in ("F", "W") else 1
-
-def text_width(text):
-    return sum(char_width(char) for char in text)
-
-def wrap_text(text, limit):
-    if text == "":
-        return [""]
-
-    result = []
-    remaining = text
-    while text_width(remaining) > limit:
-        width = 0
-        break_at = None
-        last_space = None
-        for index, char in enumerate(remaining):
-            width += char_width(char)
-            if char == " ":
-                last_space = index
-            if width > limit:
-                break_at = last_space if last_space is not None else index
-                break
-
-        if break_at is None:
-            break
-
-        if last_space is not None:
-            result.append(remaining[:break_at])
-            remaining = remaining[break_at + 1 :].lstrip(" ")
-        else:
-            # No space before limit; scan forward to keep the word/link whole
-            next_space = remaining.find(" ", index)
-            if next_space != -1:
-                result.append(remaining[:next_space])
-                remaining = remaining[next_space + 1 :].lstrip(" ")
-            else:
-                result.append(remaining[:break_at])
-                remaining = remaining[break_at:]
-
-    result.append(remaining)
-    return result
-
-for part in wrap_text(line, max_width):
-    print(part)
-PY
-    return 0
-  fi
-
-  while ((${#line} > max_width)); do
-    local break_at=-1 i
-    for ((i = max_width; i >= 1; i--)); do
-      if [[ "${line:i-1:1}" == " " ]]; then
-        break_at=${i}
+  local start=0 used cut last_space break_at next_space
+  while ((start < total)); do
+    used=0
+    cut=-1
+    last_space=-1
+    for ((index = start; index < total; index++)); do
+      used=$((used + widths[index]))
+      [[ "${line:index:1}" == " " ]] && last_space=${index}
+      if ((used > max_width)); then
+        cut=${index}
         break
       fi
     done
-    if ((break_at == -1)); then
-      # No space before limit; scan forward to keep the word/link whole
-      for ((i = max_width + 1; i <= ${#line}; i++)); do
-        if [[ "${line:i-1:1}" == " " ]]; then
-          break_at=${i}
+
+    # Everything left fits on one line.
+    ((cut >= 0)) || break
+
+    if ((last_space >= start)); then
+      break_at=${last_space}
+    else
+      # Nothing to break on before the limit. Keep the word -- a URL, a path --
+      # whole and run past the edge rather than cutting it in half.
+      next_space=-1
+      for ((index = cut; index < total; index++)); do
+        if [[ "${line:index:1}" == " " ]]; then
+          next_space=${index}
           break
         fi
       done
+      ((next_space >= 0)) || break
+      break_at=${next_space}
     fi
-    if ((break_at == -1)); then
-      printf '%s\n' "${line:0:max_width}"
-      line="${line:max_width}"
-    else
-      printf '%s\n' "${line:0:break_at-1}"
-      line="${line:break_at}"
-      while [[ "${line}" == " "* ]]; do
-        line="${line# }"
-      done
-    fi
+
+    printf '%s\n' "${line:start:break_at-start}"
+    start=$((break_at + 1))
+    while ((start < total)) && [[ "${line:start:1}" == " " ]]; do
+      start=$((start + 1))
+    done
   done
-  printf '%s\n' "${line}"
+
+  printf '%s\n' "${line:start}"
 }
 
 #######################################
@@ -595,6 +644,12 @@ function __dybatpho_log_box {
   if ((inner_limit < 1)); then
     inner_limit=1
   fi
+
+  # Learn every character's width here, in this shell. The measuring below runs
+  # inside `$(...)`, and a subshell's additions to the cache die with it, so
+  # warming it once in the parent is what lets a boxed message be drawn without
+  # a `python3` child per line.
+  __dybatpho_log_learn_widths "${message}"
 
   mapfile -t input_lines <<< "${message}"
   if ((${#input_lines[@]} == 0)); then
@@ -670,7 +725,8 @@ function dybatpho::debug {
 #######################################
 function dybatpho::debug_command {
   dybatpho::compare_log_level debug || return 0
-  __dybatpho_log_inspect debug "COMMAND 💻    " "$1\n$(eval "$2")"
+  __dybatpho_log_inspect debug "COMMAND 💻    " "$1
+$(eval "$2")"
 }
 
 #######################################

@@ -52,11 +52,20 @@ setup() {
   assert_success
   refute_output
   arr=(1 1 2 2 3 3 3 3 3 4 4 4 4 4 5 5 5 5 5 5)
-  assert_equal "$(dybatpho::array_unique "arr" "--")" "5
-4
-3
+  assert_equal "$(dybatpho::array_unique "arr" "--")" "1
 2
-1"
+3
+4
+5"
+}
+
+@test "dybatpho::array_unique keeps the first occurrence in order" {
+  arr=(zebra apple mango apple banana zebra kiwi)
+  assert_equal "$(dybatpho::array_unique "arr" "--")" "zebra
+apple
+mango
+banana
+kiwi"
 }
 
 @test "dybatpho::array_unique with spaces in elements" {

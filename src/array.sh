@@ -48,7 +48,17 @@ function dybatpho::array_reverse {
 }
 
 #######################################
-# @description Remove duplicate elements from an array in place.
+# @description Remove duplicate elements from an array in place, keeping the
+#   first occurrence of each value.
+#
+#   The surviving elements stay in the order they arrived in, which is what
+#   `dybatpho::array_union` already does and what a caller deduplicating a list
+#   of hosts or services expects to print. An earlier version collected the
+#   values as the keys of an associative array and handed back whatever order
+#   Bash happened to hash them into, so `1 2 3 4 5` came out as `5 4 3 2 1` and
+#   the order changed with the contents.
+#
+#   Empty elements are dropped, as before.
 # @arg $1 string Name of array
 # @arg $2 string Set `--` to print to stdout
 # @stdout Print the deduplicated array if $2 is `--`
@@ -56,13 +66,19 @@ function dybatpho::array_reverse {
 function dybatpho::array_unique {
   # shellcheck disable=SC2178
   local -n input_arr="$1"
-  declare -A result_arr
+  local -A __unique_seen=()
+  local -a __unique_result=()
+  local __unique_value
 
-  for i in "${input_arr[@]}"; do
-    [[ ${i} ]] && IFS=" " result_arr["${i:- }"]=1
+  for __unique_value in ${input_arr[@]+"${input_arr[@]}"}; do
+    [[ -n "${__unique_value}" ]] || continue
+    [[ -v "__unique_seen[${__unique_value}]" ]] && continue
+    __unique_seen["${__unique_value}"]=1
+    __unique_result+=("${__unique_value}")
   done
 
-  input_arr=("${!result_arr[@]}")
+  # shellcheck disable=SC2190 # input_arr is indexed; the nameref misleads ShellCheck
+  input_arr=(${__unique_result[@]+"${__unique_result[@]}"})
   if [[ "${2-""}" == "--" ]]; then
     dybatpho::array_print "$1"
   fi
