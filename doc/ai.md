@@ -52,13 +52,15 @@ anything is sent, and a call budget that stops a runaway loop.
 | **`DYBATPHO_AI_JSON_RETRIES`** | number | Attempts `dybatpho::ai_json` makes before failing (default `2`) |
 | **`DYBATPHO_AI_CLI`** | string | Command used by the `cli` backend: `claude`, `llm`, or `ollama` |
 | **`DYBATPHO_AI_ANTHROPIC_VERSION`** | string | Value of the `anthropic-version` header (default `2023-06-01`) |
-| **`DYBATPHO_AI_STATE_FILE`** | string | File the call and token counters are kept in |
+| **`DYBATPHO_AI_STATE_FILE`** | string | File the call and token counters are kept in; resolved on first use |
 
 ### 🚀 Highlights
 
 - [`__dybatpho_ai_require_json`](#__dybatpho_ai_require_json) — Fail loudly when no JSON backend is installed.
 - [`__dybatpho_ai_redact`](#__dybatpho_ai_redact) — Mask registered secrets in text before it leaves the machine.
 - [`__dybatpho_ai_state_cleanup_once`](#__dybatpho_ai_state_cleanup_once) — Arrange for the counter file to be removed when the script ends. Sourcing a module must not touch the host script's traps, so this runs on first use rather than at load time. A command substitution gets its own process, and a handler registered there would delete the counters the moment that subshell returned, so only the top-level shell registers one.
+- [`__dybatpho_ai_state_path`](#__dybatpho_ai_state_path) — Resolve the counter file, defaulting to a private directory under the XDG state home rather than to a predictable name in a shared `/tmp`. The directory is created 0700, so no other account can plant anything in it. Resolution is lazy because working it out needs `HOME`, and a module must not fail at source time on a host that has none.
+- [`__dybatpho_ai_state_prepare`](#__dybatpho_ai_state_prepare) — Return the counter file, refusing to use it through a symbolic link. Writing the counters is a plain redirection, which follows a link and truncates whatever is on the other end, so a link here is either an attack or a mistake; either way it is not something to write through.
 - [`__dybatpho_ai_state_read`](#__dybatpho_ai_state_read) — Print the counter document, creating it on first use.
 - [`__dybatpho_ai_state_write`](#__dybatpho_ai_state_write) — Replace the counter document.
 - [`__dybatpho_ai_budget_check`](#__dybatpho_ai_budget_check) — Stop the script when the call budget is already used up. This is deliberately separate from counting: the count happens deep inside a command substitution, where an `exit` would only leave that subshell, so the refusal has to be raised by the public function the caller invoked.
@@ -268,6 +270,52 @@ _Function has no arguments._
 **🔗 See also**
 
 - [dybatpho::cleanup_file_on_exit](#dybatphocleanup_file_on_exit)
+
+
+---
+
+### `__dybatpho_ai_state_path`
+
+Resolve the counter file, defaulting to a private directory under
+  the XDG state home rather than to a predictable name in a shared `/tmp`.
+
+
+  The directory is created 0700, so no other account can plant anything in it.
+  Resolution is lazy because working it out needs `HOME`, and a module must
+  not fail at source time on a host that has none.
+
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`DYBATPHO_AI_STATE_FILE`** | string | Overrides the default when set |
+
+**🧩 Variable sets**
+
+- DYBATPHO_AI_STATE_FILE
+
+**📤 Output on stdout**
+
+- Path of the counter file
+
+
+---
+
+### `__dybatpho_ai_state_prepare`
+
+Return the counter file, refusing to use it through a symbolic
+  link. Writing the counters is a plain redirection, which follows a link and
+  truncates whatever is on the other end, so a link here is either an attack
+  or a mistake; either way it is not something to write through.
+
+**📤 Output on stdout**
+
+- Path of the counter file
+
+**🚦 Exit codes**
+
+- `0`: The path is safe to write
+- `1`: Stop the script when the path is a symbolic link
 
 
 ---

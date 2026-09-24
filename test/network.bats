@@ -720,3 +720,25 @@ time.sleep(30)' > "${portfile}" 2> /dev/null &
   run --separate-stderr ! dybatpho::wait_port host 80 soon
   assert_stderr --partial "is not a number of seconds"
 }
+
+@test "credentials and bodies never reach curl's command line" {
+  export DYBATPHO_CURL_MAX_RETRIES=0
+  dybatpho::mock_http "example.test/oob" 200 'ok'
+
+  local -a DYBATPHO_CURL_SECRET_HEADERS=("Authorization: Bearer leak-me-not")
+  local DYBATPHO_CURL_SECRET_DATA='{"secret":"body"}'
+  dybatpho::curl_do "https://example.test/oob" "${BATS_TEST_TMPDIR}/out"
+
+  # Arguments are world-readable through /proc/<pid>/cmdline, so neither the
+  # credential nor the body may appear there.
+  run dybatpho::mock_calls curl
+  assert_success
+  refute_output --partial "leak-me-not"
+  refute_output --partial '"secret":"body"'
+
+  # They were still sent, out of band.
+  run dybatpho::mock_http_payloads
+  assert_success
+  assert_output --partial "Authorization: Bearer leak-me-not"
+  assert_output --partial '{"secret":"body"}'
+}

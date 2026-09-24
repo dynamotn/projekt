@@ -977,20 +977,25 @@ function dybatpho::mock_http {
   } > "${route_dir}/${route_id}.headers"
   printf '%s\t%s\t%s\n' "${pattern}" "${status}" "${route_id}" >> "${routes}"
 
-  local routes_q route_dir_q calls_q
+  local routes_q route_dir_q calls_q payloads_q
   printf -v routes_q '%q' "${routes}"
   printf -v route_dir_q '%q' "${route_dir}"
   printf -v calls_q '%q' "${mock_dir}/http-calls"
+  printf -v payloads_q '%q' "${mock_dir}/http-payloads"
 
   dybatpho::mock_command_script curl "$(
     cat << MOCK_CURL
 routes=${routes_q}
 route_dir=${route_dir_q}
 calls=${calls_q}
+payloads=${payloads_q}
 
 output="/dev/null"
 header_file=""
 url=""
+config_file=""
+body=""
+body_on_stdin=0
 while ((\$#)); do
   case "\$1" in
     -o)
@@ -999,6 +1004,18 @@ while ((\$#)); do
       ;;
     -D)
       header_file="\$2"
+      shift 2
+      ;;
+    --config)
+      config_file="\$2"
+      shift 2
+      ;;
+    --data-binary)
+      if [[ "\$2" == "@-" ]]; then
+        body_on_stdin=1
+      else
+        body="\$2"
+      fi
       shift 2
       ;;
     -w | --connect-timeout | --max-time | -H | --header | -F | --form | -X | --request | -d | --data)
@@ -1012,6 +1029,21 @@ while ((\$#)); do
   esac
 done
 printf '%s\n' "\${url}" >> "\${calls}"
+
+# Record the request material that does not travel in the argument vector, so a
+# test can still assert what was actually sent. Newlines are flattened so that
+# one request stays one line.
+payload=""
+if [[ -n "\${config_file}" && -r "\${config_file}" ]]; then
+  payload+="\$(tr '\n' ' ' < "\${config_file}")"
+fi
+if ((body_on_stdin)); then
+  body="\$(cat)"
+fi
+if [[ -n "\${body}" ]]; then
+  payload+=" \${body}"
+fi
+printf '%s\n' "\${payload//\$'\n'/ }" >> "\${payloads}"
 
 status="404"
 route_id=""
@@ -1049,6 +1081,35 @@ function dybatpho::mock_http_calls {
   local calls="${DYBATPHO_TEST_MOCK_DIR}/http-calls"
   dybatpho::is file "${calls}" || return 1
   cat "${calls}"
+}
+
+#######################################
+# @description Print the request material of every mocked HTTP call that did not
+#   travel in the argument vector, newest last, one request per line.
+#
+#   Credentials and request bodies are deliberately kept off `curl`'s command
+#   line, because arguments are readable by every account on the host through
+#   `/proc/<pid>/cmdline`. They go into a `--config` file and onto standard
+#   input instead. That is the right thing for a running script and an awkward
+#   thing for a test, which still has to be able to say "the token was sent" and
+#   "the body carried this field" -- so the mock records them here.
+# @example
+#   dybatpho::mock_http "api.github.com" 201 '{"number":12}'
+#   dybatpho::forge_issue_create "Nightly failing" "It broke"
+#   dybatpho::mock_http_payloads   # header = "Authorization: Bearer ..." {"title":...}
+#
+# @env DYBATPHO_TEST_MOCK_DIR string Directory the mocks live in
+# @stdout One line per recorded request
+# @exitcode 0 Requests were recorded
+# @exitcode 1 No mocked request has been made yet
+# @see
+#   - `dybatpho::mock_http`
+#   - `dybatpho::mock_http_calls`
+#######################################
+function dybatpho::mock_http_payloads {
+  local payloads="${DYBATPHO_TEST_MOCK_DIR}/http-payloads"
+  dybatpho::is file "${payloads}" || return 1
+  cat "${payloads}"
 }
 
 #######################################

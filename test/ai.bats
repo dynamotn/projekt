@@ -425,9 +425,11 @@ _test_tool() { printf 'tool output\n'; }
   anthropic_body 'the tool said tool output' > "${second}"
   dybatpho::ai_tool_register t "desc" '{"type":"object"}' _test_tool
   # One plan entry per round, so the second request sees the tool result.
+  # The request body travels on stdin rather than in an argument, so it is
+  # recorded from there; see DYBATPHO_CURL_SECRET_DATA.
   stub curl \
-    ": out=\"\"; prev=\"\"; for a in \"\$@\"; do if [ \"\${prev}\" = -o ]; then out=\"\${a}\"; fi; prev=\"\${a}\"; done; echo \"\$*\" >> ${args_file}; cat ${first} > \"\${out}\"; echo 200" \
-    ": out=\"\"; prev=\"\"; for a in \"\$@\"; do if [ \"\${prev}\" = -o ]; then out=\"\${a}\"; fi; prev=\"\${a}\"; done; echo \"\$*\" >> ${args_file}; cat ${second} > \"\${out}\"; echo 200"
+    ": out=\"\"; prev=\"\"; for a in \"\$@\"; do if [ \"\${prev}\" = -o ]; then out=\"\${a}\"; fi; prev=\"\${a}\"; done; echo \"\$*\" >> ${args_file}; cat >> ${args_file}; cat ${first} > \"\${out}\"; echo 200" \
+    ": out=\"\"; prev=\"\"; for a in \"\$@\"; do if [ \"\${prev}\" = -o ]; then out=\"\${a}\"; fi; prev=\"\${a}\"; done; echo \"\$*\" >> ${args_file}; cat >> ${args_file}; cat ${second} > \"\${out}\"; echo 200"
   run_traced dybatpho::ai_run "question"
   unstub curl
   assert_success
@@ -650,4 +652,29 @@ _test_tool() { printf 'tool output\n'; }
   assert_output --partial "DRY RUN"
   assert_output --partial "--no-buffer"
   assert_equal "$(dybatpho::ai_usage_field calls)" "0"
+}
+
+@test "the counter file defaults to a private directory, not a shared one" {
+  local state_home="${BATS_TEST_TMPDIR}/state"
+  DYBATPHO_AI_STATE_FILE=""
+  XDG_STATE_HOME="${state_home}" run dybatpho::ai_usage_field calls
+  assert_success
+
+  # The default must not sit in a world-writable temporary directory, where the
+  # name could be pre-created as a symbolic link.
+  local directory="${state_home}/dybatpho"
+  dybatpho::assert_dir "${directory}"
+  dybatpho::assert_file_mode "${directory}" 700
+}
+
+@test "the counter file is refused when it is a symbolic link" {
+  local victim="${BATS_TEST_TMPDIR}/victim"
+  printf 'do not overwrite me\n' > "${victim}"
+  DYBATPHO_AI_STATE_FILE="${BATS_TEST_TMPDIR}/state-link"
+  ln -s "${victim}" "${DYBATPHO_AI_STATE_FILE}"
+
+  run dybatpho::ai_usage_reset
+  assert_failure
+  assert_output --partial "symbolic link"
+  assert_equal "$(cat "${victim}")" "do not overwrite me"
 }

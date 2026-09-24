@@ -213,6 +213,17 @@ dybatpho::info "Model usage: $(dybatpho::ai_usage total)"
 - **FR-020**: Payloads and responses MUST be built and read through the `json`
   module, so the module works on whichever backend the rest of the library
   found rather than requiring a specific one.
+- **FR-021**: The API key and the request payload MUST reach `curl` out of
+  band -- the key as a secret header, the payload on standard input -- so that
+  neither appears in `/proc/<pid>/cmdline`. This MUST hold for the streaming
+  path as well, which calls `curl` directly.
+- **FR-022**: The call and token counters MUST default to a file in a private
+  directory under the XDG state home, created `0700`, rather than to a
+  predictable name in a shared temporary directory, where another account could
+  pre-create the name as a symbolic link and have the counters overwrite the
+  file it points at.
+- **FR-022a**: The module MUST refuse to read or write the counter file when it
+  is a symbolic link, wherever it has been pointed.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -265,6 +276,9 @@ dybatpho::info "Model usage: $(dybatpho::ai_usage total)"
   placement, effort, tools, and output schema.
 - **IT-012**: Verify the module behaves identically under both the `yq` and the
   `jq` backend.
+- **IT-013**: Verify the counter file defaults under the XDG state home, that
+  its directory is `0700`, and that a symbolic link in its place is refused
+  rather than written through.
 
 ## Acceptance Criteria *(mandatory)*
 

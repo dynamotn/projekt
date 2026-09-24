@@ -163,42 +163,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   UPDATE_SNAPSHOTS=1 bats test/
   ```
 
-### Fixed
-
-- **`dybatpho::split` matched its delimiter as a glob pattern.** The function
-  documents an *exact* delimiter, but it reached the separator through
-  `${1//$2/…}` with `$2` unquoted, which is pattern position. A delimiter
-  holding `*`, `?` or `[` was therefore matched as a wildcard and the result was
-  silently wrong rather than an error:
-
-  ```sh
-  dybatpho::split "a*b*c" "*"   # was: one empty line.   now: a, b, c
-  dybatpho::split "a[x]b" "[x]" # was: "a[" and "]b".    now: a, b
-  ```
-
-  Splitting now walks the string with `${rest%%"${delimiter}"*}`, so the
-  delimiter is always literal. Two things follow from the rewrite. Empty fields
-  survive, including the trailing ones the old `read`-based version dropped, so
-  `n` delimiters give `n + 1` fields and `a,b,,` splits into four. And the
-  function no longer leaks a global named `arr` into the caller's shell, which
-  it did on every call.
-
-- **Log messages no longer lose their backslashes.** `__dybatpho_log` rendered
-  through `echo -e`, which interprets escapes, so any message carrying a
-  backslash was quietly corrupted — a Windows path, a regular expression, a
-  `sed` script. `dybatpho::info 'C:\new\table'` printed `C:` followed by a
-  newline and a tab. Rendering goes through `printf '%s'` now, and
-  `dybatpho::debug_command` carries a real newline instead of the `\n` it used
-  to rely on `echo -e` expanding.
-
-- **`dybatpho::array_unique` returned its result in Bash's hash order.** It
-  collected values as the keys of an associative array, so deduplicating
-  `1 2 3 4 5` gave back `5 4 3 2 1`, and the order changed with the contents.
-  It keeps the first occurrence of each value in place now, which is what
-  `dybatpho::array_union` already did.
-
-### Changed
-
 - **Boxed output and tables stopped spawning a `python3` per line.** Measuring
   the display width of a string — what aligns a table cell and sizes a box —
   ran a `python3` child *per measured string*. A twenty-row, four-column
@@ -255,6 +219,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`dybatpho::split` matched its delimiter as a glob pattern.** The function
+  documents an *exact* delimiter, but it reached the separator through
+  `${1//$2/…}` with `$2` unquoted, which is pattern position. A delimiter
+  holding `*`, `?` or `[` was therefore matched as a wildcard and the result was
+  silently wrong rather than an error:
+
+  ```sh
+  dybatpho::split "a*b*c" "*"   # was: one empty line.   now: a, b, c
+  dybatpho::split "a[x]b" "[x]" # was: "a[" and "]b".    now: a, b
+  ```
+
+  Splitting now walks the string with `${rest%%"${delimiter}"*}`, so the
+  delimiter is always literal. Two things follow from the rewrite. Empty fields
+  survive, including the trailing ones the old `read`-based version dropped, so
+  `n` delimiters give `n + 1` fields and `a,b,,` splits into four. And the
+  function no longer leaks a global named `arr` into the caller's shell, which
+  it did on every call.
+
+- **Log messages no longer lose their backslashes.** `__dybatpho_log` rendered
+  through `echo -e`, which interprets escapes, so any message carrying a
+  backslash was quietly corrupted — a Windows path, a regular expression, a
+  `sed` script. `dybatpho::info 'C:\new\table'` printed `C:` followed by a
+  newline and a tab. Rendering goes through `printf '%s'` now, and
+  `dybatpho::debug_command` carries a real newline instead of the `\n` it used
+  to rely on `echo -e` expanding.
+
+- **`dybatpho::array_unique` returned its result in Bash's hash order.** It
+  collected values as the keys of an associative array, so deduplicating
+  `1 2 3 4 5` gave back `5 4 3 2 1`, and the order changed with the contents.
+  It keeps the first occurrence of each value in place now, which is what
+  `dybatpho::array_union` already did.
+
 - **A logging test read the real clock on a BusyBox host.** It asserted the
   fallback branch of `__dybatpho_log_timestamp` while stating that neither
   busybox nor GNU `date` was available — which is false on Alpine, where the
@@ -289,6 +285,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `test/conventions.bats` now checks the mode recorded in the index: everything
   under `example/` and `scripts/` is run and must be executable, everything
   under `src/` and `init.sh` is sourced and must not be.
+
+### Security
+
+- **Credentials no longer reach `curl` as command-line arguments.** A process's
+  arguments are readable by every account on the host through
+  `/proc/<pid>/cmdline` — that is what `ps auxww` prints — so
+  `--header "Authorization: Bearer ..."` published the token for as long as the
+  request ran. `forge` did that on every API call, and `ai` did it with the
+  provider API key, on the buffered path and the streaming one.
+
+  `dybatpho::curl_do` now takes that material out of band. Headers listed in
+  `DYBATPHO_CURL_SECRET_HEADERS` go into a config file that `curl` reads with
+  `--config`, created under `umask 077` and removed when the request is over; a
+  body in `DYBATPHO_CURL_SECRET_DATA` goes to `curl` on standard input. Both are
+  declared `local` by the caller, so they are visible to `curl_do` through
+  Bash's dynamic scoping and gone again when it returns. Request bodies moved
+  too: a prompt is not public either.
+
+  `dybatpho::mock_http_payloads` is the matching test-side accessor, because a
+  test still has to be able to say "the token was sent" about something that is
+  deliberately no longer in `dybatpho::mock_calls curl`.
+
+- **The `ai` counter file left a symlink attack open in `/tmp`.** It defaulted to
+  `${TMPDIR:-/tmp}/dybatpho_ai_state_$$`. The name is entirely predictable — the
+  only variable is the pid, which `ps` publishes and which comes from a small
+  space — and the counters are written with a plain `>`, which follows a
+  symbolic link. In a world-writable `/tmp` that is an arbitrary-file-overwrite
+  primitive: another account pre-creates that name as a link to a file of yours,
+  and the next run truncates it.
+
+  The default moved to a `0700` directory under the XDG state home, where no
+  other account can plant anything, and the module now refuses to read or write
+  the counter file when it is a symbolic link, wherever it has been pointed.
+
+- **Cache entries were world-readable.** `dybatpho::cache_set` wrote through
+  `dybatpho::file_write_atomic` under the caller's umask, so on a normal
+  `umask 022` host a new entry landed `0644` in a `0755` directory. An entry
+  holds whatever the caller found expensive to obtain — an API response, a
+  query result — which is not public, and the `ai` module caches provider
+  responses there. Entries are now written `0600` inside a `0700` directory,
+  the same treatment `dybatpho::secret_write_file` already gave a secret.
+
 
 ## [4.0.0] - 2026-09-23
 

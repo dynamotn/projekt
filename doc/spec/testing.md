@@ -289,6 +289,13 @@ dybatpho::unmock_all
   report the fastest, median, and slowest in milliseconds, on stdout and in
   `DYBATPHO_TEST_BENCH_MIN_MS`, `DYBATPHO_TEST_BENCH_MEDIAN_MS`, and
   `DYBATPHO_TEST_BENCH_MAX_MS`, without asserting anything.
+- **FR-028**: The HTTP mock MUST record the request material that does not
+  travel in the argument vector -- the headers of a `--config` file and a body
+  read from standard input -- and `mock_http_payloads` MUST print one such
+  record per request, so that a test can assert a credential or a body was sent
+  even though neither is visible in `mock_calls curl`.
+- **FR-029**: `mock_http_payloads` MUST fail when no mocked request has been
+  made yet, matching `mock_http_calls`.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -359,6 +366,10 @@ dybatpho::unmock_all
   non-zero, and rejects a malformed budget, separator, or empty command.
 - **IT-016**: Verify `benchmark` reports ordered min, median, and max values and
   fails on a run that exits non-zero.
+- **IT-017**: Verify `mock_http_payloads` fails before any request, then, after
+  a request carrying `DYBATPHO_CURL_SECRET_HEADERS` and
+  `DYBATPHO_CURL_SECRET_DATA`, reports both while `mock_calls curl` shows
+  neither.
 
 ## Acceptance Criteria *(mandatory)*
 

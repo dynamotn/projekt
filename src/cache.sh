@@ -184,11 +184,24 @@ function dybatpho::cache_set {
     dybatpho::dry_run write "${path}"
     return 0
   fi
+  # A cache entry is whatever the caller decided was expensive to obtain: an API
+  # response, a token introspection, a query result. None of that is public, and
+  # under the usual `umask 022` a new file lands 0644 and the directory 0755, so
+  # every account on the host could read it. The entry is written under
+  # `umask 077` and the directory is created 0700 instead, which is the same
+  # treatment `dybatpho::secret_write_file` already gives a secret.
+  local previous_umask status=0
+  previous_umask="$(umask)"
+  umask 077
   # `dybatpho::ensure_dir` prints the directory it made sure of, and this
   # function is on the writing end of a pipe: that path would be read as part
   # of what the caller stored.
-  dybatpho::ensure_dir "$(dybatpho::cache_dir)" > /dev/null
-  dybatpho::file_write_atomic "${path}"
+  dybatpho::ensure_dir "$(dybatpho::cache_dir)" 700 > /dev/null || status=$?
+  if ((status == 0)); then
+    dybatpho::file_write_atomic "${path}" || status=$?
+  fi
+  umask "${previous_umask}"
+  return "${status}"
 }
 
 #######################################

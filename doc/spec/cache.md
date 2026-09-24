@@ -122,6 +122,11 @@ fi
 - **FR-011**: Removing an entry or a namespace that is not there MUST succeed.
 - **FR-012**: `DRY_RUN` MUST report a write, a removal, and a clear instead of performing them, and MUST work when the cache directory does not yet exist.
 - **FR-013**: The `ai` module MUST use this module rather than its own copy, keeping `DYBATPHO_AI_CACHE_DIR`, `DYBATPHO_AI_CACHE_TTL`, and `DYBATPHO_AI_CACHE` working as documented.
+- **FR-014**: A cache entry MUST be written `0600` inside a directory created
+  `0700`. An entry holds whatever the caller found expensive to obtain -- an API
+  response, a query result -- which is not public, and under the usual
+  `umask 022` a new file would otherwise be readable by every account on the
+  host.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -156,6 +161,8 @@ fi
 - **IT-013**: Store the same key in two namespaces and verify each reads back its own value and that clearing one leaves the other.
 - **IT-014**: Verify `DRY_RUN` stores nothing when no directory exists, and leaves an existing entry in place for a removal and a clear.
 - **IT-015**: Verify the `ai` module still answers from its cache and still clears it, through its own documented environment variables.
+- **IT-016**: Verify a stored entry is `0600` and its directory `0700`, under a
+  permissive `umask`.
 
 ## Acceptance Criteria *(mandatory)*
 

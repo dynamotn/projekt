@@ -45,6 +45,21 @@ declare -gA DYBATPHO_HTTP_HEADERS=()
 DYBATPHO_HTTP_STATUS=""
 DYBATPHO_HTTP_BODY_FILE=""
 
+# Request material that must not reach `curl`'s command line. A process's
+# arguments are world-readable through `/proc/<pid>/cmdline`, which is what
+# `ps auxww` prints, so an `Authorization:` header passed as `--header` is
+# readable by every other account on the host for as long as the request runs.
+#
+# `dybatpho::curl_do` moves anything listed here out of the argument vector: the
+# headers into a private config file that `curl` reads with `--config`, and the
+# body onto `curl`'s standard input. Both are declared with `local -a` /`local`
+# by the caller, so Bash's dynamic scoping makes them visible to `curl_do` and
+# removes them again when the caller returns.
+# @env DYBATPHO_CURL_SECRET_HEADERS array Headers to pass out of band, as `Name: value`
+declare -ga DYBATPHO_CURL_SECRET_HEADERS=()
+# @env DYBATPHO_CURL_SECRET_DATA string Request body to pass on stdin instead of in an argument
+DYBATPHO_CURL_SECRET_DATA=""
+
 # Per-key in-memory state used by `dybatpho::circuit_breaker`.
 declare -gA DYBATPHO_CIRCUIT_FAILURES=()
 declare -gA DYBATPHO_CIRCUIT_OPENED_AT=()
@@ -58,6 +73,62 @@ __DYBATPHO_URL_REGEX='^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)([^?#]*)(\?([^#]*))?
 
 # One group of an IPv6 address: one to four hexadecimal digits.
 __DYBATPHO_IPV6_GROUP_REGEX='^[0-9A-Fa-f]{1,4}$'
+
+#######################################
+# @description Escape a value for a double-quoted `curl` config parameter.
+#   `curl` reads a config file as `name = "value"`, where the value takes
+#   backslash escapes, so a backslash or a quote inside a header has to be
+#   escaped or it ends the value early.
+# @arg $1 string Raw value
+# @stdout The escaped value, without its surrounding quotes
+#######################################
+function __dybatpho_network_config_escape {
+  local value="${1-}"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\t'/\\t}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\n'/\\n}"
+  printf '%s' "${value}"
+}
+
+#######################################
+# @description Write the secret headers of the current request into a private
+#   config file for `curl --config`.
+#
+#   The file is created under `umask 077` before anything is written to it, so
+#   the credential is never on disk in a mode another account could read, and it
+#   is removed as soon as the request is over. The path is an argument, which is
+#   public; the contents are not.
+# @arg $1 string Name of the variable receiving the config file path
+# @set The named variable
+# @exitcode 0 A config file was written, or there was nothing to write
+# @exitcode 1 Stop the script when the file cannot be created
+#######################################
+function __dybatpho_network_secret_config {
+  local __config_out_name
+  dybatpho::expect_args __config_out_name -- "$@"
+  local -n __config_out="${__config_out_name}"
+  __config_out=""
+
+  ((${#DYBATPHO_CURL_SECRET_HEADERS[@]})) || return 0
+
+  local previous_umask path header
+  previous_umask="$(umask)"
+  umask 077
+  path="$(mktemp "${TMPDIR:-/tmp}/dybatpho_curl_XXXXXXXX")" || {
+    umask "${previous_umask}"
+    dybatpho::die "${FUNCNAME[1]}: Unable to create a private curl config file"
+  }
+  umask "${previous_umask}"
+
+  for header in "${DYBATPHO_CURL_SECRET_HEADERS[@]}"; do
+    [[ -n "${header}" ]] || continue
+    printf 'header = "%s"\n' "$(__dybatpho_network_config_escape "${header}")" >> "${path}"
+  done
+
+  __config_out="${path}"
+}
 
 #######################################
 # @description Get description of HTTP status code
@@ -181,6 +252,18 @@ function dybatpho::curl_do {
   local code="" retry_after delay attempt=0
   local header_file
   header_file=$(mktemp) || dybatpho::die "Unable to create temporary HTTP header file"
+
+  # Credentials and request bodies stay out of the argument vector; see
+  # DYBATPHO_CURL_SECRET_HEADERS above for why.
+  local secret_config=""
+  __dybatpho_network_secret_config secret_config
+  local -a secret_args=()
+  [[ -n "${secret_config}" ]] && secret_args+=(--config "${secret_config}")
+  local body_on_stdin=false
+  if [[ -n "${DYBATPHO_CURL_SECRET_DATA}" ]]; then
+    secret_args+=(--data-binary @-)
+    body_on_stdin=true
+  fi
   # Keep the body path owned by the caller; only response headers are temporary.
   local __dybatpho_http_started=""
   if declare -F __dybatpho_metrics_key > /dev/null; then
@@ -190,34 +273,40 @@ function dybatpho::curl_do {
     local curl_args=(-fsSL -D "${header_file}" -w '%{http_code}' -o "${output}")
     [[ -n "${DYBATPHO_CURL_CONNECT_TIMEOUT}" ]] && curl_args+=(--connect-timeout "${DYBATPHO_CURL_CONNECT_TIMEOUT}")
     [[ -n "${DYBATPHO_CURL_TIMEOUT}" ]] && curl_args+=(--max-time "${DYBATPHO_CURL_TIMEOUT}")
+    curl_args+=(${secret_args[@]+"${secret_args[@]}"})
     curl_args+=("$@")
 
     : > "${header_file}"
-    if code=$(command curl "${curl_args[@]}" "${url}"); then
-      :
+    if [[ "${body_on_stdin}" == true ]]; then
+      code=$(command curl "${curl_args[@]}" "${url}" <<< "${DYBATPHO_CURL_SECRET_DATA}") || {
+        code="000"
+        dybatpho::error "Error when access ${url}"
+      }
     else
-      code="000"
-      dybatpho::error "Error when access ${url}"
+      code=$(command curl "${curl_args[@]}" "${url}") || {
+        code="000"
+        dybatpho::error "Error when access ${url}"
+      }
     fi
 
     local code_description
     code_description=$(__dybatpho_network_get_http_code "${code}")
     dybatpho::debug "Received HTTP status: ${code_description}"
     if [[ "${code}" =~ ^2[0-9][0-9]$ ]]; then
-      rm -f "${header_file}"
+      rm -f "${header_file}" ${secret_config:+"${secret_config}"}
       break
     elif [[ "${code}" =~ ^4[0-9][0-9]$ ]]; then
       case "${code}" in
         408 | 425 | 429) ;; # kcov(skip)
         *)
-          rm -f "${header_file}"
+          rm -f "${header_file}" ${secret_config:+"${secret_config}"}
           break
           ;;
       esac
     fi
     if ((attempt >= DYBATPHO_CURL_MAX_RETRIES)); then
       dybatpho::warn "No more retries left to run curl ${url}."
-      rm -f "${header_file}"
+      rm -f "${header_file}" ${secret_config:+"${secret_config}"}
       break
     fi
 

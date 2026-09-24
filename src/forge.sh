@@ -387,11 +387,20 @@ function dybatpho::forge_request {
 
   local -a args=(
     --request "${method}"
-    --header "$(__dybatpho_forge_auth_header "${kind}" "${token}")"
     --header "Accept: application/json"
   )
+
+  # The token goes to curl out of band rather than as `--header`, which would
+  # publish it in `/proc/<pid>/cmdline` for the life of the request. `local`
+  # scoping means it is visible to `dybatpho::curl_do` and gone on return.
+  local -a DYBATPHO_CURL_SECRET_HEADERS=(
+    "$(__dybatpho_forge_auth_header "${kind}" "${token}")"
+  )
+  local DYBATPHO_CURL_SECRET_DATA=""
   if [[ -n "${body}" ]]; then
-    args+=(--header "Content-Type: application/json" --data "${body}")
+    args+=(--header "Content-Type: application/json")
+    # shellcheck disable=SC2034 # read by dybatpho::curl_do through dynamic scoping
+    DYBATPHO_CURL_SECRET_DATA="${body}"
   fi
 
   dybatpho::debug "forge: ${method} ${url}"
@@ -672,9 +681,12 @@ function dybatpho::forge_release_upload {
       fi
       upload_url="${upload_url}/repos/${repo}/releases/${release}/assets?name=$(dybatpho::url_encode "${name}")"
 
+      # The token is handed over out of band; see DYBATPHO_CURL_SECRET_HEADERS.
+      local -a DYBATPHO_CURL_SECRET_HEADERS=(
+        "$(__dybatpho_forge_auth_header github "${token}")"
+      )
       dybatpho::curl_request "${upload_url}" "${response}" \
         --request POST \
-        --header "$(__dybatpho_forge_auth_header github "${token}")" \
         --header "Content-Type: application/octet-stream" \
         --data-binary "@${file}" \
         || dybatpho::die "Could not upload ${name} (HTTP ${DYBATPHO_HTTP_STATUS})"
@@ -686,9 +698,13 @@ function dybatpho::forge_release_upload {
       package_url="${package_url}/packages/generic/$(dybatpho::url_encode "$(dybatpho::path_basename "${repo}")")"
       package_url="${package_url}/$(dybatpho::url_encode "${tag}")/$(dybatpho::url_encode "${name}")"
 
+      # The token is handed over out of band; see DYBATPHO_CURL_SECRET_HEADERS.
+      # shellcheck disable=SC2034 # read by dybatpho::curl_do through dynamic scoping
+      local -a DYBATPHO_CURL_SECRET_HEADERS=(
+        "$(__dybatpho_forge_auth_header gitlab "${token}")"
+      )
       dybatpho::curl_request "${package_url}" /dev/null \
         --request PUT \
-        --header "$(__dybatpho_forge_auth_header gitlab "${token}")" \
         --upload-file "${file}" \
         || dybatpho::die "Could not upload ${name} (HTTP ${DYBATPHO_HTTP_STATUS})"
 

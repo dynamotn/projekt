@@ -77,6 +77,7 @@ Only programming mistakes, such as a missing argument, are fatal.
 - [`dybatpho::unmock_command`](#dybatphounmock_command) — Remove one mocked command so the real command is used again.
 - [`dybatpho::mock_http`](#dybatphomock_http) — Register a canned HTTP response for URLs matching a pattern.
 - [`dybatpho::mock_http_calls`](#dybatphomock_http_calls) — Print every URL requested through the HTTP mock, oldest first.
+- [`dybatpho::mock_http_payloads`](#dybatphomock_http_payloads) — Print the request material of every mocked HTTP call that did not travel in the argument vector, newest last, one request per line. Credentials and request bodies are deliberately kept off `curl`'s command line, because arguments are readable by every account on the host through `/proc/<pid>/cmdline`. They go into a `--config` file and onto standard input instead. That is the right thing for a running script and an awkward thing for a test, which still has to be able to say "the token was sent" and "the body carried this field" -- so the mock records them here.
 - [`dybatpho::assert_http_called`](#dybatphoassert_http_called) — Assert that a URL matching a pattern was requested through the HTTP mock.
 - [`dybatpho::fixture_dir`](#dybatphofixture_dir) — Create a temporary fixture directory that is removed when the shell exits.
 - [`dybatpho::fixture_file`](#dybatphofixture_file) — Create a temporary fixture file holding the given content.
@@ -1018,6 +1019,50 @@ _Function has no arguments._
 **🚦 Exit codes**
 
 - `1`: No HTTP request was made through the mock
+
+
+---
+
+### `dybatpho::mock_http_payloads`
+
+Print the request material of every mocked HTTP call that did not
+  travel in the argument vector, newest last, one request per line.
+
+
+  Credentials and request bodies are deliberately kept off `curl`'s command
+  line, because arguments are readable by every account on the host through
+  `/proc/<pid>/cmdline`. They go into a `--config` file and onto standard
+  input instead. That is the right thing for a running script and an awkward
+  thing for a test, which still has to be able to say "the token was sent" and
+  "the body carried this field" -- so the mock records them here.
+
+**🧪 Example**
+
+```bash
+dybatpho::mock_http "api.github.com" 201 '{"number":12}'
+dybatpho::forge_issue_create "Nightly failing" "It broke"
+dybatpho::mock_http_payloads   # header = "Authorization: Bearer ..." {"title":...}
+
+```
+
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`DYBATPHO_TEST_MOCK_DIR`** | string | Directory the mocks live in |
+
+**📤 Output on stdout**
+
+- One line per recorded request
+
+**🚦 Exit codes**
+
+- `0`: Requests were recorded
+- `1`: No mocked request has been made yet
+
+**🔗 See also**
+
+- [- `dybatpho::mock_http` - `dybatpho::mock_http_calls](#dybatphomock_http-dybatphomock_http_calls)
 
 
 ---

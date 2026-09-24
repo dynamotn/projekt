@@ -223,6 +223,16 @@ dybatpho::circuit_breaker api.example.test \
   rather than as text spliced into the script it runs.
 - **FR-024**: The module MUST expose a wait that retries a port probe until it succeeds or a
   configurable budget runs out, giving no single attempt more time than the budget has left.
+- **FR-025**: Credentials MUST NOT be passed to `curl` as command-line
+  arguments. A process's arguments are readable by every account on the host
+  through `/proc/<pid>/cmdline`, so the module MUST accept them through
+  `DYBATPHO_CURL_SECRET_HEADERS` and hand them over in a `--config` file.
+- **FR-025a**: That config file MUST be created under `umask 077`, so the
+  credential is never on disk in a mode another account can read, and MUST be
+  removed once the request is over.
+- **FR-026**: A request body given through `DYBATPHO_CURL_SECRET_DATA` MUST
+  reach `curl` on standard input rather than as an argument, for the same
+  reason.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -307,6 +317,9 @@ dybatpho::circuit_breaker api.example.test \
   budget, and that both helpers reject a port or a timeout that is not a number.
 - **IT-011**: Verify a circuit breaker stays closed under the failure threshold, opens and
   short-circuits calls once the threshold is reached, and closes again after a successful call.
+- **IT-024**: Verify a request carrying `DYBATPHO_CURL_SECRET_HEADERS` and
+  `DYBATPHO_CURL_SECRET_DATA` sends both, while neither appears among the
+  arguments the mocked `curl` was called with.
 
 ## Acceptance Criteria *(mandatory)*
 

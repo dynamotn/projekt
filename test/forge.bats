@@ -36,6 +36,14 @@ curl_call() {
   dybatpho::mock_calls curl | sed -n "${1}p"
 }
 
+# @description Print the credentials and body of the Nth recorded call. These
+#   are deliberately kept out of the argument vector, so they are not in
+#   `curl_call`; see `dybatpho::mock_http_payloads`.
+# @arg $1 number 1-based call index
+curl_payload() {
+  dybatpho::mock_http_payloads | sed -n "${1}p"
+}
+
 # ---------------------------------------------------------------------------
 # Detection
 # ---------------------------------------------------------------------------
@@ -174,7 +182,7 @@ curl_call() {
   run dybatpho::forge_request GET "issues"
   assert_success
   dybatpho::assert_http_called "https://api.github.com/repos/acme/widget/issues"
-  assert_regex "$(curl_call 1)" "Authorization: Bearer test-token"
+  assert_regex "$(curl_payload 1)" "Authorization: Bearer test-token"
 }
 
 @test "dybatpho::forge_request URL-encodes the project path on GitLab" {
@@ -184,7 +192,7 @@ curl_call() {
   run dybatpho::forge_request GET "issues"
   assert_success
   dybatpho::assert_http_called "https://gitlab.com/api/v4/projects/acme%2Fgroup%2Fwidget/issues"
-  assert_regex "$(curl_call 1)" "PRIVATE-TOKEN: test-token"
+  assert_regex "$(curl_payload 1)" "PRIVATE-TOKEN: test-token"
 }
 
 @test "dybatpho::forge_request sends a JSON body only when one is given" {
@@ -192,7 +200,7 @@ curl_call() {
 
   dybatpho::forge_request POST "issues" '{"title":"x"}'
   assert_regex "$(curl_call 1)" "Content-Type: application/json"
-  assert_regex "$(curl_call 1)" '\{"title":"x"\}'
+  assert_regex "$(curl_payload 1)" '\{"title":"x"\}'
 
   dybatpho::forge_request GET "issues"
   refute_regex "$(curl_call 2)" "Content-Type: application/json"
@@ -239,15 +247,15 @@ curl_call() {
   dybatpho::mock_http "api.github.com" 201 '{"number":12}'
 
   assert_equal "$(dybatpho::forge_issue_create "Title" "Body text")" "12"
-  assert_regex "$(curl_call 1)" '"title":"Title"'
-  assert_regex "$(curl_call 1)" '"body":"Body text"'
+  assert_regex "$(curl_payload 1)" '"title":"Title"'
+  assert_regex "$(curl_payload 1)" '"body":"Body text"'
 }
 
 @test "dybatpho::forge_issue_create sends GitHub labels as a JSON array" {
   dybatpho::mock_http "api.github.com" 201 '{"number":13}'
 
   dybatpho::forge_issue_create "Title" "Body" "ci, bug"
-  assert_regex "$(curl_call 1)" '"labels":\["ci","bug"\]'
+  assert_regex "$(curl_payload 1)" '"labels":\["ci","bug"\]'
 }
 
 @test "dybatpho::forge_issue_create uses description and a label string on GitLab" {
@@ -255,8 +263,8 @@ curl_call() {
   dybatpho::mock_http "gitlab.com" 201 '{"iid":21}'
 
   assert_equal "$(dybatpho::forge_issue_create "Title" "Body" "ci,bug")" "21"
-  assert_regex "$(curl_call 1)" '"description":"Body"'
-  assert_regex "$(curl_call 1)" '"labels":"ci,bug"'
+  assert_regex "$(curl_payload 1)" '"description":"Body"'
+  assert_regex "$(curl_payload 1)" '"labels":"ci,bug"'
 }
 
 @test "dybatpho::forge_issue_create fails loudly when the forge rejects it" {
@@ -271,7 +279,7 @@ curl_call() {
   dybatpho::mock_http "api.github.com" 201 '{}'
   dybatpho::forge_issue_comment 4 "a note"
   dybatpho::assert_http_called "/repos/acme/widget/issues/4/comments"
-  assert_regex "$(curl_call 1)" '"body":"a note"'
+  assert_regex "$(curl_payload 1)" '"body":"a note"'
 
   dybatpho::unmock_all
   use_gitlab
@@ -351,8 +359,8 @@ curl_call() {
   dybatpho::mock_http "api.github.com" 201 '{"id":9002}'
 
   assert_equal "$(dybatpho::forge_release_create "v1.3.0" "v1.3.0" "notes here")" "9002"
-  assert_regex "$(curl_call 1)" '"tag_name":"v1.3.0"'
-  assert_regex "$(curl_call 1)" '"body":"notes here"'
+  assert_regex "$(curl_payload 1)" '"tag_name":"v1.3.0"'
+  assert_regex "$(curl_payload 1)" '"body":"notes here"'
 }
 
 @test "dybatpho::forge_release_create uses description on GitLab and defaults the name" {
@@ -360,22 +368,22 @@ curl_call() {
   dybatpho::mock_http "gitlab.com" 201 '{"tag_name":"v1.3.0"}'
 
   assert_equal "$(dybatpho::forge_release_create "v1.3.0")" "v1.3.0"
-  assert_regex "$(curl_call 1)" '"name":"v1.3.0"'
-  assert_regex "$(curl_call 1)" '"description":""'
+  assert_regex "$(curl_payload 1)" '"name":"v1.3.0"'
+  assert_regex "$(curl_payload 1)" '"description":""'
 }
 
 @test "dybatpho::forge_release_create marks a GitHub release as a draft when asked" {
   dybatpho::mock_http "api.github.com" 201 '{"id":9003}'
 
   assert_equal "$(dybatpho::forge_release_create "v1.3.0" "v1.3.0" "notes" true)" "9003"
-  assert_regex "$(curl_call 1)" '"draft":true'
+  assert_regex "$(curl_payload 1)" '"draft":true'
 }
 
 @test "dybatpho::forge_release_create publishes rather than drafting by default" {
   dybatpho::mock_http "api.github.com" 201 '{"id":9004}'
 
   dybatpho::forge_release_create "v1.3.0"
-  refute_regex "$(curl_call 1)" '"draft"'
+  refute_regex "$(curl_payload 1)" '"draft"'
 }
 
 @test "dybatpho::forge_release_create refuses a draft on GitLab rather than publishing one" {

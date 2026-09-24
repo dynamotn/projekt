@@ -39,9 +39,13 @@ the resolver does.
 | **`DYBATPHO_PORT_TIMEOUT`** | number | Seconds `dybatpho::port_open` waits for a connection (default `5`) |
 | **`DYBATPHO_WAIT_PORT_TIMEOUT`** | number | Seconds `dybatpho::wait_port` keeps trying before giving up (default `30`) |
 | **`DYBATPHO_WAIT_PORT_INTERVAL`** | number | Seconds `dybatpho::wait_port` sleeps between attempts (default `1`) |
+| **`DYBATPHO_CURL_SECRET_HEADERS`** | array | Headers to pass out of band, as `Name: value` |
+| **`DYBATPHO_CURL_SECRET_DATA`** | string | Request body to pass on stdin instead of in an argument |
 
 ### 🚀 Highlights
 
+- [`__dybatpho_network_config_escape`](#__dybatpho_network_config_escape) — Escape a value for a double-quoted `curl` config parameter. `curl` reads a config file as `name = "value"`, where the value takes backslash escapes, so a backslash or a quote inside a header has to be escaped or it ends the value early.
+- [`__dybatpho_network_secret_config`](#__dybatpho_network_secret_config) — Write the secret headers of the current request into a private config file for `curl --config`. The file is created under `umask 077` before anything is written to it, so the credential is never on disk in a mode another account could read, and it is removed as soon as the request is over. The path is an argument, which is public; the contents are not.
 - [`__dybatpho_network_get_http_code`](#__dybatpho_network_get_http_code) — Get description of HTTP status code
 - [`dybatpho::curl_do`](#dybatphocurl_do) — Transferring data with URL by curl
 - [`dybatpho::curl_download`](#dybatphocurl_download) — Download file
@@ -106,6 +110,55 @@ the resolver does.
 
 <a id="reference"></a>
 ## 📚 Reference
+
+### `__dybatpho_network_config_escape`
+
+Escape a value for a double-quoted `curl` config parameter.
+  `curl` reads a config file as `name = "value"`, where the value takes
+  backslash escapes, so a backslash or a quote inside a header has to be
+  escaped or it ends the value early.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Raw value |
+
+**📤 Output on stdout**
+
+- The escaped value, without its surrounding quotes
+
+
+---
+
+### `__dybatpho_network_secret_config`
+
+Write the secret headers of the current request into a private
+  config file for `curl --config`.
+
+
+  The file is created under `umask 077` before anything is written to it, so
+  the credential is never on disk in a mode another account could read, and it
+  is removed as soon as the request is over. The path is an argument, which is
+  public; the contents are not.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the variable receiving the config file path |
+
+**🧩 Variable sets**
+
+- **`The`**: named variable
+
+**🚦 Exit codes**
+
+- `0`: A config file was written, or there was nothing to write
+- `1`: Stop the script when the file cannot be created
+
+
+---
 
 ### `__dybatpho_network_get_http_code`
 

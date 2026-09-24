@@ -162,3 +162,15 @@ age_entry() {
   DRY_RUN=true dybatpho::cache_clear
   run -0 dybatpho::cache_has survivor 3600
 }
+
+@test "an entry is private to its owner even under a permissive umask" {
+  local previous
+  previous="$(umask)"
+  umask 022
+  printf 'expensive answer\n' | dybatpho::cache_set private
+  umask "${previous}"
+
+  # An entry holds whatever was expensive to obtain, which is not public.
+  dybatpho::assert_file_mode "$(dybatpho::cache_path private)" 600
+  dybatpho::assert_file_mode "$(dybatpho::cache_dir)" 700
+}

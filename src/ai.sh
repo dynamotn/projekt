@@ -121,8 +121,17 @@ DYBATPHO_AI_OLLAMA_MODEL=${DYBATPHO_AI_OLLAMA_MODEL:-llama3.2}
 # parent. `$$` stays the top-level shell's pid inside a subshell, so every part
 # of one script run shares the same file.
 #
-# @env DYBATPHO_AI_STATE_FILE string File the call and token counters are kept in
-DYBATPHO_AI_STATE_FILE=${DYBATPHO_AI_STATE_FILE:-${TMPDIR:-/tmp}/dybatpho_ai_state_$$}
+# The default lives under the XDG state directory rather than in `/tmp`. The
+# name is `dybatpho_ai_state_<pid>`, which is entirely predictable -- the pid is
+# public through `ps` and comes from a small space -- and the counters are
+# written with a plain `>`, which follows a symbolic link. In a world-writable
+# `/tmp` that is an arbitrary-file-overwrite primitive: another account
+# pre-creates that name as a link to a file of yours and the next run truncates
+# it. A directory only you can write closes that off, and
+# `__dybatpho_ai_state_prepare` refuses to follow a link even there.
+#
+# @env DYBATPHO_AI_STATE_FILE string File the call and token counters are kept in; resolved on first use
+DYBATPHO_AI_STATE_FILE=${DYBATPHO_AI_STATE_FILE:-}
 
 # Tool registry used by `dybatpho::ai_run`, keyed by tool name.
 declare -gA DYBATPHO_AI_TOOL_DESCRIPTION=()
@@ -172,7 +181,45 @@ function __dybatpho_ai_state_cleanup_once {
   [[ "${BASHPID}" == "$$" ]] || return 0
   [[ -n "${__dybatpho_ai_state_cleanup-}" ]] && return 0
   __dybatpho_ai_state_cleanup=1
-  dybatpho::cleanup_file_on_exit "${DYBATPHO_AI_STATE_FILE}"
+  dybatpho::cleanup_file_on_exit "$(__dybatpho_ai_state_path)"
+}
+
+#######################################
+# @description Resolve the counter file, defaulting to a private directory under
+#   the XDG state home rather than to a predictable name in a shared `/tmp`.
+#
+#   The directory is created 0700, so no other account can plant anything in it.
+#   Resolution is lazy because working it out needs `HOME`, and a module must
+#   not fail at source time on a host that has none.
+# @env DYBATPHO_AI_STATE_FILE string Overrides the default when set
+# @set DYBATPHO_AI_STATE_FILE
+# @stdout Path of the counter file
+#######################################
+function __dybatpho_ai_state_path {
+  if [[ -z "${DYBATPHO_AI_STATE_FILE}" ]]; then
+    local directory
+    directory="$(dybatpho::xdg_state_dir dybatpho)"
+    dybatpho::ensure_dir "${directory}" 700 > /dev/null
+    DYBATPHO_AI_STATE_FILE="${directory}/ai_state_$$"
+  fi
+  printf '%s\n' "${DYBATPHO_AI_STATE_FILE}"
+}
+
+#######################################
+# @description Return the counter file, refusing to use it through a symbolic
+#   link. Writing the counters is a plain redirection, which follows a link and
+#   truncates whatever is on the other end, so a link here is either an attack
+#   or a mistake; either way it is not something to write through.
+# @stdout Path of the counter file
+# @exitcode 0 The path is safe to write
+# @exitcode 1 Stop the script when the path is a symbolic link
+#######################################
+function __dybatpho_ai_state_prepare {
+  local path
+  path="$(__dybatpho_ai_state_path)"
+  [[ -L "${path}" ]] \
+    && dybatpho::die "ai: refusing to use ${path}, it is a symbolic link"
+  printf '%s\n' "${path}"
 }
 
 #######################################
@@ -181,11 +228,13 @@ function __dybatpho_ai_state_cleanup_once {
 # @stdout Counter JSON
 #######################################
 function __dybatpho_ai_state_read {
-  if [[ ! -f "${DYBATPHO_AI_STATE_FILE}" ]]; then
+  local path
+  path="$(__dybatpho_ai_state_prepare)" || return 1
+  if [[ ! -f "${path}" ]]; then
     printf '%s\n' '{"calls":0,"total_input":0,"total_output":0,"last_input":0,"last_output":0,"last_model":"","last_stop_reason":""}' \
-      > "${DYBATPHO_AI_STATE_FILE}"
+      > "${path}"
   fi
-  cat "${DYBATPHO_AI_STATE_FILE}"
+  cat "${path}"
 }
 
 #######################################
@@ -193,9 +242,10 @@ function __dybatpho_ai_state_read {
 # @arg $1 string Counter JSON
 #######################################
 function __dybatpho_ai_state_write {
-  local document
+  local document path
   dybatpho::expect_args document -- "$@"
-  printf '%s\n' "${document}" > "${DYBATPHO_AI_STATE_FILE}"
+  path="$(__dybatpho_ai_state_prepare)" || return 1
+  printf '%s\n' "${document}" > "${path}"
 }
 
 #######################################
@@ -723,16 +773,19 @@ function __dybatpho_ai_http {
 
   local url base
   base=$(__dybatpho_ai_base_url "${provider}")
+  # The API key and the prompt both go to curl out of band: an argument is
+  # world-readable through `/proc/<pid>/cmdline` for the life of the request.
   local -a headers=()
+  local -a DYBATPHO_CURL_SECRET_HEADERS=()
   case "${provider}" in
     anthropic)
       url="${base}/v1/messages"
-      headers+=(--header "x-api-key: $(__dybatpho_ai_api_key anthropic)")
+      DYBATPHO_CURL_SECRET_HEADERS+=("x-api-key: $(__dybatpho_ai_api_key anthropic)")
       headers+=(--header "anthropic-version: ${DYBATPHO_AI_ANTHROPIC_VERSION}")
       ;;
     openai)
       url="${base}/chat/completions"
-      headers+=(--header "Authorization: Bearer $(__dybatpho_ai_api_key openai)")
+      DYBATPHO_CURL_SECRET_HEADERS+=("Authorization: Bearer $(__dybatpho_ai_api_key openai)")
       ;;
     ollama)
       url="${base}/api/chat"
@@ -749,12 +802,13 @@ function __dybatpho_ai_http {
   local response_file
   dybatpho::create_temp response_file ".json" "ai_response"
 
+  # shellcheck disable=SC2034 # read by dybatpho::curl_do through dynamic scoping
+  local DYBATPHO_CURL_SECRET_DATA="${payload}"
   dybatpho::debug "ai: POST ${url}"
   dybatpho::curl_json "${url}" "${response_file}" \
     --request POST \
     --max-time "${DYBATPHO_AI_TIMEOUT}" \
-    "${headers[@]}" \
-    --data-binary "${payload}" || return $?
+    ${headers[@]+"${headers[@]}"} || return $?
 
   body=$(cat "${response_file}")
   __dybatpho_ai_cache_write "${cache_key}" "${body}"
@@ -1154,16 +1208,20 @@ function dybatpho::ai_stream {
   base=$(__dybatpho_ai_base_url "${provider}")
 
   local -a headers=()
+  # Streaming talks to curl directly rather than through `dybatpho::curl_do`, so
+  # it builds the same private config file itself: the key must not become an
+  # argument, where `/proc/<pid>/cmdline` publishes it to the whole host.
+  local -a DYBATPHO_CURL_SECRET_HEADERS=()
   case "${provider}" in
     anthropic)
       url="${base}/v1/messages"
-      headers+=(--header "x-api-key: $(__dybatpho_ai_api_key anthropic)")
+      DYBATPHO_CURL_SECRET_HEADERS+=("x-api-key: $(__dybatpho_ai_api_key anthropic)")
       headers+=(--header "anthropic-version: ${DYBATPHO_AI_ANTHROPIC_VERSION}")
       payload=$(dybatpho::json_eval "${payload}" '.stream = true')
       ;;
     openai)
       url="${base}/chat/completions"
-      headers+=(--header "Authorization: Bearer $(__dybatpho_ai_api_key openai)")
+      DYBATPHO_CURL_SECRET_HEADERS+=("Authorization: Bearer $(__dybatpho_ai_api_key openai)")
       payload=$(dybatpho::json_eval "${payload}" '.stream = true')
       ;;
     ollama)
@@ -1192,17 +1250,24 @@ function dybatpho::ai_stream {
       ;;
   esac
 
+  local stream_config=""
+  __dybatpho_network_secret_config stream_config
+  local -a stream_args=()
+  [[ -n "${stream_config}" ]] && stream_args+=(--config "${stream_config}")
+
   local line data
   # Server-sent events prefix every payload with `data: `; Ollama streams bare
   # JSON objects. Both are handled by stripping an optional prefix per line.
+  # The payload arrives on stdin, so it is not an argument either.
   curl --silent --no-buffer --show-error \
     --request POST \
     --max-time "${DYBATPHO_AI_TIMEOUT}" \
     --header "Content-Type: application/json" \
     --header "Accept: text/event-stream" \
-    "${headers[@]}" \
-    --data-binary "${payload}" \
-    "${url}" \
+    ${headers[@]+"${headers[@]}"} \
+    ${stream_args[@]+"${stream_args[@]}"} \
+    --data-binary @- \
+    "${url}" <<< "${payload}" \
     | while IFS= read -r line; do
       [[ -z "${line}" ]] && continue
       data="${line#data: }"
@@ -1210,6 +1275,7 @@ function dybatpho::ai_stream {
       [[ "${data}" == event:* ]] && continue
       __dybatpho_ai_stream_chunk "${data}" "${filter}"
     done
+  [[ -n "${stream_config}" ]] && rm -f "${stream_config}"
   printf '\n'
 }
 

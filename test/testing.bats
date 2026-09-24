@@ -473,6 +473,30 @@ setup() {
   assert_output --partial "https://example.test/data"
 }
 
+@test "dybatpho::mock_http_payloads records what never reached the argument vector" {
+  export DYBATPHO_CURL_MAX_RETRIES=0
+  dybatpho::mock_http "example.test/secure" 200 'ok'
+
+  # Nothing sent out of band yet.
+  run dybatpho::mock_http_payloads
+  assert_failure
+
+  local -a DYBATPHO_CURL_SECRET_HEADERS=("Authorization: Bearer shhh-token")
+  local DYBATPHO_CURL_SECRET_DATA='{"field":"value"}'
+  dybatpho::curl_do "https://example.test/secure" "${BATS_TEST_TMPDIR}/out"
+
+  # The credential and the body were both sent, and neither was an argument.
+  run dybatpho::mock_http_payloads
+  assert_success
+  assert_output --partial 'Authorization: Bearer shhh-token'
+  assert_output --partial '{"field":"value"}'
+
+  run dybatpho::mock_calls curl
+  assert_success
+  refute_output --partial "shhh-token"
+  refute_output --partial '"field":"value"'
+}
+
 @test "dybatpho::assert_http_called reports unmatched and absent requests" {
   run --separate-stderr dybatpho::assert_http_called "never.example.test"
   assert_failure
