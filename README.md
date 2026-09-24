@@ -11,6 +11,8 @@
 
 ```bash
 pj backend-api                  # jump, from anywhere, in any shell
+pj bak                          # half a name is enough
+pj                              # or choose from a list
 pj oss-some-library             # workspaces get a prefix, so names never collide
 pj -                            # back where you came from, like `cd -`
 projekt folder sync             # clone every repo your config declares
@@ -284,6 +286,62 @@ threat model, incident report, daily note, zettel, budget, invoice
 ([examples/README.md](examples/README.md)). See [doc/templates.md](doc/templates.md)
 and [doc/boilerplates.md](doc/boilerplates.md).
 
+## 🎯 Half a name is enough
+
+What you type is tried as the name, then as a prefix, then as anything inside
+it, then letter by letter:
+
+```bash
+pj backend-api    # the name
+pj backend        # a prefix
+pj gateway        # somewhere in the middle
+pj bak            # b, a, k — in order, in backend-api
+pj                # no idea? choose from a list
+```
+
+**A whole name is never reinterpreted.** If what you typed is a project, that is
+where you go, however many other names contain it — nothing typed in full can
+take you somewhere unexpected.
+
+When several match equally well, the project you have been in most recently and
+most often wins; failing that the shorter name, which is the tighter match.
+`--exact` turns it all off for a script that would rather be told it was wrong
+than sent somewhere close:
+
+```bash
+projekt folder get backend --exact   # no, that is not a project
+```
+
+### Choosing from a list
+
+`pj` with no argument, or `projekt folder select`, asks:
+
+```bash
+pj                          # all of them
+projekt folder select api   # narrowed first
+projekt folder select -t work
+```
+
+`fzf` or `sk` is used when one is on PATH; `$PROJEKT_PICKER` or `--with` names
+another — anything that reads lines and writes one back. Otherwise the projects
+are numbered and the answer is read from the terminal. One candidate needs no
+question, and neither does a query that is already a whole name.
+
+Only the path is printed and the list is drawn on standard error, so
+`cd "$(projekt folder select)"` does what it looks like it does.
+
+Want it on a key? Bind it yourself — nothing here touches your keymap:
+
+```bash
+# ~/.bashrc
+bind -x '"\C-g": "cd \"$(projekt folder select)\""'
+```
+
+```fish
+# ~/.config/fish/config.fish
+bind \cg 'cd (projekt folder select); commandline -f repaint'
+```
+
 ## 🩹 Across every project
 
 `folder status` looks at every folder it can reach — workspace children and
@@ -330,7 +388,8 @@ recent [--limit N|--clear]` lists them. The history lives in
 | --- | --- |
 | [`folder add`](doc/projekt_folder_add.md) | Register a folder or workspace; `--discover` reads its repos off disk |
 | [`folder list`](doc/projekt_folder_list.md) | List every project folder, as a table, JSON or TSV |
-| [`folder get`](doc/projekt_folder_get.md) | Resolve a short name to a path — what `pj` calls |
+| [`folder get`](doc/projekt_folder_get.md) | Resolve a name to a path, loosely — what `pj` calls |
+| [`folder select`](doc/projekt_folder_select.md) | Choose from a list — what `pj` with no argument calls |
 | [`folder recent`](doc/projekt_folder_recent.md) | The projects you jumped to, most recent first |
 | [`folder open`](doc/projekt_folder_open.md) | Open a project in `$VISUAL`, `$EDITOR` or vi |
 | [`folder remove`](doc/projekt_folder_remove.md) | Drop a folder from the config |

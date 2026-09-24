@@ -19,6 +19,7 @@ projekt folder get [short name] [flags]
 ### Options
 
 ```
+      --exact       Only accept the whole name, without the looser matching
   -h, --help        help for get
       --no-record   Don't remember this lookup as a jump
 ```

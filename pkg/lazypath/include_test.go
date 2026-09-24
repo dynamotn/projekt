@@ -29,16 +29,12 @@ func loadFrom(t *testing.T, path string) {
 
 	previous := CfgFile
 	CfgFile = path
-	c = Config{}
-	effective = Config{}
-	loadErr = nil
+	ResetTestConfig()
 	viper.Reset()
 	InitConfig()
 	t.Cleanup(func() {
 		CfgFile = previous
-		c = Config{}
-		effective = Config{}
-		loadErr = nil
+		ResetTestConfig()
 		viper.Reset()
 	})
 }

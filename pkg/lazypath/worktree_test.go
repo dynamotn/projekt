@@ -14,12 +14,11 @@ func useConfigFile(t *testing.T) string {
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	previous := CfgFile
 	CfgFile = configFile
-	c = Config{}
+	ResetTestConfig()
 	InitConfig()
 	t.Cleanup(func() {
 		CfgFile = previous
-		c = Config{}
-		loadErr = nil
+		ResetTestConfig()
 	})
 	return configFile
 }

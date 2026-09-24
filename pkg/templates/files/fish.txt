@@ -1,13 +1,20 @@
 # vim:filetype=fish
 function pj --description "Jump to a project"
-  if test (count $argv) -ne 1
-    echo "usage: pj <project>" >&2
+  if test (count $argv) -gt 1
+    echo "usage: pj [project]" >&2
     return 1
   end
   # `projekt folder get` exits non-zero when the short name is unknown, so the
-  # error it already printed is the only message the user needs.
-  set -l target (command projekt folder get --verbose=error $argv[1])
-  or return 1
+  # error it already printed is the only message the user needs. With no
+  # argument there is nothing to resolve, so ask instead.
+  set -l target
+  if test (count $argv) -eq 0
+    set target (command projekt folder select --verbose=error)
+    or return 1
+  else
+    set target (command projekt folder get --verbose=error $argv[1])
+    or return 1
+  end
   if not test -d "$target"
     echo "Project folder does not exist: $target" >&2
     return 1
@@ -15,9 +22,9 @@ function pj --description "Jump to a project"
   cd $target
   or return 1
 
-  # "-" is the jump back, so the tab is named after where we landed.
-  set -l label $argv[1]
-  test "$label" = "-"; and set label (basename $target)
+  # The argument is not the name we landed on when it was "-", a loose match
+  # or nothing at all, so the tab is named after the folder itself.
+  set -l label (basename $target)
   test -n "$ZELLIJ"; and zellij action rename-tab $label
   test -n "$TMUX"; and tmux rename-window $label
 end

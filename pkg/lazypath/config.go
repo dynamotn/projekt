@@ -21,6 +21,11 @@ var (
 	c Config
 	// effective is c plus everything it includes: what gets read.
 	effective Config
+	// loaded says the configuration has been read. An empty configuration is
+	// a real answer — a file with no folders in it — and telling it apart from
+	// "not read yet" by comparing against the zero value would re-read the
+	// file every time somebody legitimately has nothing configured.
+	loaded bool
 	// loadErr records why the existing config file could not be read. Commands
 	// must refuse to run, and above all refuse to write, while it is set:
 	// writing would replace the unreadable file with the empty in-memory config.
@@ -58,9 +63,13 @@ type GitServer struct {
 }
 
 func unmarshalConfig() {
-	if !reflect.DeepEqual(c, Config{}) {
+	// Either signal means there is nothing to read: the flag, for a
+	// configuration that was set explicitly, and a non-zero value for one that
+	// was filled in directly.
+	if loaded || !reflect.DeepEqual(c, Config{}) {
 		return
 	}
+	loaded = true
 
 	err := viper.Unmarshal(&c)
 	if err != nil {
@@ -285,6 +294,7 @@ func ConfigFile() string {
 func ReloadConfig() error {
 	c = Config{}
 	effective = Config{}
+	loaded = false
 	loadErr = nil
 
 	if err := viper.ReadInConfig(); err != nil {
@@ -301,12 +311,14 @@ func ReloadConfig() error {
 func SetTestConfig(config Config) {
 	c = config
 	effective = config
+	loaded = true
 }
 
 // ResetTestConfig resets the configuration to empty state
 func ResetTestConfig() {
 	c = Config{}
 	effective = Config{}
+	loaded = false
 	loadErr = nil
 }
 

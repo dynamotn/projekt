@@ -1,14 +1,19 @@
 # vim:filetype=zsh
 pj() {
-  if (( $# != 1 )); then
-    print -u2 "usage: pj <project>"
+  if (( $# > 1 )); then
+    print -u2 "usage: pj [project]"
     return 1
   fi
 
   local target
   # `projekt folder get` exits non-zero when the short name is unknown, so the
-  # error it already printed is the only message the user needs.
-  target=$(command projekt folder get --verbose=error "$1") || return 1
+  # error it already printed is the only message the user needs. With no
+  # argument there is nothing to resolve, so ask instead.
+  if (( $# == 0 )); then
+    target=$(command projekt folder select --verbose=error) || return 1
+  else
+    target=$(command projekt folder get --verbose=error "$1") || return 1
+  fi
 
   if [[ ! -d $target ]]; then
     print -u2 "Project folder does not exist: $target"
@@ -17,9 +22,9 @@ pj() {
 
   cd -- "$target" || return 1
 
-  # "-" is the jump back, so the tab is named after where we landed.
-  local label=$1
-  [[ $label == - ]] && label=${target:t}
+  # The argument is not the name we landed on when it was "-", a loose match
+  # or nothing at all, so the tab is named after the folder itself.
+  local label=${target:t}
   [[ -n ${ZELLIJ:-} ]] && zellij action rename-tab "$label"
   [[ -n ${TMUX:-} ]] && tmux rename-window "$label"
   return 0

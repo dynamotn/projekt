@@ -112,11 +112,11 @@ func TestAddToConfig(t *testing.T) {
 	originalCfgFile := CfgFile
 	defer func() {
 		CfgFile = originalCfgFile
-		c = Config{}
+		ResetTestConfig()
 	}()
 
 	// Setup test config
-	c = Config{}
+	ResetTestConfig()
 	CfgFile = configFile
 	InitConfig()
 
@@ -174,11 +174,11 @@ func TestRemoveFromConfig(t *testing.T) {
 	originalCfgFile := CfgFile
 	defer func() {
 		CfgFile = originalCfgFile
-		c = Config{}
+		ResetTestConfig()
 	}()
 
 	// Setup test config
-	c = Config{}
+	ResetTestConfig()
 	CfgFile = configFile
 	InitConfig()
 
@@ -230,10 +230,10 @@ func TestAddToConfig_WithGitConfig(t *testing.T) {
 	defer func() {
 		CfgFile = originalCfgFile
 		// Force full reset
-		c = Config{}
+		ResetTestConfig()
 	}()
 
-	c = Config{}
+	ResetTestConfig()
 	CfgFile = configFile
 	InitConfig()
 
@@ -257,7 +257,7 @@ func TestAddToConfig_WithGitConfig(t *testing.T) {
 	}
 
 	// Verify by checking c directly after unmarshal
-	c = Config{} // Reset to force unmarshal
+	ResetTestConfig() // force a re-read
 	config := GetConfig()
 	found := false
 	for _, f := range config.Folders {
@@ -326,11 +326,11 @@ func TestRemoveFromConfig_MultipleRemoves(t *testing.T) {
 	originalCfgFile := CfgFile
 	defer func() {
 		CfgFile = originalCfgFile
-		c = Config{}
+		ResetTestConfig()
 	}()
 
 	// Reset config and setup fresh
-	c = Config{}
+	ResetTestConfig()
 	CfgFile = configFile
 	InitConfig()
 
@@ -352,7 +352,7 @@ func TestRemoveFromConfig_MultipleRemoves(t *testing.T) {
 	}
 
 	// Force re-read config
-	c = Config{}
+	ResetTestConfig()
 	config := GetConfig()
 	if len(config.Folders) != 2 {
 		t.Errorf("After RemoveFromConfig(), got %d folders, want 2", len(config.Folders))

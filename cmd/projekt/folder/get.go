@@ -35,6 +35,7 @@ lookup that is not a jump.`,
 	}
 
 	cmd.Flags().BoolVar(&o.NoRecord, "no-record", false, "Don't remember this lookup as a jump")
+	cmd.Flags().BoolVar(&o.ExactOnly, "exact", false, "Only accept the whole name, without the looser matching")
 
 	return cmd
 }
