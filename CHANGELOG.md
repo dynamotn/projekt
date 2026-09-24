@@ -41,6 +41,9 @@
   `stat`, `joinPath`, `toYaml` and `fromYaml`
 - **t**: new variables `.Source`, `.Store`, `.Home`, `.Hostname`, `.OS`,
   `.Arch` and `.Env`
+- **t**: give a template delimiters of its own with `delims: ["<%", "%>"]` in
+  its `.vars.yaml`, so one that writes GitHub Actions, Helm charts or other Go
+  templates stops escaping its own syntax
 
 ### Removed
 

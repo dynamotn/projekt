@@ -163,6 +163,31 @@ then the `.Values` keys read out of the template itself, in the order they
 appear. Keys the template loops over are left out — a list or a map is not
 something to type at a prompt, and belongs in a `--values` file.
 
+### Delimiters of your own
+
+A template that writes GitHub Actions expressions, a Helm chart or another Go
+template spends its life escaping the syntax it is written in. The manifest can
+move the delimiters out of the way instead:
+
+```yaml
+# templates/chart/.vars.yaml
+delims: ["<%", "%>"]
+vars:
+  - name: registry
+    default: ghcr.io
+```
+
+```gotemplate
+name: <% .Name %>
+image: {{ .Values.image }}     # left exactly as it is
+```
+
+The pair applies to the whole template — file contents, path segments, the
+`.ignore` and the defaults in the manifest. The shared templates of
+`.templates` keep the usual `{{ }}`: they belong to the store, not to the
+template calling them, so one fragment stays usable from templates that spell
+their delimiters differently.
+
 ## Values a template already has
 
 Some values are not worth typing twice: your name, your company, the licence

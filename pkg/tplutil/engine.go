@@ -31,6 +31,10 @@ type engine struct {
 	ask bool
 	// answers keeps what a prompt function was already told.
 	answers map[string]any
+	// delims are the delimiters this template is written with. The shared
+	// partials keep the default ones: they belong to the store, not to the
+	// template calling them.
+	delims [2]string
 }
 
 // newEngine builds the engine one render runs with.
@@ -40,6 +44,14 @@ func newEngine(o RenderOptions) (*engine, error) {
 		out:     o.Prompt,
 		ask:     o.Interactive,
 		answers: map[string]any{},
+		delims:  DefaultDelims,
+	}
+	if o.Template.Path != "" {
+		manifest, err := LoadManifest(o.Template)
+		if err != nil {
+			return nil, err
+		}
+		e.delims = manifest.delims()
 	}
 	if e.out == nil {
 		e.out = os.Stderr
@@ -92,7 +104,7 @@ func (e *engine) execute(name, text string, data map[string]any) ([]byte, error)
 	}
 	// missingkey=zero keeps `{{ .Values.foo | default "bar" }}` working for
 	// values the user did not set, instead of failing the whole render.
-	t, err := root.New(name).Parse(text)
+	t, err := root.New(name).Delims(e.delims[0], e.delims[1]).Parse(text)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse template %s: %w", name, err)
 	}
@@ -114,6 +126,7 @@ func defaultEngine() *engine {
 		return &engine{
 			root:    template.New("").Funcs(sprig.TxtFuncMap()).Option("missingkey=zero"),
 			answers: map[string]any{},
+			delims:  DefaultDelims,
 		}
 	}
 	return e
@@ -122,7 +135,14 @@ func defaultEngine() *engine {
 // execute runs one piece of text outside a render: a manifest default, or a
 // recipe's command line.
 func execute(name, text string, data map[string]any) ([]byte, error) {
-	return defaultEngine().execute(name, text, data)
+	return executeWith(DefaultDelims, name, text, data)
+}
+
+// executeWith runs one piece of text with the delimiters it was written in.
+func executeWith(delims [2]string, name, text string, data map[string]any) ([]byte, error) {
+	e := defaultEngine()
+	e.delims = delims
+	return e.execute(name, text, data)
 }
 
 // sortedKeys returns the keys of a map in a stable order, so that a parse

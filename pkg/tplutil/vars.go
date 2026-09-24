@@ -62,6 +62,53 @@ func (v Var) question() string {
 // Manifest is the parsed .vars.yaml of a template.
 type Manifest struct {
 	Vars []Var `yaml:"vars"`
+	// Delims replaces `{{` and `}}` for the whole template.
+	//
+	// A template that writes Go templates, Helm charts or GitHub Actions
+	// expressions otherwise spends its life escaping the very syntax it is
+	// written in; saying `delims: ["<%", "%>"]` once is the way out.
+	Delims []string `yaml:"delims"`
+}
+
+// DefaultDelims are the delimiters a template uses unless it says otherwise.
+var DefaultDelims = [2]string{"{{", "}}"}
+
+// delims returns the delimiters to parse this template with.
+func (m Manifest) delims() [2]string {
+	if len(m.Delims) != 2 {
+		return DefaultDelims
+	}
+	return [2]string{m.Delims[0], m.Delims[1]}
+}
+
+// Delimiters returns the delimiters a template is written with, so that a
+// question's default is rendered the same way the template would render it.
+func Delimiters(tpl Template) ([2]string, error) {
+	if tpl.Path == "" {
+		return DefaultDelims, nil
+	}
+	manifest, err := LoadManifest(tpl)
+	if err != nil {
+		return DefaultDelims, err
+	}
+	return manifest.delims(), nil
+}
+
+// validateDelims refuses a pair that cannot work, rather than letting the
+// template fail one file at a time.
+func validateDelims(path string, delims []string) error {
+	switch {
+	case len(delims) == 0:
+		return nil
+	case len(delims) != 2:
+		return fmt.Errorf("%s: delims takes exactly two values, the left and the right one", path)
+	case strings.TrimSpace(delims[0]) == "" || strings.TrimSpace(delims[1]) == "":
+		return fmt.Errorf("%s: neither delimiter may be empty", path)
+	case delims[0] == delims[1]:
+		return fmt.Errorf("%s: the two delimiters must differ, both are %q", path, delims[0])
+	default:
+		return nil
+	}
 }
 
 // varsPath returns where a template's manifest lives.
@@ -88,6 +135,9 @@ func LoadManifest(tpl Template) (Manifest, error) {
 	var manifest Manifest
 	if err := yaml.Unmarshal(data, &manifest); err != nil {
 		return Manifest{}, fmt.Errorf("cannot parse %s: %w", path, err)
+	}
+	if err := validateDelims(path, manifest.Delims); err != nil {
+		return Manifest{}, err
 	}
 	for i, v := range manifest.Vars {
 		if strings.TrimSpace(v.Name) == "" {
@@ -125,12 +175,19 @@ func InferVars(tpl Template) ([]Var, error) {
 		return nil, err
 	}
 
+	manifest, err := LoadManifest(tpl)
+	if err != nil {
+		return nil, err
+	}
+	delims := manifest.delims()
+
 	scan := &varScan{seen: map[string]bool{}, containers: map[string]bool{}}
 	for name, text := range sources {
 		// The scan only has to parse, but a template calling `promptString`
-		// does not parse at all unless the function is known.
+		// does not parse at all unless the function is known, and one written
+		// with its own delimiters does not parse without them either.
 		t, err := template.New(name).Funcs(sprig.TxtFuncMap()).Funcs(parserFuncs()).
-			Option("missingkey=zero").Parse(text)
+			Delims(delims[0], delims[1]).Option("missingkey=zero").Parse(text)
 		if err != nil {
 			return nil, fmt.Errorf("cannot parse template %s: %w", name, err)
 		}
