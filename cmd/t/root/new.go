@@ -129,6 +129,7 @@ func NewTemplateNewCmd(out io.Writer) *cobra.Command {
 	f.BoolVarP(&o.Force, "force", "F", false, "Overwrite files that already exist")
 	f.BoolVarP(&o.DryRun, "dry-run", "d", false, "Print the rendered result instead of writing files")
 	f.BoolVar(&noHooks, "no-hooks", false, "Don't run the template's `after` commands")
+	registerValueCompletion(cmd, completeSetKeys)
 
 	return cmd
 }

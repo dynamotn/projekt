@@ -47,7 +47,7 @@ func NewBoilerplateApplyCmd(out io.Writer) *cobra.Command {
 		Long:              applyLongHelp,
 		Args:              cobra.ArbitraryArgs,
 		Aliases:           []string{"up", "update"},
-		ValidArgsFunction: completeRecipeNames,
+		ValidArgsFunction: completeMoreRecipeNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			for _, name := range args {
 				recipe, err := bplutil.Get(name)
@@ -85,6 +85,7 @@ func NewBoilerplateApplyCmd(out io.Writer) *cobra.Command {
 	f.BoolVar(&o.Prune, "prune", false, "Delete the files the template no longer writes")
 	f.BoolVar(&o.Hooks, "hooks", false, "Run the recipe's `after` commands again as well")
 	f.BoolVarP(&o.DryRun, "dry-run", "d", false, "Print the plan instead of changing anything")
+	registerValueCompletion(cmd)
 
 	return cmd
 }

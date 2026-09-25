@@ -13,6 +13,9 @@
   leaves the recipe, its answers and the template it rendered in the project's
   `.projekt/template.yaml`, so a recipe's own questions and commands are not
   lost the way they were when only the template was remembered
+- **t**, **b**: tab completion for `--set` — the keys come from the template's
+  manifest or from the `.Values` it reads, a `choice` and a `bool` complete
+  their answers, and `--project` completes folders rather than files
 - **t**: turn a project into a template with `t add --replace myapp=Name`,
   which rewrites the literals in the file contents *and* in the file names,
   longest first, leaves anything that is not text alone, and writes the
