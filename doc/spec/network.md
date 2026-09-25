@@ -19,6 +19,10 @@ Shell scripts frequently need resilient HTTP access, file downloads, JSON-friend
 - Expose response status, headers, and body through a normalized, script-friendly contract.
 - Let callers override connect/total timeouts for a single request without touching global configuration.
 - Protect scripts and downstream services from repeatedly calling a failing endpoint via a circuit breaker.
+- Keep a script inside the call budget an API publishes, instead of discovering it through `429` responses.
+- Walk a paginated collection the way the server describes it, through the `Link` header.
+- Authenticate with a bearer token without publishing it in `curl`'s command line.
+- Treat a GraphQL response that answers `200 OK` with an `errors` array as the failure it is.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -114,6 +118,39 @@ As an operator, I want to override connect/total timeouts for a single request a
 
 ---
 
+### User Story 7 - Stay inside an API's call budget (Priority: P3)
+
+As a script author, I want to cap how often a keyed operation runs so that a loop over many items does not spend an API's published rate limit and start collecting `429` responses.
+
+**Why this priority**: Rate limiting is the counterpart to the circuit breaker: the breaker stops calling a service that is failing, and the limiter stops calling one faster than it agreed to be called.
+
+**Independent Test**: Spend a small budget, then confirm that the next call waits for the window to slide, and that it is refused with a dedicated exit code when waiting is disabled or would exceed the configured maximum.
+
+**Acceptance Scenarios**:
+
+1. **Given** a key's budget still has room, **When** a command is run under the limiter, **Then** it runs immediately and the slot is recorded
+2. **Given** a key's budget is spent, **When** another call is made, **Then** the limiter waits exactly until the oldest call leaves the window and then runs the command
+3. **Given** waiting is disabled or the required wait exceeds the configured maximum, **When** the budget is spent, **Then** the command is not run and a dedicated exit code is returned
+
+---
+
+### User Story 8 - Read a paginated collection and authenticate for it (Priority: P3)
+
+As a script author, I want to fetch every page of a collection, send a bearer token safely, and see GraphQL errors as failures so that an API client does not have to be rebuilt in each script.
+
+**Why this priority**: These are the helpers every API client needs once the transport works, and each has a failure mode that is silent when hand-written: the loop that misses the last page, the token visible in `ps`, the GraphQL error inside a `200 OK`.
+
+**Independent Test**: Serve two pages linked by a `Link` header and confirm both bodies are printed and the walk stops; confirm a bearer token reaches the request but not the argument vector; confirm a `200` response carrying an `errors` array is reported as a failure.
+
+**Acceptance Scenarios**:
+
+1. **Given** a response carries `Link: <...>; rel="next"`, **When** pagination runs, **Then** every page's body is printed in order and the walk stops when no next relation is offered
+2. **Given** a page budget or a repeated URL, **When** pagination runs, **Then** the walk stops rather than continuing forever
+3. **Given** a bearer token, **When** an authenticated request is made, **Then** the token is sent out of band and does not appear among curl's arguments
+4. **Given** a GraphQL endpoint answers `200` with a non-empty `errors` array, **When** the query runs, **Then** the helper reports a client-error exit code and logs the first message
+
+---
+
 ### Example Workflow
 
 ```bash
@@ -149,6 +186,10 @@ dybatpho::circuit_breaker api.example.test \
 - A requested response header is missing and no default is supplied.
 - Per-request timeout overrides are partially supplied (only connect, only total, or neither).
 - A circuit breaker's cooldown elapses, allowing a half-open trial request.
+- A rate limit spec names a window in milliseconds, seconds, minutes, or hours, or is not `count/window` at all.
+- A rate limit key's window empties while the script is doing something else, so the budget is whole again.
+- A paginated collection's last page offers no `next` relation, one entry names several relations at once, or the pages form a cycle.
+- A GraphQL response answers `200 OK` while carrying an `errors` array, or the caller passes variables that are not a JSON object.
 
 ## Requirements *(mandatory)*
 
@@ -190,6 +231,28 @@ dybatpho::circuit_breaker api.example.test \
 - **FR-019**: The module MUST expose an in-memory circuit breaker keyed by name that opens
   after a configurable consecutive-failure threshold, rejects calls while open, and allows a
   trial request after a configurable cooldown, along with helpers to inspect and reset state.
+
+- **FR-027**: The module MUST expose an in-memory sliding window rate limiter keyed by name,
+  taking a `count/window` spec whose window is read in seconds unless it carries an `ms`, `s`,
+  `m`, or `h` suffix, and MUST run the given command as an argument vector once a slot is free.
+- **FR-027a**: When the budget is spent the limiter MUST wait exactly until the oldest call
+  leaves the window, and MUST instead return a dedicated exit code without running the command
+  when waiting is disabled or the wait would exceed the configured maximum.
+- **FR-027b**: The module MUST expose helpers to report a key's remaining calls and to reset it.
+- **FR-028**: The module MUST expose a reader for one relation of the last response's `Link`
+  header, matching `rel` as a whole word so that an entry naming several relations is read
+  correctly and a prefix of a relation is not mistaken for it.
+- **FR-029**: The module MUST expose a pagination helper that follows the `next` relation,
+  prints each page's body to standard output separated by a newline, stops when no next
+  relation is offered, and refuses to visit the same URL twice or to exceed a configurable
+  page budget; under dry-run it MUST rehearse only the first page.
+- **FR-030**: The module MUST expose a bearer-authenticated request helper that passes the
+  token through `DYBATPHO_CURL_SECRET_HEADERS`, preserving any secret headers the caller
+  already set, and MUST refuse an empty token.
+- **FR-031**: The module MUST expose a GraphQL helper that builds the `query`/`variables`
+  envelope, sends it on standard input, refuses variables that are not a JSON object, and
+  reports a non-empty `errors` array in an otherwise successful response as a client error
+  with the first message logged.
 
 - **FR-020**: The module MUST split a URL into scheme, user, password, host, port, path,
   query, and fragment, requiring a scheme and `://`, and MUST present every component,
@@ -248,6 +311,11 @@ dybatpho::circuit_breaker api.example.test \
   exposed after a request.
 - **Circuit Breaker State**: Per-key consecutive failure count and open timestamp used to decide
   whether a guarded command may run.
+- **Rate Limit Window**: Per-key timestamps of the calls made inside the current window, oldest
+  first, together with the `count/window` spec they are judged against.
+- **Link Relation**: A URL and the relation names it carries in the response's `Link` header.
+- **GraphQL Envelope**: The `query` document and its `variables` object, plus the `errors` array
+  a response may carry alongside `data`.
 
 ## Success Criteria *(mandatory)*
 
@@ -270,6 +338,12 @@ dybatpho::circuit_breaker api.example.test \
   hand-written retry loop, and the wait keeps to the budget it was given.
 - **SC-008**: A repeatedly failing endpoint stops receiving new attempts once its circuit opens,
   and recovers automatically once the cooldown elapses and a trial request succeeds.
+- **SC-011**: A loop over many items keeps to an API's published rate without the script author
+  writing a sleep, and no call is silently dropped to achieve it.
+- **SC-012**: A paginated collection is read in one call, and a token used to read it never
+  appears in the process table.
+- **SC-013**: A GraphQL failure that arrives with a `200` status is reported as a failure rather
+  than read as a successful request.
 
 ## Integration Tests *(mandatory)*
 
@@ -317,6 +391,20 @@ dybatpho::circuit_breaker api.example.test \
   budget, and that both helpers reject a port or a timeout that is not a number.
 - **IT-011**: Verify a circuit breaker stays closed under the failure threshold, opens and
   short-circuits calls once the threshold is reached, and closes again after a successful call.
+- **IT-025**: Verify the limiter runs a command and returns its exit code, takes a slot with no
+  command at all, reads every window unit, refuses a spec that is not `count/window`, waits for
+  the window to slide rather than dropping a call, forgets calls that have left the window, and
+  returns the dedicated exit code when waiting is disabled or capped.
+- **IT-026**: Verify the `Link` reader finds a relation among several entries, matches an entry
+  that carries several relations, and fails on a missing relation or a missing header.
+- **IT-027**: Verify pagination prints both pages of a two-page collection, stops at the page
+  budget, stops when the pages form a cycle, and returns the failing page's exit code.
+- **IT-028**: Verify a bearer token reaches the request through the config file and not through
+  curl's arguments, that secret headers already set by the caller survive, and that an empty
+  token is refused.
+- **IT-029**: Verify the GraphQL helper sends the query and variables, reports an `errors` array
+  in a `200` response as exit code 4 with the message logged, passes a clean response through,
+  and refuses variables that are not a JSON object.
 - **IT-024**: Verify a request carrying `DYBATPHO_CURL_SECRET_HEADERS` and
   `DYBATPHO_CURL_SECRET_DATA` sends both, while neither appears among the
   arguments the mocked `curl` was called with.
@@ -326,5 +414,6 @@ dybatpho::circuit_breaker api.example.test \
 1. The module turns raw curl usage into a higher-level, testable contract for automation scripts.
 2. Request and download behavior remain predictable enough for use in CI and scripted environments.
 3. Multipart uploads, resumable/checksum-verified downloads, normalized response parsing,
-   per-request timeout overrides, and the circuit breaker are covered by the same testable
-   contract as the existing request helpers.
+   per-request timeout overrides, the circuit breaker, the rate limiter, pagination, bearer
+   authentication, and GraphQL requests are covered by the same testable contract as the
+   existing request helpers.

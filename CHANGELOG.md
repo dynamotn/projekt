@@ -168,6 +168,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secret in the message is redacted before it is drawn. `DYBATPHO_SPINNER`
   forces the animation on or off, and `DYBATPHO_SPINNER_INTERVAL` and
   `DYBATPHO_SPINNER_FRAMES` change how it looks.
+- **`network` — the other half of calling a service politely, and the API
+  client that always gets rewritten.** The module already had a circuit
+  breaker, which stops calling a service that is failing. It had nothing that
+  stops calling one that is working — faster than it agreed to be called. An
+  API that answers `429` for the rest of the hour once a script has spent its
+  budget is not made better by retrying; it is made better by not spending the
+  budget in the first place.
+
+  ```sh
+  dybatpho::rate_limit api.example.com 10/60 -- dybatpho::curl_json "${url}" /tmp/out.json
+  dybatpho::rate_limit_remaining api.example.com 10/60 # calls left this minute
+  ```
+
+  The window holds the timestamps of the calls inside it. While the budget has
+  room the command runs at once; when it is full the limiter waits exactly
+  until the oldest call leaves the window, and then runs. Nothing is dropped,
+  so a loop over five hundred items still finishes — at the rate the spec
+  allows. A script that would rather skip work than block sets
+  `DYBATPHO_RATE_LIMIT_WAIT=false` and reads exit code `9`, the same code the
+  circuit breaker uses for a call it did not attempt. The window is written the
+  way a rate limit is spoken: `10/60`, `10/1m`, `5/500ms`.
+
+  Around it are the three helpers an API client needs anyway, each with a
+  failure mode that is silent when it is hand-written:
+
+  ```sh
+  dybatpho::curl_paginate "https://api.example.com/items?per_page=100"
+  dybatpho::curl_auth_bearer "${url}" "${API_TOKEN}" /tmp/me.json
+  dybatpho::curl_graphql "${endpoint}" "${query}" "${variables}" /tmp/answer.json
+  ```
+
+  `curl_paginate` follows the `Link` header's `next` relation and prints one
+  body per page, so the loop that rebuilds `?page=N` by hand — and misses the
+  last page — is not written again; it refuses to visit a URL twice, so a
+  server that repeats itself ends the walk rather than the script. `curl_link`
+  reads one relation out of that header, matching `rel` as a whole word, which
+  is what an entry written `rel="next last"` needs. `curl_auth_bearer` sends
+  the token through `DYBATPHO_CURL_SECRET_HEADERS`, so it never appears in
+  `/proc/<pid>/cmdline` where `ps auxww` prints it, and it keeps any secret
+  headers the caller had already set. `curl_graphql` builds the
+  `query`/`variables` envelope, sends it on standard input, and turns the
+  `errors` array of an otherwise successful `200 OK` into exit code `4` with
+  the first message logged — the one GraphQL failure a status check cannot see.
+
+  `network` now loads `json` with it, which is what builds that envelope and
+  reads the error out of it.
 
 - **`helpers` — asking the library about itself, from the running shell.** The
   library documents itself in `doc/`, which answers the question while you are

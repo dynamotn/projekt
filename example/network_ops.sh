@@ -3,7 +3,8 @@
 # @brief Example showing network utilities
 # @description Demonstrates dybatpho::curl_do, curl_download, curl_json,
 #   curl_head, curl_upload, curl_resume_download, verify_checksum,
-#   curl_request/curl_parse_response, curl_timeout, and circuit_breaker
+#   curl_request/curl_parse_response, curl_timeout, circuit_breaker,
+#   rate_limit, curl_link/curl_paginate, curl_auth_bearer and curl_graphql
 #
 #   Every request below is served by a stub, so the example runs offline and
 #   produces the same output on every machine. Only the transport is faked:
@@ -41,6 +42,7 @@ for arg in "$@"; do
 done
 
 content_type='text/plain'
+link=''
 case "${url}" in
   *api.github.com*)
     content_type='application/json'
@@ -50,13 +52,30 @@ case "${url}" in
     content_type='application/json'
     body='{"form":{"note":"nightly run"},"files":{"report":"metric,value"}}'
     ;;
+  *items*page=2*)
+    content_type='application/json'
+    body='[{"id":3,"name":"third"}]'
+    ;;
+  *items*)
+    content_type='application/json'
+    body='[{"id":1,"name":"first"},{"id":2,"name":"second"}]'
+    link='<https://api.example.test/items?page=2>; rel="next"'
+    ;;
+  *graphql*)
+    content_type='application/json'
+    body='{"data":{"viewer":{"login":"dynamotn"}}}'
+    ;;
   *hello.txt) body='hello dybatpho' ;;
   *) body='<!doctype html><title>Example Domain</title>' ;;
 esac
 
 if [[ -n "${header_file}" ]]; then
-  printf 'HTTP/2 200\r\ncontent-type: %s\r\ncontent-length: %s\r\n\r\n' \
-    "${content_type}" "${#body}" > "${header_file}"
+  {
+    printf 'HTTP/2 200\r\ncontent-type: %s\r\ncontent-length: %s\r\n' \
+      "${content_type}" "${#body}"
+    [[ -n "${link}" ]] && printf 'link: %s\r\n' "${link}"
+    printf '\r\n'
+  } > "${header_file}"
 fi
 if [[ -n "${output}" && "${output}" != "/dev/null" ]]; then
   printf '%s' "${body}" > "${output}"
@@ -160,6 +179,73 @@ function _demo_circuit_breaker {
   unset DYBATPHO_CIRCUIT_THRESHOLD DYBATPHO_CIRCUIT_COOLDOWN
 }
 
+# @description Spend a call budget rather than a rate limit: ten calls a minute
+#   is what the API agreed to, and the limiter waits for the window to slide
+#   instead of letting the script find out through a `429`.
+function _demo_rate_limit {
+  dybatpho::header "RATE LIMIT"
+  local service="api.example.test" item
+  dybatpho::rate_limit_reset "${service}"
+  for item in alpha beta gamma; do
+    dybatpho::rate_limit "${service}" 10/60 -- dybatpho::print "  fetched ${item}"
+  done
+  dybatpho::info "Calls left in this minute: $(dybatpho::rate_limit_remaining "${service}" 10/60)"
+
+  # With waiting switched off the limiter refuses the call instead, which is
+  # what a script wants when it would rather skip work than block.
+  dybatpho::rate_limit_reset "${service}"
+  export DYBATPHO_RATE_LIMIT_WAIT=false
+  dybatpho::rate_limit "${service}" 1/60
+  if dybatpho::rate_limit "${service}" 1/60 -- dybatpho::print "  this never runs"; then
+    dybatpho::info "The budget had room"
+  else
+    dybatpho::info "The budget was spent, so the call was skipped"
+  fi
+  unset DYBATPHO_RATE_LIMIT_WAIT
+}
+
+# @description Walk a paginated collection the way the server describes it,
+#   through the `Link` header, instead of rebuilding `?page=N` by hand.
+function _demo_pagination {
+  dybatpho::header "PAGINATION"
+  local body_file
+  dybatpho::create_temp body_file ".json"
+  # One page on its own already says where the next one is.
+  dybatpho::curl_request "https://api.example.test/items?page=1" "${body_file}"
+  dybatpho::info "The server's next page: $(dybatpho::curl_link next || echo '(none)')"
+
+  # And this walks the whole collection, one body per page, until the server
+  # stops offering a next one.
+  local page
+  while IFS= read -r page; do
+    dybatpho::print "  page: ${page}"
+  done < <(dybatpho::curl_paginate "https://api.example.test/items?page=1" \
+    --header "Accept: application/json")
+}
+
+# @description Send a token without putting it where `ps` can read it, and ask a
+#   GraphQL endpoint a question whose failures live in the body.
+function _demo_authenticated_requests {
+  dybatpho::header "AUTHENTICATED REQUESTS"
+  local body_file
+  dybatpho::create_temp body_file ".json"
+  # The token goes into a private config file rather than into curl's argument
+  # vector, which every account on the host can read while the request runs.
+  if dybatpho::curl_auth_bearer "https://api.example.test/items" "example-token" "${body_file}"; then
+    dybatpho::info "Authenticated request returned ${DYBATPHO_HTTP_STATUS}"
+  fi
+
+  # shellcheck disable=SC2016 # `$login` is a GraphQL variable, not a shell one
+  if dybatpho::curl_graphql "https://api.example.test/graphql" \
+    'query($login:String!){ user(login:$login){ id } }' \
+    '{"login":"dynamotn"}' "${body_file}"; then
+    dybatpho::info "GraphQL answered without errors"
+    dybatpho::show_file "${body_file}"
+  else
+    dybatpho::warn "GraphQL reported an error"
+  fi
+}
+
 # @description Take a URL apart before doing anything with it, which is what
 #   picking a host out of configuration usually turns into.
 function _demo_url_parse {
@@ -240,6 +326,9 @@ function _main {
   _demo_normalized_response
   _demo_per_request_timeout
   _demo_circuit_breaker
+  _demo_rate_limit
+  _demo_pagination
+  _demo_authenticated_requests
   dybatpho::success "Network operations demo complete"
 }
 

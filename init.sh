@@ -83,6 +83,7 @@ export DYBATPHO_CORE_MODULES DYBATPHO_OPTIONAL_MODULES
 declare -A __dybatpho_module_deps=(
   [text]="table"
   [table]="text"
+  [network]="json"
   [notification]="network"
   [archive]="safety"
   [cli]="config"

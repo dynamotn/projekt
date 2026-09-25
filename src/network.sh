@@ -5,8 +5,13 @@
 #   This module contains functions to work with network connection, downloads,
 #   JSON-oriented requests, and HEAD requests. It also provides multipart
 #   uploads, resumable downloads with checksum verification, normalized
-#   response parsing (status/headers/body), per-request timeouts, and an
-#   in-memory circuit breaker.
+#   response parsing (status/headers/body), per-request timeouts, and the two
+#   halves of calling a remote service politely: an in-memory circuit breaker
+#   for a service that is failing, and a sliding window rate limiter for one
+#   that is not to be called too often. On top of them sit the helpers an API
+#   client needs anyway -- bearer authentication that keeps the token out of
+#   `curl`'s command line, `Link`-header pagination, and a GraphQL request that
+#   reads the errors out of a `200 OK` body.
 #
 #   Alongside the HTTP client it carries the primitives a script reaches for
 #   before making a request at all: splitting a URL into its parts, deciding
@@ -25,6 +30,11 @@
 # @env DYBATPHO_CURL_TIMEOUT number Optional curl total timeout in seconds
 # @env DYBATPHO_CIRCUIT_THRESHOLD number Consecutive failures before `dybatpho::circuit_breaker` opens a circuit (default `5`)
 # @env DYBATPHO_CIRCUIT_COOLDOWN number Seconds an open circuit waits before allowing a trial request (default `30`)
+# @env DYBATPHO_RATE_LIMIT_WAIT bool Let `dybatpho::rate_limit` wait for a free slot instead of refusing the call (default `true`)
+# @env DYBATPHO_RATE_LIMIT_MAX_WAIT number Longest wait in seconds `dybatpho::rate_limit` accepts, `0` for no limit (default `0`)
+# @env DYBATPHO_PAGINATE_MAX_PAGES number Most pages `dybatpho::curl_paginate` fetches, `0` for no limit (default `100`)
+# @env DYBATPHO_PAGINATE_RATE string Optional rate limit spec applied per page by `dybatpho::curl_paginate`
+# @env DYBATPHO_GRAPHQL_TOKEN string Optional bearer token sent by `dybatpho::curl_graphql`
 # @env DYBATPHO_PORT_TIMEOUT number Seconds `dybatpho::port_open` waits for a connection (default `5`)
 # @env DYBATPHO_WAIT_PORT_TIMEOUT number Seconds `dybatpho::wait_port` keeps trying before giving up (default `30`)
 # @env DYBATPHO_WAIT_PORT_INTERVAL number Seconds `dybatpho::wait_port` sleeps between attempts (default `1`)
@@ -36,6 +46,11 @@ DYBATPHO_CURL_CONNECT_TIMEOUT=${DYBATPHO_CURL_CONNECT_TIMEOUT:-}
 DYBATPHO_CURL_TIMEOUT=${DYBATPHO_CURL_TIMEOUT:-}
 DYBATPHO_CIRCUIT_THRESHOLD=${DYBATPHO_CIRCUIT_THRESHOLD:-5}
 DYBATPHO_CIRCUIT_COOLDOWN=${DYBATPHO_CIRCUIT_COOLDOWN:-30}
+DYBATPHO_RATE_LIMIT_WAIT=${DYBATPHO_RATE_LIMIT_WAIT:-true}
+DYBATPHO_RATE_LIMIT_MAX_WAIT=${DYBATPHO_RATE_LIMIT_MAX_WAIT:-0}
+DYBATPHO_PAGINATE_MAX_PAGES=${DYBATPHO_PAGINATE_MAX_PAGES:-100}
+DYBATPHO_PAGINATE_RATE=${DYBATPHO_PAGINATE_RATE:-}
+DYBATPHO_GRAPHQL_TOKEN=${DYBATPHO_GRAPHQL_TOKEN:-}
 DYBATPHO_PORT_TIMEOUT=${DYBATPHO_PORT_TIMEOUT:-5}
 DYBATPHO_WAIT_PORT_TIMEOUT=${DYBATPHO_WAIT_PORT_TIMEOUT:-30}
 DYBATPHO_WAIT_PORT_INTERVAL=${DYBATPHO_WAIT_PORT_INTERVAL:-1}
@@ -63,6 +78,12 @@ DYBATPHO_CURL_SECRET_DATA=""
 # Per-key in-memory state used by `dybatpho::circuit_breaker`.
 declare -gA DYBATPHO_CIRCUIT_FAILURES=()
 declare -gA DYBATPHO_CIRCUIT_OPENED_AT=()
+
+# Per-key call timestamps, in milliseconds and oldest first, forming the sliding
+# window `dybatpho::rate_limit` decides against, and the last answer the pruning
+# helper worked out, which its caller has to read without a subshell.
+declare -gA DYBATPHO_RATE_EVENTS=()
+__DYBATPHO_RATE_REMAINING=0
 
 # Parsed components of the last URL, populated by `dybatpho::url_parse`.
 declare -gA DYBATPHO_URL=()
@@ -747,6 +768,435 @@ function dybatpho::circuit_breaker {
       dybatpho::warn "Circuit '${key}' opened after ${failures} consecutive failures"
     fi
   fi
+  return "${exit_code}"
+}
+
+#######################################
+# @description Parse a rate limit spec into a call budget and a window length.
+#   The spec is written the way a rate limit is spoken -- `10/60` is ten calls
+#   a minute -- and the window takes an optional unit so that `10/1m` and
+#   `5/500ms` mean what they look like.
+# @arg $1 string Spec as `count/window`, where the window is in seconds unless it carries an `ms`, `s`, `m`, or `h` suffix
+# @stdout The count and the window in milliseconds, separated by a space
+# @exitcode 1 The spec is not `count/window`, or asks for zero calls in no time
+#######################################
+function __dybatpho_network_rate_spec {
+  local spec="${1-}"
+  [[ "${spec}" =~ ^([0-9]+)/([0-9]+)(ms|s|m|h)?$ ]] || return 1
+  local count="${BASH_REMATCH[1]}" window="${BASH_REMATCH[2]}" unit="${BASH_REMATCH[3]:-s}"
+  local window_ms
+  case "${unit}" in
+    ms) window_ms="${window}" ;;
+    s) window_ms=$((window * 1000)) ;;
+    m) window_ms=$((window * 60000)) ;;
+    h) window_ms=$((window * 3600000)) ;;
+  esac
+  ((count > 0 && window_ms > 0)) || return 1
+  printf '%s %s\n' "${count}" "${window_ms}"
+}
+
+#######################################
+# @description Drop the timestamps that have fallen out of a key's window, and
+#   report how many calls it has left.
+# @arg $1 string Rate limit key
+# @arg $2 number Call budget per window
+# @arg $3 number Window length in milliseconds
+# @arg $4 number Current time in milliseconds
+# @set DYBATPHO_RATE_EVENTS The key's remaining timestamps, oldest first
+# @set __DYBATPHO_RATE_REMAINING Remaining calls in the current window
+# @stdout Remaining calls in the current window
+# @note The answer is also left in a variable, because a caller that read it
+#   through a command substitution would prune the window in a subshell and
+#   keep the unpruned one, growing the list forever and computing its waits
+#   from a timestamp that had already left the window
+#######################################
+function __dybatpho_network_rate_prune {
+  local key count window_ms now
+  dybatpho::expect_args key count window_ms now -- "$@"
+
+  local -a recorded=() kept=()
+  read -r -a recorded <<< "${DYBATPHO_RATE_EVENTS[${key}]:-}"
+  local cutoff=$((now - window_ms)) timestamp
+  for timestamp in ${recorded[@]+"${recorded[@]}"}; do
+    ((timestamp > cutoff)) && kept+=("${timestamp}")
+  done
+  DYBATPHO_RATE_EVENTS["${key}"]="${kept[*]-}"
+
+  __DYBATPHO_RATE_REMAINING=$((count - ${#kept[@]}))
+  ((__DYBATPHO_RATE_REMAINING < 0)) && __DYBATPHO_RATE_REMAINING=0
+  printf '%s\n' "${__DYBATPHO_RATE_REMAINING}"
+}
+
+#######################################
+# @description Report how many calls a rate limit key has left in its window.
+# @example
+#   dybatpho::rate_limit_remaining api.example.com 10/60
+#
+# @arg $1 string Rate limit key
+# @arg $2 string Spec as `count/window`
+# @stdout Number of calls still allowed before the limiter waits
+# @see dybatpho::rate_limit
+#######################################
+function dybatpho::rate_limit_remaining {
+  local key spec
+  dybatpho::expect_args key spec -- "$@"
+
+  local parsed count window_ms
+  parsed="$(__dybatpho_network_rate_spec "${spec}")" \
+    || dybatpho::die "${FUNCNAME[0]}: Invalid rate limit spec: ${spec}"
+  read -r count window_ms <<< "${parsed}"
+
+  __dybatpho_network_rate_prune "${key}" "${count}" "${window_ms}" "$(__dybatpho_log_now_ms)"
+}
+
+#######################################
+# @description Forget every call recorded against a rate limit key.
+# @arg $1 string Rate limit key
+# @see dybatpho::rate_limit
+#######################################
+function dybatpho::rate_limit_reset {
+  local key
+  dybatpho::expect_args key -- "$@"
+  DYBATPHO_RATE_EVENTS["${key}"]=""
+}
+
+#######################################
+# @description Run a command under a sliding window rate limit keyed by name.
+#
+#   The limiter is the other half of `dybatpho::circuit_breaker`: the breaker
+#   stops calling a service that is already failing, and this stops calling one
+#   that is working faster than it agreed to be called. An API that answers
+#   `429` for the rest of the hour once a script has spent its budget is not
+#   made better by retrying -- it is made better by not spending the budget in
+#   the first place.
+#
+#   A window holds the timestamps of the calls made inside it. While the budget
+#   has room the command runs immediately; when it is full the limiter waits
+#   exactly until the oldest call leaves the window, and then runs. Nothing is
+#   dropped, so a loop over five hundred items still finishes -- it finishes at
+#   the rate the spec allows.
+# @example
+#   dybatpho::rate_limit api.example.com 10/60 -- dybatpho::curl_json https://api.example.com/v1/items /tmp/items.json
+#   dybatpho::rate_limit api.example.com 10/60   # take a slot, run nothing
+#
+# @arg $1 string Rate limit key, typically a host or service name
+# @arg $2 string Spec as `count/window`, where the window is in seconds unless it carries an `ms`, `s`, `m`, or `h` suffix
+# @arg $@ string Command and arguments to run, optionally after a `--` separator
+# @env DYBATPHO_RATE_LIMIT_WAIT bool Wait for a free slot instead of refusing the call (default `true`)
+# @env DYBATPHO_RATE_LIMIT_MAX_WAIT number Longest wait in seconds the limiter will accept, `0` for no limit (default `0`)
+# @set DYBATPHO_RATE_EVENTS The key's call timestamps
+# @exitcode 0 The command succeeded, or no command was given and a slot was taken
+# @exitcode 9 The budget is spent and the limiter was not allowed to wait for it; the command was not run
+# @exitcode other The command's own exit code
+# @see dybatpho::circuit_breaker
+# @note The command runs as an argument vector rather than through `eval`, unlike `dybatpho::circuit_breaker`; wrap a shell string in `bash -c` when one is really wanted
+# @note The window is in-memory and process-local, like the circuit breaker's state; it does not persist across script invocations, nor out of a subshell
+#######################################
+function dybatpho::rate_limit {
+  local key spec
+  dybatpho::expect_args key spec -- "$@"
+  shift 2
+  if [[ "${1-}" == "--" ]]; then
+    shift
+  fi
+
+  local parsed count window_ms
+  parsed="$(__dybatpho_network_rate_spec "${spec}")" \
+    || dybatpho::die "${FUNCNAME[0]}: Invalid rate limit spec: ${spec}"
+  read -r count window_ms <<< "${parsed}"
+  [[ "${DYBATPHO_RATE_LIMIT_MAX_WAIT}" =~ ^[0-9]+$ ]] \
+    || dybatpho::die "DYBATPHO_RATE_LIMIT_MAX_WAIT must be a non-negative integer"
+
+  local now remaining oldest wait_ms
+  while :; do
+    now="$(__dybatpho_log_now_ms)"
+    # Read through the variable rather than a command substitution, so that the
+    # pruned window is the one this shell keeps.
+    __dybatpho_network_rate_prune "${key}" "${count}" "${window_ms}" "${now}" > /dev/null
+    remaining="${__DYBATPHO_RATE_REMAINING}"
+    ((remaining > 0)) && break
+
+    # The window is full, so the next free slot opens one window after the
+    # oldest call still inside it.
+    oldest="${DYBATPHO_RATE_EVENTS[${key}]%% *}"
+    wait_ms=$((oldest + window_ms - now))
+    ((wait_ms < 1)) && wait_ms=1
+
+    if ! dybatpho::is true "${DYBATPHO_RATE_LIMIT_WAIT}"; then
+      dybatpho::warn "Rate limit '${key}' is spent; skipping call (free in ${wait_ms}ms)"
+      return 9
+    fi
+    if ((DYBATPHO_RATE_LIMIT_MAX_WAIT > 0 && wait_ms > DYBATPHO_RATE_LIMIT_MAX_WAIT * 1000)); then
+      dybatpho::warn "Rate limit '${key}' needs ${wait_ms}ms, over the ${DYBATPHO_RATE_LIMIT_MAX_WAIT}s budget; skipping call"
+      return 9
+    fi
+
+    if declare -F __dybatpho_metrics_key > /dev/null; then
+      dybatpho::metrics_counter_inc dybatpho_rate_limit_waits_total 1 "key=${key}"
+    fi
+    dybatpho::debug "Rate limit '${key}': waiting ${wait_ms}ms for a free slot"
+    sleep "$(printf '%d.%03d' $((wait_ms / 1000)) $((wait_ms % 1000)))" || true
+  done
+
+  DYBATPHO_RATE_EVENTS["${key}"]="${DYBATPHO_RATE_EVENTS[${key}]:+${DYBATPHO_RATE_EVENTS[${key}]} }${now}"
+  (($#)) || return 0
+  "$@"
+}
+
+#######################################
+# @description Print the URL of one relation of the last response's `Link` header.
+#
+#   A `Link` header is a comma-separated list of `<url>; rel="next"` entries,
+#   and one `rel` may name several relations at once, as in `rel="next last"`.
+#   A caller that matches `rel="next"` as a substring gets the first of those
+#   right and the second wrong.
+# @example
+#   dybatpho::curl_request https://api.example.com/items /tmp/page.json
+#   next="$(dybatpho::curl_link next)" || echo "that was the last page"
+#
+# @arg $1 string Relation name, such as `next`, `prev`, or `last`
+# @env DYBATPHO_HTTP_HEADERS map Headers parsed by `dybatpho::curl_parse_response`
+# @stdout The URL carrying that relation
+# @exitcode 1 The last response carried no `Link` header with that relation
+# @see dybatpho::curl_paginate
+#######################################
+function dybatpho::curl_link {
+  local rel
+  dybatpho::expect_args rel -- "$@"
+  local rest="${DYBATPHO_HTTP_HEADERS[link]:-}"
+  [[ -n "${rest}" ]] || return 1
+
+  local url parameters relations
+  while [[ "${rest}" =~ ^[[:space:],]*\<([^\>]*)\>([^,]*)(.*)$ ]]; do
+    url="${BASH_REMATCH[1]}"
+    parameters="${BASH_REMATCH[2]}"
+    rest="${BASH_REMATCH[3]}"
+    if [[ "${parameters}" =~ rel[[:space:]]*=[[:space:]]*\"?([^\";]*) ]]; then
+      relations=" $(dybatpho::trim "${BASH_REMATCH[1]//\"/}") "
+      if [[ "${relations}" == *" ${rel} "* ]]; then
+        printf '%s\n' "${url}"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+#######################################
+# @description Fetch every page of a paginated resource, following the `Link`
+#   header's `next` relation, and print each page's body to standard output.
+#
+#   Paging is the part of an API client that gets written once per script and
+#   wrong once per script: the loop that misses the last page, the one that
+#   rebuilds `?page=N` by hand when the server already said where the next page
+#   is, the one that never stops because the server repeats itself. This
+#   follows what the server sent, stops when it stops offering a next page, and
+#   refuses to visit the same URL twice.
+# @example
+#   dybatpho::curl_paginate "https://api.example.com/items?per_page=100" --header "Accept: application/json"
+#
+# @arg $1 string URL of the first page
+# @arg $@ string Other options/arguments for curl, sent with every page
+# @env DYBATPHO_PAGINATE_MAX_PAGES number Most pages to fetch before stopping, `0` for no limit (default `100`)
+# @env DYBATPHO_PAGINATE_RATE string Optional rate limit spec, such as `10/60`, applied per page and keyed by host
+# @set DYBATPHO_HTTP_STATUS The status of the last page fetched
+# @set DYBATPHO_HTTP_HEADERS The headers of the last page fetched
+# @stdout The body of every page, in order
+# @exitcode 0 Every page was fetched
+# @exitcode other The exit code of `dybatpho::curl_do` for the page that failed
+# @see
+#   - `dybatpho::curl_link`
+#   - `dybatpho::rate_limit`
+# @tip An authenticated API takes its token through `DYBATPHO_CURL_SECRET_HEADERS`, which keeps it off `curl`'s command line for every page
+# @note Under `DRY_RUN` only the first page is rehearsed, because no response comes back to say where the next one is
+#######################################
+function dybatpho::curl_paginate {
+  local url
+  dybatpho::expect_args url -- "$@"
+  shift
+  [[ "${DYBATPHO_PAGINATE_MAX_PAGES}" =~ ^[0-9]+$ ]] \
+    || dybatpho::die "DYBATPHO_PAGINATE_MAX_PAGES must be a non-negative integer"
+
+  local rate_key=""
+  if [[ -n "${DYBATPHO_PAGINATE_RATE}" ]]; then
+    # `url_parse` writes to a global, so its answer is read in a subshell here
+    # rather than overwriting whatever the caller last parsed.
+    rate_key="$(dybatpho::url_parse "${url}" > /dev/null 2>&1 && printf '%s' "${DYBATPHO_URL[host]}")" || rate_key=""
+    rate_key="${rate_key:-curl_paginate}"
+  fi
+
+  local body
+  dybatpho::create_temp body ".body"
+  local -A visited=()
+  local page=0 next exit_code=0
+  while [[ -n "${url}" ]]; do
+    if [[ -v "visited[${url}]" ]]; then
+      dybatpho::warn "Pagination came back to ${url}; stopping"
+      break
+    fi
+    visited["${url}"]=1
+    page=$((page + 1))
+    if ((DYBATPHO_PAGINATE_MAX_PAGES > 0 && page > DYBATPHO_PAGINATE_MAX_PAGES)); then
+      dybatpho::warn "Pagination stopped after ${DYBATPHO_PAGINATE_MAX_PAGES} pages"
+      break
+    fi
+    [[ -n "${rate_key}" ]] && dybatpho::rate_limit "${rate_key}" "${DYBATPHO_PAGINATE_RATE}"
+
+    dybatpho::debug "Fetching page ${page}: ${url}"
+    : > "${body}"
+    exit_code=0
+    dybatpho::curl_request "${url}" "${body}" "$@" || exit_code=$?
+    if ((exit_code != 0)); then
+      rm -f "${body}"
+      return "${exit_code}"
+    fi
+    if [[ -s "${body}" ]]; then
+      cat "${body}"
+      # A page that does not end in a newline would otherwise run into the
+      # first line of the next one.
+      (($(tail -c 1 "${body}" | wc -l) == 1)) || echo
+    fi
+
+    if dybatpho::is true "${DRY_RUN}"; then
+      break
+    fi
+    next="$(dybatpho::curl_link next)" || next=""
+    url="${next}"
+  done
+  rm -f "${body}"
+  return 0
+}
+
+#######################################
+# @description Make a request carrying a bearer token, without putting the token
+#   on `curl`'s command line.
+#
+#   `--header "Authorization: Bearer ..."` publishes the token in
+#   `/proc/<pid>/cmdline`, which every account on the host can read for as long
+#   as the request runs, and which `ps auxww` prints. The token goes through
+#   `DYBATPHO_CURL_SECRET_HEADERS` instead, which `dybatpho::curl_do` writes to
+#   a private config file and removes again afterwards.
+# @example
+#   dybatpho::curl_auth_bearer https://api.example.com/v1/me "${API_TOKEN}" /tmp/me.json
+#
+# @arg $1 string URL
+# @arg $2 string Bearer token
+# @arg $3 string Location of curl output, default is `/dev/null`
+# @arg $@ string Other options/arguments for curl
+# @set DYBATPHO_HTTP_STATUS The response status code
+# @set DYBATPHO_HTTP_HEADERS The response headers
+# @exitcode 0 The server answered with a 2xx status
+# @see dybatpho::curl_request
+# @note Secret headers the caller already set are kept; the `Authorization` header is added to them
+#######################################
+function dybatpho::curl_auth_bearer {
+  local url token
+  dybatpho::expect_args url token -- "$@"
+  shift 2
+  if dybatpho::is empty "${token}"; then
+    dybatpho::die "${FUNCNAME[0]}: Bearer token must not be empty"
+  fi
+  local output="/dev/null"
+  if (($# > 0)); then
+    output="$1"
+    shift
+  fi
+
+  local -a headers=(
+    ${DYBATPHO_CURL_SECRET_HEADERS[@]+"${DYBATPHO_CURL_SECRET_HEADERS[@]}"}
+    "Authorization: Bearer ${token}"
+  )
+  # shellcheck disable=SC2034 # read by dybatpho::curl_do through dynamic scoping
+  local -a DYBATPHO_CURL_SECRET_HEADERS=("${headers[@]}")
+  dybatpho::curl_request "${url}" "${output}" "$@"
+}
+
+#######################################
+# @description Post a GraphQL query and report the errors the response carries.
+#
+#   A GraphQL endpoint answers `200 OK` and puts the failure in the body, so a
+#   script that only checks the status code reads "the field you asked for does
+#   not exist" as a successful request. This builds the `{"query":...,
+#   "variables":...}` envelope, sends the body on standard input rather than in
+#   an argument, and turns a non-empty `errors` array into exit code `4` with
+#   the first message logged.
+# @example
+#   dybatpho::curl_graphql https://api.github.com/graphql \
+#     'query($owner:String!){ repositoryOwner(login:$owner){ login } }' \
+#     "$(dybatpho::json_object owner dynamotn)" /tmp/owner.json
+#
+# @arg $1 string GraphQL endpoint URL
+# @arg $2 string Query or mutation document
+# @arg $3 string Variables as a JSON object, default `{}`
+# @arg $4 string Location of curl output, default is `/dev/null`
+# @arg $@ string Other options/arguments for curl
+# @env DYBATPHO_GRAPHQL_TOKEN string Optional bearer token, sent out of band with the request
+# @set DYBATPHO_HTTP_STATUS The response status code
+# @set DYBATPHO_HTTP_HEADERS The response headers
+# @exitcode 0 The endpoint answered 2xx and the response carried no errors
+# @exitcode 4 The endpoint answered 4xx, or answered with a non-empty `errors` array
+# @exitcode 5 The endpoint answered 5xx
+# @see dybatpho::curl_request
+#######################################
+function dybatpho::curl_graphql {
+  local url query
+  dybatpho::expect_args url query -- "$@"
+  shift 2
+  local variables="{}" output="/dev/null"
+  if (($# > 0)); then
+    variables="${1:-{\}}"
+    shift
+  fi
+  if (($# > 0)); then
+    output="$1"
+    shift
+  fi
+
+  # `yq`'s `from_json` reads an unparseable value as the string it was given, so
+  # bad variables would otherwise be sent as a string field the server rejects
+  # with a message about the query rather than about the caller.
+  variables="$(dybatpho::trim "${variables}")"
+  [[ -n "${variables}" ]] || variables="{}"
+  if [[ "${variables}" != "{"*"}" ]] || ! dybatpho::json_valid "${variables}"; then
+    dybatpho::die "${FUNCNAME[0]}: Variables must be a JSON object: ${variables}"
+  fi
+
+  local payload
+  payload="$(dybatpho::json_object query "${query}" variables:json "${variables}")" \
+    || dybatpho::die "${FUNCNAME[0]}: Could not build the GraphQL request body"
+
+  # The errors live in the body, so a caller that discards the body still needs
+  # one to read before it is thrown away.
+  local response="${output}" scratch=""
+  if [[ "${response}" == "/dev/null" ]]; then
+    dybatpho::create_temp scratch ".json"
+    response="${scratch}"
+  fi
+
+  local -a args=(
+    --request POST
+    --header "Accept: application/json"
+    --header "Content-Type: application/json"
+  )
+  local -a headers=(${DYBATPHO_CURL_SECRET_HEADERS[@]+"${DYBATPHO_CURL_SECRET_HEADERS[@]}"})
+  [[ -n "${DYBATPHO_GRAPHQL_TOKEN}" ]] && headers+=("Authorization: Bearer ${DYBATPHO_GRAPHQL_TOKEN}")
+  local -a DYBATPHO_CURL_SECRET_HEADERS=(${headers[@]+"${headers[@]}"})
+  # shellcheck disable=SC2034 # read by dybatpho::curl_do through dynamic scoping
+  local DYBATPHO_CURL_SECRET_DATA="${payload}"
+
+  local exit_code=0
+  dybatpho::curl_request "${url}" "${response}" "${args[@]}" "$@" || exit_code=$?
+
+  if ((exit_code == 0)) && ! dybatpho::is true "${DRY_RUN}"; then
+    local message=""
+    message="$(dybatpho::json_get "$(< "${response}")" '.errors[0].message // ""' 2> /dev/null)" || message=""
+    if [[ -n "${message}" && "${message}" != "null" ]]; then
+      dybatpho::error "GraphQL error from ${url}: ${message}"
+      exit_code=4
+    fi
+  fi
+
+  [[ -n "${scratch}" ]] && rm -f "${scratch}"
   return "${exit_code}"
 }
 

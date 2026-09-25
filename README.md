@@ -190,7 +190,7 @@ scripts/release.sh --version 3.0.0 --sign
 
 | Module                                    | What you get                                                    |
 | ----------------------------------------- | ---------------------------------------------------------------- |
-| [network.sh](doc/network.md)              | `curl` wrapper with retry, dry-run and header handling            |
+| [network.sh](doc/network.md)              | `curl` wrapper with retry, rate limiting, pagination and auth     |
 | [notification.sh](doc/notification.md)    | Slack, Telegram, Teams, Google Chat, Discord, generic webhooks     |
 
 ### 🔐 Configuration & secrets

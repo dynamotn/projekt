@@ -3,6 +3,7 @@ setup() {
 }
 
 teardown() {
+  dybatpho::unmock_all 2> /dev/null || true
   local pidfile="${BATS_TEST_TMPDIR}/listener.pid"
   [[ -f "${pidfile}" ]] || return 0
   kill "$(cat "${pidfile}")" 2> /dev/null || true
@@ -505,6 +506,272 @@ c.close()' > "${portfile}" 2> /dev/null &
   assert_success
   assert_equal "$(dybatpho::circuit_state recovering-service)" "closed"
   unset DYBATPHO_CIRCUIT_THRESHOLD
+}
+
+# --- Rate limiting -------------------------------------------------------
+
+@test "dybatpho::rate_limit runs the command and returns its exit code" {
+  dybatpho::rate_limit_reset runner
+  run dybatpho::rate_limit runner 5/60 -- printf 'called %s\n' once
+  assert_success
+  assert_output "called once"
+
+  dybatpho::rate_limit_reset runner
+  run -3 dybatpho::rate_limit runner 5/60 -- bash -c 'exit 3'
+  assert_failure
+}
+
+@test "dybatpho::rate_limit takes a slot without a command" {
+  dybatpho::rate_limit_reset gate
+  assert_equal "$(dybatpho::rate_limit_remaining gate 3/60)" "3"
+  dybatpho::rate_limit gate 3/60
+  dybatpho::rate_limit gate 3/60
+  assert_equal "$(dybatpho::rate_limit_remaining gate 3/60)" "1"
+}
+
+@test "dybatpho::rate_limit accepts the command without a -- separator" {
+  dybatpho::rate_limit_reset separator
+  run dybatpho::rate_limit separator 5/60 printf 'plain'
+  assert_success
+  assert_output "plain"
+}
+
+@test "dybatpho::rate_limit refuses a spent budget when waiting is disabled" {
+  dybatpho::rate_limit_reset strict
+  DYBATPHO_RATE_LIMIT_WAIT=false
+  dybatpho::rate_limit strict 1/60
+  run -9 dybatpho::rate_limit strict 1/60 -- touch "${BATS_TEST_TMPDIR}/must-not-exist"
+  assert_failure
+  DYBATPHO_RATE_LIMIT_WAIT=true
+  [ ! -f "${BATS_TEST_TMPDIR}/must-not-exist" ]
+}
+
+@test "dybatpho::rate_limit refuses a wait longer than the budget allows" {
+  dybatpho::rate_limit_reset capped
+  DYBATPHO_RATE_LIMIT_MAX_WAIT=1
+  dybatpho::rate_limit capped 1/1h
+  run -9 dybatpho::rate_limit capped 1/1h -- true
+  assert_failure
+  DYBATPHO_RATE_LIMIT_MAX_WAIT=0
+}
+
+@test "dybatpho::rate_limit waits for the window to slide instead of dropping the call" {
+  # The clock and the sleep are both replaced, because a wall-clock assertion
+  # measures how loaded the machine running the suite is rather than what the
+  # limiter decided: a window short enough to keep the test fast can elapse on
+  # its own while a parallel run is busy elsewhere.
+  # The name is not `now`: `dybatpho::rate_limit` has a local of that name, and
+  # Bash's dynamic scoping would hand the stub that one instead of this one.
+  local fake_now=1700000000000 slept=""
+  __dybatpho_log_now_ms() { printf '%s' "${fake_now}"; }
+  sleep() {
+    slept="$1"
+    fake_now=$((fake_now + 1000))
+  }
+
+  dybatpho::rate_limit_reset waiting
+  dybatpho::rate_limit waiting 1/1s
+  run_traced dybatpho::rate_limit waiting 1/1s -- printf 'late'
+  assert_success
+  assert_output "late"
+  # It waited out the whole window rather than dropping the call.
+  assert_equal "${slept}" "1.000"
+}
+
+@test "dybatpho::rate_limit forgets calls that have left the window" {
+  # Two calls 200ms apart, judged from three points in time: inside the window,
+  # after the first has left it, and after both have.
+  DYBATPHO_RATE_EVENTS[sliding]="1000 1200"
+  assert_equal "$(__dybatpho_network_rate_prune sliding 2 500 1300)" "0"
+  assert_equal "$(__dybatpho_network_rate_prune sliding 2 500 1600)" "1"
+  assert_equal "$(__dybatpho_network_rate_prune sliding 2 500 1800)" "2"
+
+  # And the same through the public reader, which asks the clock itself.
+  local fake_now=1700000000000
+  __dybatpho_log_now_ms() { printf '%s' "${fake_now}"; }
+  dybatpho::rate_limit_reset sliding
+  dybatpho::rate_limit sliding 2/500ms
+  assert_equal "$(dybatpho::rate_limit_remaining sliding 2/500ms)" "1"
+  fake_now=$((fake_now + 600))
+  assert_equal "$(dybatpho::rate_limit_remaining sliding 2/500ms)" "2"
+}
+
+@test "dybatpho::rate_limit keeps only the calls still inside the window" {
+  # The pruning has to reach the caller's window: read through a subshell, the
+  # list would grow with every call and the wait would be worked out from a
+  # timestamp that had already left it.
+  local fake_now=1700000000000
+  __dybatpho_log_now_ms() { printf '%s' "${fake_now}"; }
+  dybatpho::rate_limit_reset pruning
+  dybatpho::rate_limit pruning 5/500ms
+  fake_now=$((fake_now + 200))
+  dybatpho::rate_limit pruning 5/500ms
+  fake_now=$((fake_now + 400))
+  dybatpho::rate_limit pruning 5/500ms
+  # The first call is 600ms old by now, so only the last two are still counted.
+  assert_equal "${DYBATPHO_RATE_EVENTS[pruning]}" "1700000000200 1700000000600"
+}
+
+@test "dybatpho::rate_limit_reset clears a key" {
+  dybatpho::rate_limit_reset cleared
+  dybatpho::rate_limit cleared 2/60
+  assert_equal "$(dybatpho::rate_limit_remaining cleared 2/60)" "1"
+  dybatpho::rate_limit_reset cleared
+  assert_equal "$(dybatpho::rate_limit_remaining cleared 2/60)" "2"
+}
+
+@test "dybatpho::rate_limit reads every window unit" {
+  assert_equal "$(__dybatpho_network_rate_spec 10/60)" "10 60000"
+  assert_equal "$(__dybatpho_network_rate_spec 10/500ms)" "10 500"
+  assert_equal "$(__dybatpho_network_rate_spec 10/2m)" "10 120000"
+  assert_equal "$(__dybatpho_network_rate_spec 10/1h)" "10 3600000"
+}
+
+@test "dybatpho::rate_limit rejects a spec that is not count/window" {
+  run --separate-stderr dybatpho::rate_limit bad 10 -- true
+  assert_failure
+  run --separate-stderr dybatpho::rate_limit bad 0/60 -- true
+  assert_failure
+  run --separate-stderr dybatpho::rate_limit_remaining bad "ten per minute"
+  assert_failure
+}
+
+# --- Link header pagination ----------------------------------------------
+
+@test "dybatpho::curl_link picks the URL of the relation it was asked for" {
+  DYBATPHO_HTTP_HEADERS=(
+    [link]='<https://api.example.test/items?page=1>; rel="prev", <https://api.example.test/items?page=3>; rel="next"'
+  )
+  assert_equal "$(dybatpho::curl_link next)" "https://api.example.test/items?page=3"
+  assert_equal "$(dybatpho::curl_link prev)" "https://api.example.test/items?page=1"
+  run dybatpho::curl_link last
+  assert_failure
+}
+
+@test "dybatpho::curl_link matches one entry that carries several relations" {
+  DYBATPHO_HTTP_HEADERS=([link]='<https://api.example.test/items?page=9>; rel="next last"')
+  assert_equal "$(dybatpho::curl_link last)" "https://api.example.test/items?page=9"
+  # `nex` is a prefix of `next` and must not be mistaken for it.
+  run dybatpho::curl_link nex
+  assert_failure
+}
+
+@test "dybatpho::curl_link fails when the response carried no Link header" {
+  DYBATPHO_HTTP_HEADERS=()
+  run dybatpho::curl_link next
+  assert_failure
+}
+
+@test "dybatpho::curl_paginate follows rel=next until the last page" {
+  dybatpho::mock_http "items?page=1" 200 'page-one' \
+    'Link: <https://api.example.test/items?page=2>; rel="next"'
+  dybatpho::mock_http "items?page=2" 200 'page-two'
+
+  run dybatpho::curl_paginate "https://api.example.test/items?page=1"
+  assert_success
+  assert_line --index 0 "page-one"
+  assert_line --index 1 "page-two"
+  dybatpho::assert_http_called "items?page=2"
+}
+
+@test "dybatpho::curl_paginate stops at the page budget" {
+  # Every page points at another one, so only the budget ends the walk.
+  dybatpho::mock_http "items?page=1" 200 'one' \
+    'Link: <https://api.example.test/items?page=2>; rel="next"'
+  dybatpho::mock_http "items?page=2" 200 'two' \
+    'Link: <https://api.example.test/items?page=3>; rel="next"'
+  dybatpho::mock_http "items?page=3" 200 'three'
+  DYBATPHO_PAGINATE_MAX_PAGES=2
+  run dybatpho::curl_paginate "https://api.example.test/items?page=1"
+  DYBATPHO_PAGINATE_MAX_PAGES=100
+  assert_success
+  assert_equal "$(dybatpho::mock_http_calls | wc -l)" "2"
+  refute_output --partial "three"
+}
+
+@test "dybatpho::curl_paginate refuses to walk in a circle" {
+  dybatpho::mock_http "items?page=1" 200 'page-one' \
+    'Link: <https://api.example.test/items?page=2>; rel="next"'
+  dybatpho::mock_http "items?page=2" 200 'page-two' \
+    'Link: <https://api.example.test/items?page=1>; rel="next"'
+
+  run dybatpho::curl_paginate "https://api.example.test/items?page=1"
+  assert_success
+  assert_equal "$(dybatpho::mock_http_calls | wc -l)" "2"
+}
+
+@test "dybatpho::curl_paginate reports the failing page instead of the pages before it" {
+  dybatpho::mock_http "items?page=1" 200 'page-one' \
+    'Link: <https://api.example.test/items?page=2>; rel="next"'
+  dybatpho::mock_http "items?page=2" 404 'gone'
+
+  run -4 dybatpho::curl_paginate "https://api.example.test/items?page=1"
+  assert_failure
+}
+
+@test "dybatpho::curl_paginate rejects a non-numeric page budget" {
+  DYBATPHO_PAGINATE_MAX_PAGES=lots
+  run --separate-stderr dybatpho::curl_paginate "https://api.example.test/items"
+  DYBATPHO_PAGINATE_MAX_PAGES=100
+  assert_failure
+}
+
+# --- Bearer authentication and GraphQL -----------------------------------
+
+@test "dybatpho::curl_auth_bearer sends the token out of the argument vector" {
+  dybatpho::mock_http "api.example.test/me" 200 '{"login":"dynamotn"}'
+  local body="${BATS_TEST_TMPDIR}/me.json"
+  dybatpho::curl_auth_bearer "https://api.example.test/me" "s3cr3t" "${body}"
+  assert_equal "$(cat "${body}")" '{"login":"dynamotn"}'
+  # The token travels in curl's config file, never in its arguments.
+  dybatpho::mock_http_payloads | grep -q 'Authorization: Bearer s3cr3t'
+  ! dybatpho::mock_calls curl | grep -q 's3cr3t'
+}
+
+@test "dybatpho::curl_auth_bearer keeps the secret headers the caller already set" {
+  dybatpho::mock_http "api.example.test/me" 200 '{}'
+  local -a DYBATPHO_CURL_SECRET_HEADERS=("X-Trace: abc123")
+  dybatpho::curl_auth_bearer "https://api.example.test/me" "s3cr3t"
+  dybatpho::mock_http_payloads | grep -q 'X-Trace: abc123'
+  dybatpho::mock_http_payloads | grep -q 'Authorization: Bearer s3cr3t'
+}
+
+@test "dybatpho::curl_auth_bearer refuses an empty token" {
+  run --separate-stderr dybatpho::curl_auth_bearer "https://api.example.test/me" ""
+  assert_failure
+}
+
+@test "dybatpho::curl_graphql posts the query and its variables" {
+  dybatpho::mock_http "graphql" 200 '{"data":{"viewer":{"login":"dynamotn"}}}'
+  local body="${BATS_TEST_TMPDIR}/graphql.json"
+  DYBATPHO_GRAPHQL_TOKEN="gql-token"
+  run dybatpho::curl_graphql "https://api.example.test/graphql" \
+    'query($login:String!){ user(login:$login){ id } }' \
+    '{"login":"dynamotn"}' "${body}"
+  DYBATPHO_GRAPHQL_TOKEN=""
+  assert_success
+  assert_equal "$(dybatpho::json_get "$(< "${body}")" '.data.viewer.login')" "dynamotn"
+  dybatpho::mock_http_payloads | grep -q '"login": *"dynamotn"'
+  dybatpho::mock_http_payloads | grep -q 'Authorization: Bearer gql-token'
+}
+
+@test "dybatpho::curl_graphql treats an errors array in a 200 as a failure" {
+  dybatpho::mock_http "graphql" 200 '{"errors":[{"message":"Field does not exist"}]}'
+  run -4 --separate-stderr dybatpho::curl_graphql "https://api.example.test/graphql" '{ viewer { nope } }'
+  assert_failure
+  [[ "${stderr}" == *"Field does not exist"* ]]
+}
+
+@test "dybatpho::curl_graphql passes a clean response through" {
+  dybatpho::mock_http "graphql" 200 '{"data":{"ok":true}}'
+  run dybatpho::curl_graphql "https://api.example.test/graphql" '{ ok }'
+  assert_success
+}
+
+@test "dybatpho::curl_graphql rejects variables that are not a JSON object" {
+  dybatpho::mock_http "graphql" 200 '{"data":{}}'
+  run --separate-stderr dybatpho::curl_graphql "https://api.example.test/graphql" '{ ok }' 'not json'
+  assert_failure
 }
 
 # --- URL parsing ---------------------------------------------------------
