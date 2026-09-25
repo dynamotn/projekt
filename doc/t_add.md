@@ -2,6 +2,29 @@
 
 Save an existing file or folder as a template
 
+### Synopsis
+
+Save an existing file or folder as a template.
+
+The content is copied as it is, so any template action already in it is kept.
+That is half the job: the project also says its own name, its own module path
+and its own author in every second file, and a template says `{{ .Name }}`.
+
+--replace does that half. Each one is literal=Expr, where Expr is a template
+path: .Name and the rest come for free, anything under .Values becomes a
+question, and a `.vars.yaml` is written with what the project already said
+as the default. The literals are replaced in the file names as well as in the
+contents, longest first, and a file that is not text is copied untouched.
+
+Examples:
+
+  t add ./LICENSE
+  t add ./myapp --name go-cli
+  t add ./myapp --name go-cli \
+    --replace myapp=Name \
+    --replace example.com/myapp=Values.module \
+    --replace 'Jane Doe=Values.author'
+
 ```
 t add [file or folder] [flags]
 ```
@@ -9,9 +32,10 @@ t add [file or folder] [flags]
 ### Options
 
 ```
-  -F, --force         Overwrite a template that already exists
-  -h, --help          help for add
-  -n, --name string   Name of the template, defaults to the source name
+  -F, --force                 Overwrite a template that already exists
+  -h, --help                  help for add
+  -n, --name string           Name of the template, defaults to the source name
+  -r, --replace stringArray   Turn a literal into a template expression, like -r myapp=Name (repeatable)
 ```
 
 ### Options inherited from parent commands
