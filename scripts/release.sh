@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @file release.sh
 # @brief Cut a release of projekt from the current repository
-# @description
+# @description Decide the next version, write the changelog, tag and push.
 #   Decides the next version from the Conventional Commits made since the last
 #   tag, writes the changelog entry, then commits, tags and pushes. The actual
 #   build and the GitHub release are left to goreleaser, which the `release`
@@ -14,7 +14,6 @@
 #   scripts/release.sh --dry-run
 #   scripts/release.sh --bump minor
 #   scripts/release.sh --version 1.4.0 --yes
-set -euo pipefail
 
 # The library lives in the dotfiles checkout by default; point DYBATPHO_DIR
 # somewhere else to use another copy, such as a vendored one in CI.
@@ -37,7 +36,10 @@ TAG_PATTERN="${DYBATPHO_RELEASE_TAG_PATTERN:-v*}"
 # Steps
 # ---------------------------------------------------------------------------
 
-# Refuse to release from a tree that doesn't match what the tag will claim.
+# @description Refuse to release from a tree that doesn't match what the tag
+#   will claim.
+# @env REMOTE string Remote the release will be pushed to
+# @noargs
 function _preflight {
   dybatpho::require git
   dybatpho::require go
@@ -59,9 +61,15 @@ function _preflight {
     || dybatpho::die "No remote named ${REMOTE}"
 }
 
-# Sets a variable rather than printing, so that a rejected version stops the
-# script itself instead of only the command substitution that would read it.
+# @description Work out the version to release.
+#
+#   Sets a variable rather than printing, so that a rejected version stops the
+#   script itself instead of only the command substitution that would read it.
+# @env VERSION string Version given on the command line, if any
+# @env BUMP string Part to bump the previous tag by, if any
+# @env PREVIOUS_TAG string Tag of the previous release, empty when there is none
 # @set RELEASE_VERSION Version to release, without a leading `v`
+# @noargs
 function _resolve_version {
   if [[ -n "${VERSION:-}" ]]; then
     RELEASE_VERSION="${VERSION#v}"
@@ -80,14 +88,20 @@ function _resolve_version {
   fi
 }
 
+# @description Stop when the tag for this release already exists.
 # @arg $1 string Version being released
 function _check_tag_free {
-  local tag="v$1"
+  local version tag
+  dybatpho::expect_args version -- "$@"
+  tag="v${version}"
   if git -C "${REPO_ROOT}" rev-parse -q --verify "refs/tags/${tag}" > /dev/null; then
     dybatpho::die "Tag ${tag} already exists"
   fi
 }
 
+# @description Run the lint and test gates a release has to pass.
+# @env SKIP_CHECKS string When true, skip both gates
+# @noargs
 function _run_gates {
   if dybatpho::is true "${SKIP_CHECKS:-false}"; then
     dybatpho::warn "Skipping lint and tests"
@@ -99,11 +113,14 @@ function _run_gates {
   dybatpho::dry_run make -C "${REPO_ROOT}" test
 }
 
-# Read the body of the `## [Unreleased]` section, without its heading.
+# @description Read the body of the `## [Unreleased]` section, without its
+#   heading.
 #
-# Entries are written by hand as the change is made, so this is the list that
-# knows what a release actually contains; the one derived from commit subjects
-# only knows what they were called.
+#   Entries are written by hand as the change is made, so this is the list that
+#   knows what a release actually contains; the one derived from commit subjects
+#   only knows what they were called.
+# @stdout Body of the Unreleased section, empty when there is none
+# @noargs
 function _unreleased_body {
   [[ -f "${CHANGELOG}" ]] || return 0
   sed -n '/^## \[Unreleased\]/,/^## \[/{ /^## \[/d; p; }' "${CHANGELOG}" \
@@ -113,16 +130,20 @@ function _unreleased_body {
            { while (blank-- > 0) print ""; blank = 0; print }'
 }
 
-# Put the new section directly under the changelog title, so the file stays
-# newest-first the way Keep a Changelog describes.
+# @description Write the changelog entry for this release.
 #
-# The hand-written `## [Unreleased]` section becomes the release: its entries
-# were written as each change was made, and leaving them above the version
-# they shipped in would strand them there for good. When there is no such
-# section, the entry derived from the commit subjects is used instead.
+#   Puts the new section directly under the changelog title, so the file stays
+#   newest-first the way Keep a Changelog describes.
+#
+#   The hand-written `## [Unreleased]` section becomes the release: its entries
+#   were written as each change was made, and leaving them above the version
+#   they shipped in would strand them there for good. When there is no such
+#   section, the entry derived from the commit subjects is used instead.
 # @arg $1 string Version being released
 function _write_changelog {
-  local version="$1" entry unreleased temp_dir temp_file
+  local version
+  dybatpho::expect_args version -- "$@"
+  local entry unreleased temp_dir temp_file
   entry="$(dybatpho::release_changelog \
     "${REPO_ROOT}" "${PREVIOUS_TAG}" HEAD "${version}")"
   unreleased="$(_unreleased_body)"
@@ -152,16 +173,21 @@ function _write_changelog {
   dybatpho::dry_run cp "${temp_file}" "${CHANGELOG}"
 }
 
+# @description Commit the changelog, tag the release and push both.
 # @arg $1 string Version being released
+# @env REMOTE string Remote to push to
+# @env PUSH string When false, commit and tag but don't push
 function _publish {
-  local version="$1" tag="v$1" branch
+  local version
+  dybatpho::expect_args version -- "$@"
+  local tag="v${version}" branch
   branch="$(dybatpho::git_branch "${REPO_ROOT}")"
 
   dybatpho::dry_run git -C "${REPO_ROOT}" add CHANGELOG.md
   dybatpho::dry_run git -C "${REPO_ROOT}" commit -m "chore(release): ${tag}"
   dybatpho::dry_run git -C "${REPO_ROOT}" tag -a "${tag}" -m "Release ${tag}"
 
-  if dybatpho::is true "${NO_PUSH:-false}"; then
+  if dybatpho::is false "${PUSH:-true}"; then
     dybatpho::warn "Not pushing; run: git push ${REMOTE} ${branch} && git push ${REMOTE} ${tag}"
     return 0
   fi
@@ -170,6 +196,11 @@ function _publish {
   dybatpho::info "Pushed ${tag}; the release workflow builds and publishes it"
 }
 
+# @description Run the whole release, from preflight to push.
+# @env REMOTE string Remote to push to, defaults to `origin`
+# @env DRY_RUN string When true, show every step without changing anything
+# @set PREVIOUS_TAG Tag of the previous release, empty when there is none
+# @noargs
 function _release {
   REMOTE="${REMOTE:-origin}"
   if dybatpho::is true "${DRY_RUN:-false}"; then
@@ -201,6 +232,8 @@ function _release {
 # Spec
 # ---------------------------------------------------------------------------
 
+# @description Declare the command line of this script.
+# @noargs
 function _spec {
   dybatpho::opts::setup \
     "Cut a release of projekt: version, changelog, tag and push" \
@@ -211,7 +244,8 @@ function _spec {
   dybatpho::opts::param "Remote to push to" REMOTE -r --remote init:="origin"
   dybatpho::opts::flag "Show every step without changing anything" DRY_RUN -n --dry-run
   dybatpho::opts::flag "Skip lint and tests" SKIP_CHECKS --skip-checks
-  dybatpho::opts::flag "Commit and tag, but don't push" NO_PUSH --no-push
+  dybatpho::opts::flag "Push the release commit and tag" PUSH --push \
+    negatable:true init:="true"
   dybatpho::opts::flag "Answer yes to every prompt" DYBATPHO_FORCE -y --yes
 
   dybatpho::opts::disp "Show help" -h --help action:"dybatpho::generate_help _spec"

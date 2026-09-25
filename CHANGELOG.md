@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **release**: `scripts/release.sh --no-push` stops before the push again,
+  instead of tagging and pushing anyway — the option parser reserves `--no-*`
+  for the negated form of a switch, so the flag never reached its variable
+
 ## [3.1.0]
 
 ### Added
