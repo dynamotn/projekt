@@ -194,8 +194,8 @@ func (c *checker) checkVars(manifest Manifest, read, askable map[string]bool) {
 	// A value a data file already holds is answered, not unasked: it is never
 	// missing at render time and never shows up at the prompt.
 	declared := map[string]bool{}
-	if data, err := LoadData(c.tpl); err == nil {
-		flatten(data, "", declared)
+	if keys, err := DataKeys(c.tpl); err == nil {
+		declared = keys
 	}
 
 	for _, v := range manifest.Vars {
@@ -216,21 +216,6 @@ func (c *checker) checkVars(manifest Manifest, read, askable map[string]bool) {
 	sort.Strings(missing)
 	for _, name := range missing {
 		c.warnf("the template reads .Values.%s, which %s never asks for, so --interactive will not offer it", name, VarsFile)
-	}
-}
-
-// flatten records a data file's keys, at every depth, as values that are
-// already answered.
-func flatten(values map[string]any, prefix string, into map[string]bool) {
-	for key, value := range values {
-		path := key
-		if prefix != "" {
-			path = prefix + "." + key
-		}
-		into[path] = true
-		if nested, ok := toMap(value); ok {
-			flatten(nested, path, into)
-		}
 	}
 }
 

@@ -59,6 +59,35 @@ func WithData(o RenderOptions) (Values, error) {
 	return MergeValues(data, o.Values), nil
 }
 
+// DataKeys returns every key the data files already hold, at every depth.
+//
+// A value a data file supplies is answered, not unasked: it is never missing
+// at render time and never shows up at a prompt, so nothing should complain
+// that it was not declared.
+func DataKeys(tpl Template) (map[string]bool, error) {
+	data, err := LoadData(tpl)
+	if err != nil {
+		return nil, err
+	}
+	keys := map[string]bool{}
+	flattenKeys(data, "", keys)
+	return keys, nil
+}
+
+// flattenKeys records a nested map's keys as dotted paths.
+func flattenKeys(values map[string]any, prefix string, into map[string]bool) {
+	for key, value := range values {
+		path := key
+		if prefix != "" {
+			path = prefix + "." + key
+		}
+		into[path] = true
+		if nested, ok := toMap(value); ok {
+			flattenKeys(nested, path, into)
+		}
+	}
+}
+
 // dataPath returns where a template's own data file lives: inside a folder
 // template, so it travels with it, and next to a file template.
 func dataPath(tpl Template) string {

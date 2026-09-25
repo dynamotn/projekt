@@ -227,6 +227,41 @@ kind.
 A recipe that clones a repository rather than rendering a template cannot be
 applied again, and says so: there is no template to re-render.
 
+## Checking a recipe
+
+`b check` reads a recipe the way creating from it would, and reports
+everything rather than the first thing:
+
+```bash
+b check              # every recipe of the store
+b check go-cli       # one of them
+b check --strict     # warnings count as errors too
+```
+
+Nothing is written and no project is created. It exits non-zero on an error,
+so a CI job can gate on a store of recipes staying usable.
+
+**Errors** — the recipe will not create anything:
+
+- no origin, or both an origin and a repository
+- a `source.template` that is not in the template store, or one that `t check`
+  itself reports an error on
+- a `source.repo` that is neither a URL nor `server:group/name`
+- a variable without a name, or a choice without choices
+- an `after` command line that does not parse
+- a `register.remote` without a host or a group, or one naming a git server
+  that is not in your configuration
+
+**Warnings** — it works, but probably not as meant:
+
+- a question the recipe asks that the template never reads
+- a value the template reads that the recipe never asks for. As with
+  `t check`, one the template already handles the absence of, one a
+  `.data.yaml` already holds, and a list or a map are all left alone
+- a `register.workspace` that does not exist yet, or a `register.skip` that
+  makes the workspace beside it pointless
+- a `source.template` that is a file template, so the "project" is one file
+
 ## Writing a recipe
 
 Write the template first — `t add ./some-project --name go-cli` turns a project
