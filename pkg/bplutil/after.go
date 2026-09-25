@@ -30,7 +30,7 @@ func RunAfter(out io.Writer, plan Plan, values tplutil.Values, o CreateOptions) 
 	base["Values"] = map[string]any(values)
 
 	for i, command := range plan.Recipe.After {
-		rendered, err := renderCommand(plan.Recipe.Name, i, command, base)
+		rendered, err := renderCommand(plan.Recipe, i, command, base)
 		if err != nil {
 			return err
 		}
@@ -57,8 +57,8 @@ func RunAfter(out io.Writer, plan Plan, values tplutil.Values, o CreateOptions) 
 }
 
 // renderCommand runs one command line through the template engine.
-func renderCommand(recipe string, index int, command string, base map[string]any) (string, error) {
-	rendered, err := tplutil.RenderString(fmt.Sprintf("%s:after[%d]", recipe, index), command, base)
+func renderCommand(recipe Recipe, index int, command string, base map[string]any) (string, error) {
+	rendered, err := tplutil.RenderString(TrustOrigin(recipe), fmt.Sprintf("%s:after[%d]", recipe.Name, index), command, base)
 	if err != nil {
 		return "", err
 	}
@@ -70,6 +70,9 @@ func renderCommand(recipe string, index int, command string, base map[string]any
 // Through a shell because a hook that cannot use a pipe or an && is not much
 // of a hook, and because that is what the line in the recipe looks like.
 func runCommand(plan Plan, command string, o CreateOptions) error {
+	if err := tplutil.Authorize(TrustOrigin(plan.Recipe), command); err != nil {
+		return err
+	}
 	shell := strings.TrimSpace(os.Getenv("SHELL"))
 	if shell == "" {
 		shell = "/bin/sh"

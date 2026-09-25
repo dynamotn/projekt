@@ -73,6 +73,9 @@ func (e *engine) includeTemplate(name string, data ...any) (string, error) {
 // newline kept so `{{ output "git" "config" "user.name" | trim }}` reads the
 // way the shell does.
 func (e *engine) output(name string, args ...string) (string, error) {
+	if err := Authorize(e.origin, strings.Join(append([]string{name}, args...), " ")); err != nil {
+		return "", err
+	}
 	cmd := exec.Command(name, args...)
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
@@ -260,7 +263,7 @@ func (e *engine) prompt(key string, v Var, fallback string) (any, error) {
 // has to do, and a default that does not parse is reported rather than asked
 // about forever.
 func (e *engine) read(v Var, fallback string) (any, error) {
-	prompter := Prompter{Out: e.out}
+	prompter := Prompter{Out: e.out, Origin: e.origin}
 	for {
 		typed, err := prompter.ask(e.in, v, fallback)
 		eof := errors.Is(err, io.EOF)

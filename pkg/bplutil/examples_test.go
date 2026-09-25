@@ -62,6 +62,11 @@ func TestExampleRecipesCreate(t *testing.T) {
 			if len(recipe.After) > 0 {
 				t.Skip("runs commands of its own")
 			}
+			// The examples live in this repository, which has a remote: they
+			// run their commands once trusted, as they would for anyone.
+			if err := Trust(recipe); err != nil {
+				t.Fatal(err)
+			}
 			target := filepath.Join(t.TempDir(), "project")
 
 			result, err := Create(CreateOptions{

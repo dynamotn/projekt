@@ -271,6 +271,11 @@ template can ask a question at the point it needs the answer with
 `include`, `includeTemplate`, `output`, `lookPath`, `stat`, `toYaml` and
 `fromYaml`.
 
+A store cloned with `t init` is someone else's code: its `after:` hooks and
+`output` calls run only once you have looked and said `t trust`, and a sync
+that changes a template asks again
+([doc/templates.md](doc/templates.md#trusting-what-a-store-runs)).
+
 A project keeps a record of what it was rendered from, in
 `.projekt/template.yaml` — the template, the values and the hash of every file
 written — so a template can be applied to it again when the template moves on:
@@ -501,7 +506,9 @@ Each is also reachable as `projekt template <command>` / `projekt boilerplate <c
 | [`t check`](doc/t_check.md) | Validate a template, or the whole store; exits 1 on an error |
 | [`t init`](doc/t_init.md) | Clone a repository of templates into the store |
 | [`t sync`](doc/t_sync.md) | Bring the store up to date with its remote |
+| [`t trust`](doc/t_trust.md) | Let a template of a cloned store run its commands, as it is now |
 | [`b check`](doc/b_check.md) | Validate a recipe, or the whole store; exits 1 on an error |
+| [`b trust`](doc/b_trust.md) | Let a recipe from a repository run its commands, as it is now |
 | [`b apply`](doc/b_apply.md) | Create a project from its recipes again, replaying their recorded answers |
 | [`b new`](doc/b_new.md) | Create a project from a recipe, and register it |
 | [`b list`](doc/b_list.md) | List the recipes of the store, as a table, JSON or TSV |

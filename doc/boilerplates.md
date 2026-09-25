@@ -109,6 +109,13 @@ usually assumes the first one worked. The files stay: only the hook failed.
 > them without running any, and `--no-hooks` skips them. Read a recipe you did
 > not write before you run it.
 
+A recipe in a git repository with a remote — or one rendering a template that
+is — runs its commands only once trusted, exactly as a [template of a cloned
+store](templates.md#trusting-what-a-store-runs) does. `b trust <name>` trusts
+the recipe and its template together, as they are now. A starting point cloned
+with `render: true` is someone else's repository too: an `output` in it asks on
+a terminal, and is refused anywhere else.
+
 ## Pointing at a remote
 
 ```yaml

@@ -34,6 +34,9 @@ type engine struct {
 	// lenient lets an unanswerable question render empty, for a check that
 	// only wants to know whether the template holds together.
 	lenient bool
+	// origin is where the text being rendered comes from, which decides
+	// whether `output` may run a command.
+	origin Origin
 	// delims are the delimiters this template is written with. The shared
 	// partials keep the default ones: they belong to the store, not to the
 	// template calling them.
@@ -49,6 +52,10 @@ func newEngine(o RenderOptions) (*engine, error) {
 		answers: map[string]any{},
 		lenient: o.lenient,
 		delims:  DefaultDelims,
+		origin:  o.Origin,
+	}
+	if e.origin.key() == "" {
+		e.origin = TemplateOrigin(o.Template)
 	}
 	if o.Template.Path != "" {
 		manifest, err := LoadManifest(o.Template)
@@ -122,8 +129,8 @@ func (e *engine) execute(name, text string, data map[string]any) ([]byte, error)
 
 // defaultEngine is the session a one-off piece of text runs with: the store's
 // shared partials and the full function set, with nothing to ask questions on.
-func defaultEngine() *engine {
-	e, err := newEngine(RenderOptions{})
+func defaultEngine(origin Origin) *engine {
+	e, err := newEngine(RenderOptions{Origin: origin})
 	if err != nil {
 		// A broken partial must not stop a recipe's command line from being
 		// rendered; it is reported where the partial is actually used.
@@ -131,6 +138,7 @@ func defaultEngine() *engine {
 			root:    template.New("").Funcs(sprig.TxtFuncMap()).Option("missingkey=zero"),
 			answers: map[string]any{},
 			delims:  DefaultDelims,
+			origin:  origin,
 		}
 	}
 	return e
@@ -138,13 +146,13 @@ func defaultEngine() *engine {
 
 // execute runs one piece of text outside a render: a manifest default, or a
 // recipe's command line.
-func execute(name, text string, data map[string]any) ([]byte, error) {
-	return executeWith(DefaultDelims, name, text, data)
+func execute(origin Origin, name, text string, data map[string]any) ([]byte, error) {
+	return executeWith(origin, DefaultDelims, name, text, data)
 }
 
 // executeWith runs one piece of text with the delimiters it was written in.
-func executeWith(delims [2]string, name, text string, data map[string]any) ([]byte, error) {
-	e := defaultEngine()
+func executeWith(origin Origin, delims [2]string, name, text string, data map[string]any) ([]byte, error) {
+	e := defaultEngine(origin)
 	e.delims = delims
 	return e.execute(name, text, data)
 }

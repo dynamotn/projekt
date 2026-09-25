@@ -104,7 +104,11 @@ func InitStore(out io.Writer, repo, ref string) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(out, "Cloned %s into %s (%d templates)\n", primary, after.Dir, after.Templates)
+	if _, err := fmt.Fprintf(out, "Cloned %s into %s (%d templates)\n", primary, after.Dir, after.Templates); err != nil {
+		return err
+	}
+	// Nothing in a clone runs a command before it is looked at.
+	_, err = fmt.Fprintln(out, "Its templates run commands only once trusted: review them, then run `t trust`.")
 	return err
 }
 

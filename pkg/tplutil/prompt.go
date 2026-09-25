@@ -19,6 +19,9 @@ type Prompter struct {
 	// Delims are the delimiters a default is written with. The zero value
 	// means the usual `{{` and `}}`.
 	Delims [2]string
+	// Origin is where the defaults come from, which decides whether one may
+	// run a command through `output`.
+	Origin Origin
 }
 
 // Ask walks the variables and returns the values, the ones already given left
@@ -127,7 +130,7 @@ func (p Prompter) renderDefault(v Var, base map[string]any) (string, error) {
 		return v.Default, nil
 	}
 
-	rendered, err := executeWith(delims, "default:"+v.Name, v.Default, base)
+	rendered, err := executeWith(p.Origin, delims, "default:"+v.Name, v.Default, base)
 	if err != nil {
 		return "", fmt.Errorf("default of %s: %w", v.Name, err)
 	}

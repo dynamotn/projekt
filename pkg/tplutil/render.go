@@ -40,6 +40,9 @@ type RenderOptions struct {
 	// Interactive lets the prompt functions ask. Without it they take their
 	// default, and a question without one is an error.
 	Interactive bool
+	// Origin is where the template comes from, when that is not the store:
+	// a repository cloned to be rendered. Empty means the template itself.
+	Origin Origin
 	// lenient lets a prompt function without a default render empty instead of
 	// failing. It is what `t check` renders with: a template that asks a
 	// question is not a broken template.
@@ -577,8 +580,8 @@ func writeSymlink(target, link string) error {
 //
 // It is what a command line in a recipe goes through, so that `{{ .Name }}`
 // means there what it means everywhere else.
-func RenderString(name, text string, data map[string]any) (string, error) {
-	rendered, err := execute(name, text, data)
+func RenderString(origin Origin, name, text string, data map[string]any) (string, error) {
+	rendered, err := execute(origin, name, text, data)
 	if err != nil {
 		return "", err
 	}

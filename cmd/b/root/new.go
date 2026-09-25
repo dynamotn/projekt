@@ -155,7 +155,7 @@ func askForValues(cmd *cobra.Command, o bplutil.CreateOptions) (tplutil.Values, 
 		return nil, err
 	}
 
-	values, err := tplutil.Prompter{In: cmd.InOrStdin(), Out: prompt, Delims: delims}.Ask(vars, o.Values, base)
+	values, err := tplutil.Prompter{In: cmd.InOrStdin(), Out: prompt, Delims: delims, Origin: bplutil.TrustOrigin(o.Recipe)}.Ask(vars, o.Values, base)
 	if err != nil {
 		return nil, err
 	}

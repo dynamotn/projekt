@@ -266,7 +266,7 @@ func (c *checker) checkAfter(recipe Recipe) {
 			c.warnf("after[%d] is empty", i)
 			continue
 		}
-		if _, err := tplutil.RenderString(fmt.Sprintf("%s:after[%d]", recipe.Name, i), command, checkContext); err != nil {
+		if _, err := tplutil.RenderString(TrustOrigin(recipe), fmt.Sprintf("%s:after[%d]", recipe.Name, i), command, checkContext); err != nil {
 			c.errorf("%v", err)
 		}
 	}

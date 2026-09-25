@@ -30,6 +30,7 @@ func NewProjektBoilerplateCmd(out io.Writer) *cobra.Command {
 		NewBoilerplateNewCmd(out),
 		NewBoilerplateApplyCmd(out),
 		NewBoilerplateCheckCmd(out),
+		NewBoilerplateTrustCmd(out),
 		NewBoilerplateShowCmd(out),
 		NewBoilerplatePathCmd(out),
 	)

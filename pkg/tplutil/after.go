@@ -49,7 +49,7 @@ func RunAfter(o HookOptions) error {
 
 	for i, command := range manifest.After {
 		name := fmt.Sprintf("%s:after[%d]", o.Template.Name, i)
-		rendered, err := executeWith(delims, name, command, o.Context)
+		rendered, err := executeWith(TemplateOrigin(o.Template), delims, name, command, o.Context)
 		if err != nil {
 			return err
 		}
@@ -80,6 +80,9 @@ func RunAfter(o HookOptions) error {
 // Through a shell because a hook that cannot use a pipe or an && is not much
 // of a hook, and because that is what the line in the manifest looks like.
 func (o HookOptions) run(command string) error {
+	if err := Authorize(TemplateOrigin(o.Template), command); err != nil {
+		return err
+	}
 	shell := strings.TrimSpace(os.Getenv("SHELL"))
 	if shell == "" {
 		shell = "/bin/sh"

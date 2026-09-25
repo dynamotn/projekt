@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- **t**, **b**: `t trust [template...]` and `b trust [recipe...]` let a
+  template or recipe from a cloned store run its commands, as it is now —
+  beforehand, so CI or `folder exec` can use it without a terminal to ask on.
+  Trusting a recipe trusts the template it renders too
+
 ### Fixed
 
 - **config**: a command that changes the configuration — `folder add`,
@@ -14,6 +21,16 @@
 - **release**: `scripts/release.sh --no-push` stops before the push again,
   instead of tagging and pushing anyway — the option parser reserves `--no-*`
   for the negated form of a switch, so the flag never reached its variable
+
+### Security
+
+- **t**, **b**: a template, recipe or starting point that sits in a git
+  repository with a remote — a store cloned with `t init`, which every
+  `t sync` can change — no longer runs its `after:` hooks or `output` calls
+  until you trust it. On a terminal it asks first, naming the command; anywhere
+  else the command is refused with the `t trust`/`b trust` line that allows
+  it. Trust covers the exact content, shared `.templates` included, so any
+  later change asks again. Stores you keep yourself are not affected
 
 ## [3.1.0]
 

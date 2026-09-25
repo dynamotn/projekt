@@ -47,6 +47,31 @@ something to sort out by hand, not something for a sync to guess at. A folder
 that merely *sits inside* some other checkout is not a store to sync — pulling
 it would pull that checkout — and `t sync` says so instead.
 
+### Trusting what a store runs
+
+A template runs commands two ways: its `after:` hooks and the `output`
+function. In a store you keep yourself that is your own code, and it runs. A
+store cloned with `t init` is different: every `t sync` can bring commands you
+have never read. So a template that sits in a git repository **with a remote**
+runs a command only once you have trusted it:
+
+```bash
+t show go-cli                     # read it first
+git -C "$(t path)" log -p         # or what the last sync brought
+t trust go-cli                    # then allow it — or `t trust` for the store
+```
+
+Trust is given to the template **as it is now**: its files, and the shared
+`.templates` of the store it can call. Change any of them — by a sync, or by
+hand — and the next command asks again. On a terminal it asks in place, with
+the command it is about to run; anywhere else (a pipe, CI, `folder exec`) the
+command is refused with the `t trust` line that allows it, and nothing is
+written. A folder outside any repository, or in one that has no remote, is
+yours and never asks.
+
+The decisions live in `$XDG_STATE_HOME/projekt/trust.yaml`, one per template —
+state, not configuration, so they stay out of your dotfiles.
+
 Each entry of that folder is one template:
 
 - a **file** template renders one file. A `.tmpl` suffix is stripped from the
@@ -381,7 +406,7 @@ On top of the [sprig](https://masterminds.github.io/sprig/) set:
 | --- | --- |
 | `include "path"` | the contents of a file of the template, unrendered |
 | `includeTemplate "name" .` | a shared template of `.templates`, rendered into a string |
-| `output "cmd" "arg"` | the standard output of a command |
+| `output "cmd" "arg"` | the standard output of a command — [trusted](#trusting-what-a-store-runs) templates only, when the store is a clone |
 | `lookPath "git"` | where an executable is, or empty when it is not installed |
 | `stat "go.mod"` | what is at a path, or nothing — `{{ if stat "go.mod" }}` |
 | `joinPath "a" "b"` | `a/b` |

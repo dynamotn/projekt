@@ -63,6 +63,7 @@ func createFromRepo(plan Plan, o CreateOptions, log io.Writer) ([]string, error)
 	cli.Debug("Rendering the clone of %s", primary)
 	return tplutil.Render(tplutil.RenderOptions{
 		Template: tplutil.Template{Name: plan.Recipe.Name, Path: clone, Kind: tplutil.KindDir},
+		Origin:   repoOrigin(plan.Recipe, primary, clone),
 		Dest:     plan.Path,
 		Name:     plan.Name,
 		Values:   o.Values,
