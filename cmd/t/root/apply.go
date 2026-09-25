@@ -15,6 +15,11 @@ const applyLongHelp = `Render a template over a project it already created.
 change to a template reaches the projects made from it: fix the CI job in one
 place, then apply it wherever it belongs.
 
+Named no template, it applies every template the project records, so it needs
+to be told nothing about a project to bring it up to date:
+
+  projekt folder exec -t work -- t apply
+
 A project remembers what it was rendered from in .projekt/template.yaml — the
 template, the values, and the hash of every file written. That record is what
 tells an out-of-date file apart from one somebody edited:
@@ -30,11 +35,12 @@ The recorded values are replayed, so applying needs no flags; --set and
 
 Examples:
 
-  t apply go-cli                    # the current folder
-  t apply go-cli ./myapp            # somewhere else
+  t apply                           # everything this project records
+  t apply -C ./myapp                # somewhere else
+  t apply go-cli                    # one of its templates
   t apply go-cli --set ci=true      # change one answer, replay the others
-  t apply go-cli --force            # rewrite what was edited by hand too
-  t apply go-cli --prune            # and delete what it no longer writes`
+  t apply --force                   # rewrite what was edited by hand too
+  t apply --prune                   # and delete what it no longer writes`
 
 const diffLongHelp = `Show what applying a template would change.
 
@@ -44,9 +50,10 @@ project having drifted from its template.
 
 Examples:
 
-  t diff go-cli
-  t diff go-cli ./myapp --set ci=true
-  t diff go-cli --name-only`
+  t diff                                    # everything this project records
+  t diff go-cli -C ./myapp --set ci=true
+  t diff --name-only
+  projekt folder exec -t work -- t diff     # which projects have drifted`
 
 // NewTemplateApplyCmd renders a template over a project again.
 func NewTemplateApplyCmd(out io.Writer) *cobra.Command {
@@ -68,10 +75,10 @@ func applyCommand(out io.Writer, diff bool) *cobra.Command {
 	)
 	o := tplutil.ApplyOptions{DryRun: diff}
 
-	use, short, long := "apply [template] [project]", "Render a template over a project again", applyLongHelp
+	use, short, long := "apply [template...]", "Render a template over a project again", applyLongHelp
 	aliases := []string{"up", "update"}
 	if diff {
-		use, short, long = "diff [template] [project]", "Show what applying a template would change", diffLongHelp
+		use, short, long = "diff [template...]", "Show what applying a template would change", diffLongHelp
 		aliases = []string{"status"}
 	}
 
@@ -79,17 +86,16 @@ func applyCommand(out io.Writer, diff bool) *cobra.Command {
 		Use:               use,
 		Short:             short,
 		Long:              long,
-		Args:              cobra.RangeArgs(1, 2),
+		Args:              cobra.ArbitraryArgs,
 		Aliases:           aliases,
 		ValidArgsFunction: completeTemplateNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			tpl, err := tplutil.Get(args[0])
-			if err != nil {
-				return err
-			}
-			o.Template = tpl
-			if len(args) > 1 {
-				o.Dest = args[1]
+			for _, name := range args {
+				tpl, err := tplutil.Get(name)
+				if err != nil {
+					return err
+				}
+				o.Templates = append(o.Templates, tpl)
 			}
 
 			fileValues, err := tplutil.LoadValuesFiles(valueFiles)
@@ -114,6 +120,7 @@ func applyCommand(out io.Writer, diff bool) *cobra.Command {
 	}
 
 	f := cmd.Flags()
+	f.StringVarP(&o.Dest, "project", "C", "", "Project to work on (default is the current folder)")
 	f.StringVarP(&o.Name, "name", "n", "", "Name to render with, overriding the recorded one")
 	f.StringArrayVarP(&sets, "set", "s", nil, "Set a template value, like -s key=value (repeatable)")
 	f.StringArrayVarP(&valueFiles, "values", "f", nil, "YAML file of template values (repeatable)")
@@ -133,6 +140,7 @@ func applyCommand(out io.Writer, diff bool) *cobra.Command {
 // `t diff` exits non-zero when it found something, so a CI job can gate on a
 // project still matching its template.
 func report(cmd *cobra.Command, out io.Writer, changes []tplutil.Change, o tplutil.ApplyOptions, diff, namesOnly bool, context int) error {
+	several := templateCount(changes) > 1
 	pending := 0
 	for _, change := range changes {
 		if !change.Writes() {
@@ -146,7 +154,7 @@ func report(cmd *cobra.Command, out io.Writer, changes []tplutil.Change, o tplut
 			}
 			continue
 		}
-		if _, err := fmt.Fprintf(out, "%s\t%s%s\n", change.Status, change.Path, kept(change, o)); err != nil {
+		if _, err := fmt.Fprintf(out, "%s\t%s%s%s\n", change.Status, change.Path, from(change, several), kept(change, o)); err != nil {
 			return err
 		}
 		if !diff {
@@ -163,9 +171,27 @@ func report(cmd *cobra.Command, out io.Writer, changes []tplutil.Change, o tplut
 		}
 	}
 	if diff && pending > 0 {
-		return fmt.Errorf("%s has drifted from %s: %s", project(o), o.Template.Name, tplutil.Summary(changes))
+		return fmt.Errorf("%s has drifted from its templates: %s", project(o), tplutil.Summary(changes))
 	}
 	return nil
+}
+
+// templateCount is how many templates the changes come from, which decides
+// whether each line has to say which one it is.
+func templateCount(changes []tplutil.Change) int {
+	seen := map[string]bool{}
+	for _, change := range changes {
+		seen[change.Template] = true
+	}
+	return len(seen)
+}
+
+// from names the template a change comes from, once there is more than one.
+func from(change tplutil.Change, several bool) string {
+	if !several {
+		return ""
+	}
+	return "  (" + change.Template + ")"
 }
 
 // project names the folder a diff was run against, for the closing message.

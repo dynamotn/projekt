@@ -4,6 +4,11 @@
 
 ### Added
 
+- **t**: `t apply` and `t diff` given no template cover every template the
+  project records, so nothing has to be remembered about a project to bring it
+  up to date — which makes `projekt folder exec -t work -- t diff` a drift
+  report over every project at once. The project to work on moved to
+  `--project`/`-C`, leaving the positional arguments for the templates
 - **t**: validate a template, or the whole store, with `t check` — every file
   and path segment parsed, every shared template resolved, the whole tree
   rendered with the manifest's own defaults, and what the manifest asks for

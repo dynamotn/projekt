@@ -276,9 +276,15 @@ A project keeps a record of what it was rendered from, in
 written — so a template can be applied to it again when the template moves on:
 
 ```bash
-t diff go-cli ./myapp     # what would change, as a unified diff; exits 1 if any
-t apply go-cli ./myapp    # do it, replaying the recorded values
+t diff                    # what would change, as a unified diff; exits 1 if any
+t apply                   # do it, replaying the recorded values
+t apply go-cli -C ./myapp # one template, somewhere else
+
+projekt folder exec -t work -- t diff    # which of my projects have drifted
 ```
+
+Named no template, `apply` and `diff` cover every template the project records,
+so nothing needs to be remembered about a project to bring it up to date.
 
 A file that is byte for byte what was written is updated; one that was edited
 by hand is a `conflict` and kept, unless `--force`; one the template no longer
@@ -486,7 +492,7 @@ Each is also reachable as `projekt template <command>` / `projekt boilerplate <c
 | Command | What it does |
 | --- | --- |
 | [`t new`](doc/t_new.md) | Render a template, with `--set`, `--values`, `--dry-run` |
-| [`t apply`](doc/t_apply.md) | Render a template over a project again, replaying its recorded values |
+| [`t apply`](doc/t_apply.md) | Render a project's templates over it again, replaying its recorded values |
 | [`t diff`](doc/t_diff.md) | What `apply` would change, as a unified diff; exits 1 when it found something |
 | [`t list`](doc/t_list.md) | List the templates of the store, as a table, JSON or TSV |
 | [`t add`](doc/t_add.md) | Save an existing file or folder as a template |
