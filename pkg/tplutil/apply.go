@@ -38,6 +38,9 @@ type Change struct {
 	Status ChangeStatus
 	// Before is what is on disk, After what the template renders.
 	Before, After []byte
+	// Template is the store entry this change comes from, which matters once
+	// a project is rendered from more than one.
+	Template string
 	// Attrs are what the template's name asked the file to be.
 	Attrs Attributes
 	// recorded is the hash the project remembers writing, which is what a
@@ -52,8 +55,10 @@ func (c Change) Writes() bool {
 
 // ApplyOptions drives `t diff` and `t apply`.
 type ApplyOptions struct {
-	// Template is the folder template to apply.
-	Template Template
+	// Templates are the folder templates to apply. Empty means every template
+	// the project records, which is what makes `t apply` answerable without
+	// being told what the project was made from.
+	Templates []Template
 	// Dest is the project it was rendered into.
 	Dest string
 	// Name overrides the recorded `.Name`.
@@ -77,26 +82,83 @@ type ApplyOptions struct {
 // The project's record is what makes the difference between "this file is out
 // of date" and "somebody edited this file": a file whose hash still matches
 // what was written is ours to replace, anything else is theirs.
-func PlanApply(o ApplyOptions) ([]Change, RenderRecord, error) {
-	if !o.Template.IsDir() {
-		return nil, RenderRecord{}, fmt.Errorf("%s is a file template; only a folder template can be applied", o.Template.Name)
+func PlanApply(o ApplyOptions) ([]Change, error) {
+	root, err := projectRoot(o)
+	if err != nil {
+		return nil, err
 	}
+	templates, err := Targets(o)
+	if err != nil {
+		return nil, err
+	}
+
+	var changes []Change
+	for _, tpl := range templates {
+		planned, _, err := planOne(o, root, tpl)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, planned...)
+	}
+	return changes, nil
+}
+
+// Targets returns the templates an apply covers: the ones it was given, or
+// everything the project remembers being rendered from.
+func Targets(o ApplyOptions) ([]Template, error) {
+	if len(o.Templates) > 0 {
+		return o.Templates, nil
+	}
+
+	root, err := projectRoot(o)
+	if err != nil {
+		return nil, err
+	}
+	record, err := LoadRecord(root)
+	if err != nil {
+		return nil, err
+	}
+	if len(record.Renders) == 0 {
+		return nil, fmt.Errorf("%s does not record being rendered from anything; name a template, or create it with `t new`", root)
+	}
+
+	templates := make([]Template, 0, len(record.Renders))
+	for _, render := range record.Renders {
+		tpl, err := Get(render.Template)
+		if err != nil {
+			return nil, fmt.Errorf("%s was rendered from %q: %w", root, render.Template, err)
+		}
+		templates = append(templates, tpl)
+	}
+	return templates, nil
+}
+
+// projectRoot resolves the folder an apply acts on.
+func projectRoot(o ApplyOptions) (string, error) {
 	root, err := filepath.Abs(dirOrCurrent(o.Dest))
 	if err != nil {
-		return nil, RenderRecord{}, fmt.Errorf("cannot resolve %s: %w", o.Dest, err)
+		return "", fmt.Errorf("cannot resolve %s: %w", o.Dest, err)
+	}
+	return root, nil
+}
+
+// planOne works out what one template would do to the project.
+func planOne(o ApplyOptions, root string, template Template) ([]Change, RenderRecord, error) {
+	if !template.IsDir() {
+		return nil, RenderRecord{}, fmt.Errorf("%s is a file template; only a folder template can be applied", template.Name)
 	}
 
 	record, err := LoadRecord(root)
 	if err != nil {
 		return nil, RenderRecord{}, err
 	}
-	previous, remembered := record.Find(o.Template.Name)
+	previous, remembered := record.Find(template.Name)
 
 	// The recorded values are replayed, and anything given now wins over them,
 	// so `t apply go-cli . --set ci=true` changes one answer and keeps the
 	// rest.
 	render := RenderOptions{
-		Template:    o.Template,
+		Template:    template,
 		Dest:        root,
 		Name:        firstNonEmpty(o.Name, previous.Name),
 		Values:      MergeValues(previous.Values, o.Values),
@@ -116,7 +178,7 @@ func PlanApply(o ApplyOptions) ([]Change, RenderRecord, error) {
 	}
 
 	next := RenderRecord{
-		Template:   o.Template.Name,
+		Template:   template.Name,
 		Name:       nameOf(render),
 		RenderedAt: time.Now().UTC(),
 		Values:     render.Values,
@@ -141,6 +203,7 @@ func PlanApply(o ApplyOptions) ([]Change, RenderRecord, error) {
 			Status:   statusOf(before, file.Content, previous.Files[file.Rel], remembered),
 			Before:   before,
 			After:    file.Content,
+			Template: template.Name,
 			Attrs:    file.Attrs,
 			recorded: previous.Files[file.Rel],
 		})
@@ -166,7 +229,7 @@ func PlanApply(o ApplyOptions) ([]Change, RenderRecord, error) {
 			// Edited since, so deleting it would throw work away.
 			status = ChangeConflict
 		}
-		changes = append(changes, Change{Path: path, Status: status, Before: before, recorded: hash})
+		changes = append(changes, Change{Path: path, Status: status, Before: before, Template: template.Name, recorded: hash})
 	}
 
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Path < changes[j].Path })
@@ -194,19 +257,34 @@ func statusOf(before, after []byte, recorded string, remembered bool) ChangeStat
 // deleted without --prune: an apply that quietly threw work away would only be
 // run once.
 func Apply(o ApplyOptions) ([]Change, error) {
-	changes, next, err := PlanApply(o)
+	root, err := projectRoot(o)
 	if err != nil {
 		return nil, err
 	}
-	if o.DryRun {
-		return changes, nil
-	}
-
-	root, err := filepath.Abs(dirOrCurrent(o.Dest))
+	templates, err := Targets(o)
 	if err != nil {
 		return nil, err
 	}
 
+	var all []Change
+	for _, template := range templates {
+		changes, next, err := planOne(o, root, template)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, changes...)
+		if o.DryRun {
+			continue
+		}
+		if err := applyOne(o, root, changes, next); err != nil {
+			return nil, err
+		}
+	}
+	return all, nil
+}
+
+// applyOne writes what one template's plan asked for, and records it.
+func applyOne(o ApplyOptions, root string, changes []Change, next RenderRecord) error {
 	for _, change := range changes {
 		target := filepath.Join(root, filepath.FromSlash(change.Path))
 		switch change.Status {
@@ -214,7 +292,7 @@ func Apply(o ApplyOptions) ([]Change, error) {
 			continue
 		case ChangeAdded, ChangeUpdated:
 			if err := writeFile(target, change.After, true, change.Attrs); err != nil {
-				return nil, err
+				return err
 			}
 		case ChangeConflict:
 			if !o.Force {
@@ -225,12 +303,12 @@ func Apply(o ApplyOptions) ([]Change, error) {
 			}
 			if change.After == nil {
 				if err := remove(root, target); err != nil {
-					return nil, err
+					return err
 				}
 				continue
 			}
 			if err := writeFile(target, change.After, true, change.Attrs); err != nil {
-				return nil, err
+				return err
 			}
 		case ChangeRemoved:
 			if !o.Prune {
@@ -241,15 +319,12 @@ func Apply(o ApplyOptions) ([]Change, error) {
 				continue
 			}
 			if err := remove(root, target); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
 
-	if err := recordRender(root, next); err != nil {
-		return nil, err
-	}
-	return changes, nil
+	return recordRender(root, next)
 }
 
 // remember keeps a change the apply left alone in the record, exactly as it
