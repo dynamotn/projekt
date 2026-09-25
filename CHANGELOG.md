@@ -13,6 +13,9 @@
   leaves the recipe, its answers and the template it rendered in the project's
   `.projekt/template.yaml`, so a recipe's own questions and commands are not
   lost the way they were when only the template was remembered
+- **b**: validate a recipe, or the whole store, with `b check` — every problem
+  at once rather than the first, the template it renders checked too, and the
+  questions it asks compared with what that template actually reads
 - **t**: the `after` commands of a template or a recipe are not run again by an
   apply unless `--hooks` says so; they ran when the project was created
 - **t**: validate a template, or the whole store, with `t check` — every file

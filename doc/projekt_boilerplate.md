@@ -21,6 +21,7 @@ Create boilerplate project folder of a language/framework/tool...
 
 * [projekt](projekt.md)	 - A smart command to work with your project folder
 * [projekt boilerplate apply](projekt_boilerplate_apply.md)	 - Create a project from a boilerplate again
+* [projekt boilerplate check](projekt_boilerplate_check.md)	 - Validate a recipe, or the whole store
 * [projekt boilerplate list](projekt_boilerplate_list.md)	 - List all boilerplates of your boilerplate folder
 * [projekt boilerplate new](projekt_boilerplate_new.md)	 - Create a project from a boilerplate
 * [projekt boilerplate path](projekt_boilerplate_path.md)	 - Print the path of the boilerplate folder, or of one recipe
