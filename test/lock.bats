@@ -205,7 +205,82 @@ teardown() {
   dybatpho::lock_acquire "reclaim-live"
   run dybatpho::lock_reclaim_stale "${live_path}"
   assert_success
-  assert_dir_exist "${live_path}"
+  # The assertion is that the lock is still held, not what it looks like on
+  # disk: the claim is a symbolic link now, and that is an implementation
+  # detail this test has no business pinning.
+  dybatpho::lock_is_held "reclaim-live"
 
   dybatpho::lock_release "reclaim-live"
+}
+
+@test "a lock is claimed atomically, with its owner already in it" {
+  local lock_path
+  lock_path="$(dybatpho::lock_path "atomic-claim")"
+  dybatpho::lock_acquire "atomic-claim"
+
+  # The claim is one operation: `ln -s` fails when the name exists, and the
+  # identity is in the target, so the lock is never on disk without an owner.
+  # Claiming with `mkdir` and writing the pid afterwards left exactly that gap.
+  [[ -L "${lock_path}" ]]
+  assert_equal "$(dybatpho::lock_field "${lock_path}" pid)" "$$"
+  assert_equal "$(dybatpho::lock_field "${lock_path}" host)" "$(dybatpho::lock_hostname)"
+  [[ -n "$(dybatpho::lock_field "${lock_path}" acquired_at)" ]]
+
+  dybatpho::lock_release "atomic-claim"
+}
+
+@test "a second acquire is refused while the lock is held" {
+  dybatpho::lock_acquire "exclusive"
+  # A fresh shell, so it is a different process asking.
+  run bash -c "DYBATPHO_LOCK_DIR=$(printf '%q' "${DYBATPHO_LOCK_DIR}") \
+    LOG_LEVEL=fatal \
+    . $(printf '%q' "${DYBATPHO_DIR}")/init.sh --modules lock \
+    && dybatpho::lock_acquire exclusive 0"
+  assert_failure
+  dybatpho::lock_release "exclusive"
+}
+
+@test "dybatpho::with_lock installs a release handler and takes it away again" {
+  # Run in a child shell rather than this one, and watch HUP rather than INT.
+  # Bats runs tests with SIGINT *ignored*, and a shell that inherits a signal as
+  # ignored cannot install a handler for it -- so `with_lock` genuinely gets no
+  # INT handler under Bats, and neither would any caller that ignores it. HUP is
+  # handled the same way and is not inherited ignored, so it is what this
+  # asserts on. The probe is a shell function so it runs in that child and can
+  # see its handlers; a command run as a program could not.
+  run bash -c "
+    export DYBATPHO_LOCK_DIR=$(printf '%q' "${DYBATPHO_LOCK_DIR}")
+    export LOG_LEVEL=fatal
+    . $(printf '%q' "${DYBATPHO_DIR}")/init.sh --modules lock
+    probe() { printf 'during: %s\\n' \"\$(trap -p HUP)\"; }
+    printf 'before: %s\\n' \"\$(trap -p HUP)\"
+    dybatpho::with_lock trap-probe 1 -- probe
+    printf 'after: %s\\n' \"\$(trap -p HUP)\"
+  "
+  assert_success
+
+  # Present while the command runs, so an interrupt during a long job releases.
+  assert_line --partial "during:"
+  assert_output --partial "lock_release"
+
+  # Gone again afterwards, so calling with_lock N times does not leave N
+  # handlers behind, each releasing a lock that no longer exists.
+  assert_line "after: "
+}
+
+@test "a lock written by an older version is still understood" {
+  # Before the atomic claim the lock was a directory of fields. A copy of the
+  # library that meets one has to read it rather than treat it as free.
+  local legacy_path
+  legacy_path="$(dybatpho::lock_path "legacy-form")"
+  mkdir "${legacy_path}"
+  printf '%s' "$$" > "${legacy_path}/pid"
+  printf '%s' "$(dybatpho::lock_hostname)" > "${legacy_path}/host"
+  printf '%s' "2026-01-01T00:00:00Z" > "${legacy_path}/acquired_at"
+
+  assert_equal "$(dybatpho::lock_field "${legacy_path}" pid)" "$$"
+  assert_equal "$(dybatpho::lock_field "${legacy_path}" acquired_at)" "2026-01-01T00:00:00Z"
+  dybatpho::lock_is_held "legacy-form"
+
+  rm -rf "${legacy_path}"
 }

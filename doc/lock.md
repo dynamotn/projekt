@@ -32,7 +32,9 @@ A lock is a directory containing metadata about the process holding it
 
 ### 🚀 Highlights
 
-- [`dybatpho::lock_hostname`](#dybatpholock_hostname) — Print the current host name using whichever mechanism is available. Kept as the name a lock file is stamped with; the detection itself lives in `dybatpho::hostname`.
+- [`__dybatpho_lock_exists`](#__dybatpho_lock_exists) — Return success when something holds this lock path, whichever form it is in: a symbolic link, which is what the atomic claim writes, or a directory, which is what versions before it wrote. `[[ -L ]]` is deliberately first and deliberately not `[[ -e ]]`: the link target is data rather than a path, so it never resolves, and `-e` reports a dangling link as absent.
+- [`__dybatpho_lock_target`](#__dybatpho_lock_target) — Print the link target that identifies the holder of a lock, as `pid:host:acquired_at`.
+- [`dybatpho::lock_hostname`](#dybatpholock_hostname) — 
 - [`dybatpho::lock_path`](#dybatpholock_path) — Resolve a lock name or path into an absolute lock directory path.
 - [`dybatpho::lock_field`](#dybatpholock_field) — Read a single metadata field recorded for a lock.
 - [`dybatpho::lock_is_alive`](#dybatpholock_is_alive) — Return success when the process that owns a lock is still alive on this host.
@@ -90,15 +92,45 @@ dybatpho::lock_info "deploy"
 <a id="reference"></a>
 ## 📚 Reference
 
-### `dybatpho::lock_hostname`
+### `__dybatpho_lock_exists`
 
-Print the current host name using whichever mechanism is available.
-  Kept as the name a lock file is stamped with; the detection itself lives in
-  `dybatpho::hostname`.
+Return success when something holds this lock path, whichever
+  form it is in: a symbolic link, which is what the atomic claim writes, or a
+  directory, which is what versions before it wrote.
+
+
+  `[[ -L ]]` is deliberately first and deliberately not `[[ -e ]]`: the link
+  target is data rather than a path, so it never resolves, and `-e` reports a
+  dangling link as absent.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Lock path |
+
+**🚦 Exit codes**
+
+- `0`: A lock is present
+- `1`: Nothing is there
+
+
+---
+
+### `__dybatpho_lock_target`
+
+Print the link target that identifies the holder of a lock,
+  as `pid:host:acquired_at`.
 
 **📤 Output on stdout**
 
-- Host name reported by `hostname`, `uname -n`, the kernel, or the `HOSTNAME` env var
+- The target
+
+
+---
+
+### `dybatpho::lock_hostname`
+
 
 
 ---

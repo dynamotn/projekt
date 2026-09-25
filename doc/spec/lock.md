@@ -188,6 +188,17 @@ dybatpho::lock_info "deploy"
 - **FR-017**: `lock_hostname` MUST stamp the lock with the host name the `os`
   module resolves, which uses `hostname`, `uname -n`, the kernel, or
   `HOSTNAME`, in that order.
+- **FR-018**: Acquiring a lock MUST be a single atomic operation that
+  records the holder at the same moment it takes the lock, so the lock is never
+  observable in a state where it exists without an owner. Claiming it and
+  recording the owner as two steps let a second process read the gap as "nobody
+  holds this", remove the lock and take it.
+- **FR-019**: The module MUST still read a lock written in the directory
+  form used before the atomic claim, so a lock taken by an older copy of the
+  library is not mistaken for a free one.
+- **FR-020**: `with_lock` MUST release the lock when the command it is
+  running is interrupted, and MUST restore the signal handlers it installed, so
+  repeated calls do not accumulate handlers.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -233,6 +244,12 @@ dybatpho::lock_info "deploy"
 - **IT-008**: Verify `with_lock` runs the command, releases the lock, and
   propagates both success and failure exit codes.
 - **IT-009**: Verify `with_lock` rejects a missing `--` separator.
+- **IT-010**: Verify a freshly acquired lock already names its holder,
+  and that a second process is refused while it is held.
+- **IT-011**: Verify a lock in the older directory form is still read
+  and still reported as held.
+- **IT-012**: Verify `with_lock` has a release handler installed while
+  its command runs and none afterwards.
 
 ## Acceptance Criteria *(mandatory)*
 

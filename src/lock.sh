@@ -47,6 +47,36 @@ DYBATPHO_LOCK_POLL_INTERVAL="${DYBATPHO_LOCK_POLL_INTERVAL:-1}"
 #   `dybatpho::hostname`.
 # @stdout Host name reported by `hostname`, `uname -n`, the kernel, or the `HOSTNAME` env var
 #######################################
+# Suffix of the file holding the command that took a lock, beside the lock
+# itself. See `dybatpho::lock_field`.
+readonly __DYBATPHO_LOCK_COMMAND_SUFFIX=".command"
+
+#######################################
+# @description Return success when something holds this lock path, whichever
+#   form it is in: a symbolic link, which is what the atomic claim writes, or a
+#   directory, which is what versions before it wrote.
+#
+#   `[[ -L ]]` is deliberately first and deliberately not `[[ -e ]]`: the link
+#   target is data rather than a path, so it never resolves, and `-e` reports a
+#   dangling link as absent.
+# @arg $1 string Lock path
+# @exitcode 0 A lock is present
+# @exitcode 1 Nothing is there
+#######################################
+function __dybatpho_lock_exists {
+  [[ -L "${1-}" ]] || dybatpho::is dir "${1-}"
+}
+
+#######################################
+# @description Print the link target that identifies the holder of a lock,
+#   as `pid:host:acquired_at`.
+# @stdout The target
+#######################################
+function __dybatpho_lock_target {
+  printf '%s:%s:%s' \
+    "$$" "$(dybatpho::lock_hostname)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+
 function dybatpho::lock_hostname {
   dybatpho::hostname
 }
@@ -79,6 +109,35 @@ function dybatpho::lock_path {
 function dybatpho::lock_field {
   local lock_path field
   dybatpho::expect_args lock_path field -- "$@"
+
+  # `command` can hold anything, including the separator, so it never goes in
+  # the link target. It is written beside the lock after the claim and is
+  # diagnostic only: a missing one is not a correctness problem.
+  if [[ "${field}" == "command" ]]; then
+    local sidecar="${lock_path}${__DYBATPHO_LOCK_COMMAND_SUFFIX}"
+    dybatpho::is file "${sidecar}" && cat "${sidecar}"
+    return 0
+  fi
+
+  if [[ -L "${lock_path}" ]]; then
+    local target rest
+    target="$(readlink "${lock_path}" 2> /dev/null || true)"
+    [[ -n "${target}" ]] || return 0
+    # pid:host:acquired_at -- the timestamp holds colons of its own, so it is
+    # last and takes everything after the second separator. A host name has no
+    # colon in it, which is what makes the first two splits unambiguous.
+    rest="${target#*:}"
+    case "${field}" in
+      pid) printf '%s' "${target%%:*}" ;;
+      host) printf '%s' "${rest%%:*}" ;;
+      acquired_at) printf '%s' "${rest#*:}" ;;
+      *) return 0 ;;
+    esac
+    return 0
+  fi
+
+  # A directory is what versions before the atomic claim wrote. Reading it keeps
+  # a lock taken by an older copy of the library legible to a newer one.
   local field_file="${lock_path}/${field}"
   if dybatpho::is file "${field_file}"; then
     cat "${field_file}"
@@ -94,7 +153,7 @@ function dybatpho::lock_field {
 function dybatpho::lock_is_alive {
   local lock_path
   dybatpho::expect_args lock_path -- "$@"
-  dybatpho::is dir "${lock_path}" || return 1
+  __dybatpho_lock_exists "${lock_path}" || return 1
 
   local pid host
   pid="$(dybatpho::lock_field "${lock_path}" pid)"
@@ -150,9 +209,10 @@ function dybatpho::lock_info {
 function dybatpho::lock_reclaim_stale {
   local lock_path
   dybatpho::expect_args lock_path -- "$@"
-  if dybatpho::is dir "${lock_path}" && ! dybatpho::lock_is_alive "${lock_path}"; then
+  if __dybatpho_lock_exists "${lock_path}" && ! dybatpho::lock_is_alive "${lock_path}"; then
     dybatpho::warn "Reclaiming stale lock ${lock_path} (pid $(dybatpho::lock_field "${lock_path}" pid) is no longer running)"
-    rm -rf "${lock_path}" > /dev/null 2>&1 || true
+    # `rm` on a symbolic link removes the link, never what it points at.
+    rm -rf -- "${lock_path}" "${lock_path}${__DYBATPHO_LOCK_COMMAND_SUFFIX}" > /dev/null 2>&1 || true
   fi
 }
 
@@ -187,11 +247,15 @@ function dybatpho::lock_acquire {
   while true; do
     dybatpho::lock_reclaim_stale "${lock_path}"
 
-    if mkdir "${lock_path}" 2> /dev/null; then
-      printf '%s' "$$" > "${lock_path}/pid"
-      printf '%s' "$(dybatpho::lock_hostname)" > "${lock_path}/host"
-      printf '%s' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${lock_path}/acquired_at"
-      printf '%s' "${DYBATPHO_LOCK_COMMAND:-${0}}" > "${lock_path}/command"
+    # One syscall claims the lock and says who holds it. `symlink()` fails when
+    # the name already exists, and the identity is already in the target, so
+    # there is no window in which the lock exists without an owner. Claiming
+    # with `mkdir` and writing the pid afterwards left exactly such a window,
+    # and a second process read the missing pid as "nobody holds this", removed
+    # the lock and took it.
+    if ln -s "$(__dybatpho_lock_target)" "${lock_path}" 2> /dev/null; then
+      printf '%s' "${DYBATPHO_LOCK_COMMAND:-${0}}" \
+        > "${lock_path}${__DYBATPHO_LOCK_COMMAND_SUFFIX}" 2> /dev/null || true
       return 0
     fi
 
@@ -216,7 +280,7 @@ function dybatpho::lock_release {
   dybatpho::expect_args name -- "$@"
   lock_path="$(dybatpho::lock_path "${name}")"
 
-  dybatpho::is dir "${lock_path}" || return 0
+  __dybatpho_lock_exists "${lock_path}" || return 0
 
   local owner_pid
   owner_pid="$(dybatpho::lock_field "${lock_path}" pid)"
@@ -225,7 +289,7 @@ function dybatpho::lock_release {
     return 1
   fi
 
-  rm -rf "${lock_path}" > /dev/null 2>&1 || true
+  rm -rf -- "${lock_path}" "${lock_path}${__DYBATPHO_LOCK_COMMAND_SUFFIX}" > /dev/null 2>&1 || true
 }
 
 #######################################
@@ -249,8 +313,35 @@ function dybatpho::with_lock {
 
   dybatpho::lock_acquire "${name}" "${timeout}" || return 1
 
+  # Without this, an interrupted command left the lock behind: the release below
+  # is only reached when the command returns normally, so Ctrl-C during a long
+  # job left the lock for the next run to trip over. Releasing is idempotent and
+  # checks ownership, so the handler and the normal path can both run.
+  #
+  # EXIT is deliberately not handled. An EXIT handler installed here outlives
+  # this function, runs in whatever context the script ends in, and collides
+  # with handlers the caller already has -- Bats being the case that showed it.
+  # The residual gap is a command that is a shell *function* calling `exit`,
+  # which ends this shell without a signal; a command run as a program, which is
+  # what the `--` form is for, returns its status here and is released normally.
+  # The handlers are put back afterwards rather than left in place: `with_lock`
+  # can be called many times in one script, and a handler per call would
+  # accumulate, each one releasing a lock that is long gone.
+  local quoted_name previous_traps signal
+  printf -v quoted_name '%q' "${name}"
+  previous_traps=""
+  for signal in HUP INT TERM; do
+    previous_traps+="$(trap -p "${signal}")"$'\n'
+  done
+
+  dybatpho::trap "dybatpho::lock_release ${quoted_name} > /dev/null 2>&1 || true" \
+    HUP INT TERM
+
   local exit_code=0
   "$@" || exit_code=$?
   dybatpho::lock_release "${name}"
+
+  trap - HUP INT TERM
+  eval "${previous_traps}"
   return "${exit_code}"
 }

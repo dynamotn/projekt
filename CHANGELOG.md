@@ -281,6 +281,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A lock is a symbolic link on disk, not a directory.** `lock_info`,
+  `lock_is_held` and `lock_field` are unchanged, and `lock_field` still reads the
+  old form, but anything that inspected the lock directory by hand stops
+  working. The command that took the lock now lives in a file beside it, because
+  it can contain anything and does not belong in a link target.
 - **`ai` now uses the `cache` module instead of its own copy.**
   `DYBATPHO_AI_CACHE`, `DYBATPHO_AI_CACHE_DIR` and `DYBATPHO_AI_CACHE_TTL` keep
   working exactly as documented, and the cache keys are unchanged.
@@ -425,6 +430,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Two processes could hold the same lock.** `dybatpho::lock_acquire` claimed
+  the lock with `mkdir` and wrote the holder's pid afterwards. Between those two
+  steps the lock existed with nobody in it, and a second process arriving in
+  that window read the missing pid as "nobody holds this", removed the lock and
+  took it. Both then proceeded believing they held it, and nothing ever told
+  either of them otherwise. The window was entered by every single acquire, and
+  contention — the only time a lock matters — is exactly when several processes
+  are inside it at once.
+
+  The claim is now a single `ln -s` whose target carries `pid:host:acquired_at`.
+  `symlink()` is atomic and fails when the name already exists, so taking the
+  lock and saying who took it are one operation and the gap does not exist.
+
+  A lock written in the previous directory form is still read, so a lock taken
+  by an older copy of the library is not mistaken for a free one.
+
+- **An interrupted `dybatpho::with_lock` left its lock behind.** The release ran
+  only on the path where the command returned normally. It now installs a
+  release handler for `HUP`, `INT` and `TERM` while the command runs, and
+  restores the previous handlers afterwards so repeated calls do not accumulate
+  them. A shell that inherits a signal as ignored — which is how Bats runs, and
+  how some callers run — still cannot install a handler for that signal; that is
+  Bash, not something the module can change.
 - **`config` could not read a YAML file at all.** The loader asked `yq` for
   `if type != "!!map" then error(...) else ... end`, which is `jq` syntax; no
   release of the Go `yq` has ever been able to parse it, so every
