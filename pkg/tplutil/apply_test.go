@@ -74,7 +74,7 @@ func TestPlanApply_UnchangedWhenNothingMoved(t *testing.T) {
 	tpl := create(t, dest, Values{"ci": true})
 	_ = store
 
-	changes, _, err := PlanApply(ApplyOptions{Template: tpl, Dest: dest})
+	changes, err := PlanApply(ApplyOptions{Templates: []Template{tpl}, Dest: dest})
 	if err != nil {
 		t.Fatalf("PlanApply() error = %v", err)
 	}
@@ -100,7 +100,7 @@ func TestPlanApply_TellsAnOutdatedFileFromAnEditedOne(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	changes, _, err := PlanApply(ApplyOptions{Template: tpl, Dest: dest})
+	changes, err := PlanApply(ApplyOptions{Templates: []Template{tpl}, Dest: dest})
 	if err != nil {
 		t.Fatalf("PlanApply() error = %v", err)
 	}
@@ -128,7 +128,7 @@ func TestApply_KeepsAConflictAndWritesTheRest(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	if _, err := Apply(ApplyOptions{Template: tpl, Dest: dest}); err != nil {
+	if _, err := Apply(ApplyOptions{Templates: []Template{tpl}, Dest: dest}); err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
 	if got := readFile(t, filepath.Join(dest, "main.txt")); got != "hello myapp, again\n" {
@@ -140,7 +140,7 @@ func TestApply_KeepsAConflictAndWritesTheRest(t *testing.T) {
 
 	// The record must still call the kept file a conflict next time, rather
 	// than claim it was rewritten.
-	changes, _, err := PlanApply(ApplyOptions{Template: tpl, Dest: dest})
+	changes, err := PlanApply(ApplyOptions{Templates: []Template{tpl}, Dest: dest})
 	if err != nil {
 		t.Fatalf("PlanApply() error = %v", err)
 	}
@@ -157,7 +157,7 @@ func TestApply_ForceRewritesWhatWasEdited(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	if _, err := Apply(ApplyOptions{Template: tpl, Dest: dest, Force: true}); err != nil {
+	if _, err := Apply(ApplyOptions{Templates: []Template{tpl}, Dest: dest, Force: true}); err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
 	if got := readFile(t, filepath.Join(dest, "keep.txt")); got != "steady\n" {
@@ -171,7 +171,7 @@ func TestApply_PruneDeletesWhatIsNoLongerWritten(t *testing.T) {
 	tpl := create(t, dest, Values{"ci": true})
 
 	// Without --prune the file stays, and says so.
-	changes, err := Apply(ApplyOptions{Template: tpl, Dest: dest, Values: Values{"ci": false}})
+	changes, err := Apply(ApplyOptions{Templates: []Template{tpl}, Dest: dest, Values: Values{"ci": false}})
 	if err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
@@ -182,7 +182,7 @@ func TestApply_PruneDeletesWhatIsNoLongerWritten(t *testing.T) {
 		t.Errorf("Stat(ci/job.yml) error = %v, want it kept without --prune", err)
 	}
 
-	if _, err := Apply(ApplyOptions{Template: tpl, Dest: dest, Values: Values{"ci": false}, Prune: true}); err != nil {
+	if _, err := Apply(ApplyOptions{Templates: []Template{tpl}, Dest: dest, Values: Values{"ci": false}, Prune: true}); err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dest, "ci", "job.yml")); !os.IsNotExist(err) {
@@ -204,7 +204,7 @@ func TestApply_PruneNeverEmptiesTheProject(t *testing.T) {
 	// Every file leaves the template at once.
 	writeTemplate(t, filepath.Join(store, "app", IgnoreFile), "*.txt\n")
 
-	if _, err := Apply(ApplyOptions{Template: tpl, Dest: dest, Prune: true}); err != nil {
+	if _, err := Apply(ApplyOptions{Templates: []Template{tpl}, Dest: dest, Prune: true}); err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
 	if _, err := os.Stat(dest); err != nil {
@@ -223,7 +223,7 @@ func TestPlanApply_ReplaysTheRecordedValues(t *testing.T) {
 
 	// Nothing is passed this time: the values, and the name, come back from
 	// the project's own record.
-	if _, err := Apply(ApplyOptions{Template: tpl, Dest: dest}); err != nil {
+	if _, err := Apply(ApplyOptions{Templates: []Template{tpl}, Dest: dest}); err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
 	if got := readFile(t, filepath.Join(dest, "main.txt")); got != "hi myapp\n" {
@@ -239,7 +239,7 @@ func TestPlanApply_RefusesAFileTemplate(t *testing.T) {
 		t.Fatalf("Get() error = %v", err)
 	}
 
-	_, _, err = PlanApply(ApplyOptions{Template: tpl, Dest: t.TempDir()})
+	_, err = PlanApply(ApplyOptions{Templates: []Template{tpl}, Dest: t.TempDir()})
 	if err == nil || !strings.Contains(err.Error(), "folder template") {
 		t.Errorf("PlanApply() error = %v, want it to refuse a file template", err)
 	}
@@ -257,7 +257,7 @@ func TestPlanApply_AProjectWithoutARecordIsAllConflicts(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	changes, _, err := PlanApply(ApplyOptions{Template: tpl, Dest: dest, Name: "myapp"})
+	changes, err := PlanApply(ApplyOptions{Templates: []Template{tpl}, Dest: dest, Name: "myapp"})
 	if err != nil {
 		t.Fatalf("PlanApply() error = %v", err)
 	}
@@ -267,5 +267,80 @@ func TestPlanApply_AProjectWithoutARecordIsAllConflicts(t *testing.T) {
 	}
 	if got["keep.txt"] != ChangeAdded {
 		t.Errorf("keep.txt = %s, want the missing file added", got["keep.txt"])
+	}
+}
+
+func TestTargets_DefaultsToWhatTheProjectRecords(t *testing.T) {
+	store := applyStore(t)
+	// A second template rendered into the same project, the way `t new
+	// github-ci .` drops a workflow into something that already exists.
+	writeTemplate(t, filepath.Join(store, "ci", "pipeline.yml.tmpl"), "on: push\n")
+
+	dest := t.TempDir()
+	create(t, dest, Values{"ci": true})
+	second, err := Get("ci")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if _, err := Render(RenderOptions{Template: second, Dest: dest, Name: "myapp"}); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	templates, err := Targets(ApplyOptions{Dest: dest})
+	if err != nil {
+		t.Fatalf("Targets() error = %v", err)
+	}
+	if len(templates) != 2 {
+		t.Fatalf("Targets() = %v, want both templates the project records", templates)
+	}
+
+	changes, err := PlanApply(ApplyOptions{Dest: dest})
+	if err != nil {
+		t.Fatalf("PlanApply() error = %v", err)
+	}
+	seen := map[string]bool{}
+	for _, change := range changes {
+		seen[change.Template] = true
+	}
+	if !seen["app"] || !seen["ci"] {
+		t.Errorf("PlanApply() covered %v, want both templates", seen)
+	}
+}
+
+func TestTargets_SaysSoWhenTheProjectRecordsNothing(t *testing.T) {
+	applyStore(t)
+
+	_, err := Targets(ApplyOptions{Dest: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "t new") {
+		t.Errorf("Targets() error = %v, want it to say the project records nothing", err)
+	}
+}
+
+func TestApply_AppliesEveryRecordedTemplate(t *testing.T) {
+	store := applyStore(t)
+	writeTemplate(t, filepath.Join(store, "ci", "pipeline.yml.tmpl"), "on: push\n")
+
+	dest := t.TempDir()
+	create(t, dest, Values{"ci": true})
+	second, err := Get("ci")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if _, err := Render(RenderOptions{Template: second, Dest: dest, Name: "myapp"}); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	// Both templates move on.
+	writeTemplate(t, filepath.Join(store, "app", "main.txt.tmpl"), "hello {{ .Name }}, again\n")
+	writeTemplate(t, filepath.Join(store, "ci", "pipeline.yml.tmpl"), "on: [push, pull_request]\n")
+
+	if _, err := Apply(ApplyOptions{Dest: dest}); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	if got := readFile(t, filepath.Join(dest, "main.txt")); got != "hello myapp, again\n" {
+		t.Errorf("main.txt = %q", got)
+	}
+	if got := readFile(t, filepath.Join(dest, "pipeline.yml")); got != "on: [push, pull_request]\n" {
+		t.Errorf("pipeline.yml = %q", got)
 	}
 }

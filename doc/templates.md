@@ -438,11 +438,24 @@ writes the project again, which is how that reaches the projects already made
 from it.
 
 ```bash
-t diff go-cli                    # what would change, as a unified diff
-t diff go-cli ./myapp            # somewhere other than here
-t apply go-cli                   # do it
-t apply go-cli --set ci=true     # change one answer, replay the rest
+t diff                           # what would change, as a unified diff
+t diff -C ./myapp                # somewhere other than here
+t apply                          # do it
+t apply go-cli --set ci=true     # one template, one answer changed
 ```
+
+Named no template, it applies **every** template the project records, so it
+needs to be told nothing about a project to bring it up to date. That is what
+makes the fleet-wide question answerable with what `projekt` already has:
+
+```bash
+projekt folder exec -t work -- t diff     # which of my projects have drifted
+projekt folder exec -t work -- t apply    # bring them all up to date
+```
+
+`folder exec` exits non-zero when the command failed anywhere, and `t diff`
+exits non-zero when it found something, so the first of those is a check a CI
+job can run over every project at once.
 
 ### What the project remembers
 
@@ -493,10 +506,14 @@ so the first apply only fills in what is missing.
 which is what a CI job wants:
 
 ```bash
-t diff go-cli || echo "this project has drifted from its template"
-t diff go-cli --name-only          # the paths alone, for a script
-t diff go-cli -U0                  # no context around the changes
+t diff || echo "this project has drifted from its templates"
+t diff --name-only                 # the paths alone, for a script
+t diff -U0                         # no context around the changes
+t diff go-cli                      # only one of the project's templates
 ```
+
+Once a project records more than one template, each line says which one the
+change comes from.
 
 ## Writing a template
 
