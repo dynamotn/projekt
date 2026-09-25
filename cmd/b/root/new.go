@@ -109,6 +109,7 @@ func NewBoilerplateNewCmd(out io.Writer) *cobra.Command {
 	f.BoolVarP(&o.NoRegister, "no-register", "", false, "Don't add the project to the projekt config")
 	f.BoolVarP(&o.Force, "force", "F", false, "Create into a folder that is not empty, overwriting files")
 	f.BoolVarP(&o.DryRun, "dry-run", "d", false, "Print the plan instead of creating anything")
+	registerValueCompletion(cmd)
 
 	return cmd
 }
