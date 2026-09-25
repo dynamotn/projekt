@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // useHistoryFor points the jump history at a scratch file and records visits.

@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"strings"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // WorktreeFolder is where a working tree goes by default: inside the project,

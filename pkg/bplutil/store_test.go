@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 // useStores points the package at a temporary boilerplate store and a

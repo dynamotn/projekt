@@ -6,7 +6,7 @@ import (
 	"os"
 	"sort"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // PruneWorktreeOptions drives `projekt worktree prune`.

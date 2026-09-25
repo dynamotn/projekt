@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // FindOwnFolder returns this machine's configuration entry for a path, and

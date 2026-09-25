@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"sort"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 // createFromRepo clones a starting point and puts its files in the

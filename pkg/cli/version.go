@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/dynamo.foss/projekt/internal/version"
+	"gitlab.com/dynamo-tools/projekt/internal/version"
 )
 
 type versionOptions struct {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 func TestCurrentFolder(t *testing.T) {

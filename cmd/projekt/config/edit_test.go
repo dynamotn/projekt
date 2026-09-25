@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // fakeEditor writes a script that replaces the edited file with content, and

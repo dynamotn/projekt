@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
 )
 
 const selectLongHelp = `Choose a project, and print where it is.

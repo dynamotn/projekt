@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 // recipeProject creates a project from a recipe and returns where it is.

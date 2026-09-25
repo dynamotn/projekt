@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 func NewFolderRemoveCmd(out io.Writer) *cobra.Command {

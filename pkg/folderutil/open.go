@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // OpenOptions drives `projekt folder open`.

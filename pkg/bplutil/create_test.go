@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 func readFile(t *testing.T, path string) string {

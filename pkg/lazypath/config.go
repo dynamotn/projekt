@@ -12,7 +12,7 @@ import (
 	"github.com/OpenPeeDeeP/xdg"
 	"github.com/spf13/viper"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 var (

@@ -19,10 +19,10 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.version={{.Version}}
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitCommit={{.Commit}}
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitTreeState=clean
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.buildTime={{.Timestamp}}
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.version={{.Version}}
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.gitCommit={{.Commit}}
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.gitTreeState=clean
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.buildTime={{.Timestamp}}
   - main: ./cmd/t
     id: t
     binary: t
@@ -38,10 +38,10 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.version={{.Version}}
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitCommit={{.Commit}}
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitTreeState=clean
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.buildTime={{.Timestamp}}
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.version={{.Version}}
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.gitCommit={{.Commit}}
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.gitTreeState=clean
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.buildTime={{.Timestamp}}
   - main: ./cmd/b
     id: b
     binary: b
@@ -57,10 +57,10 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.version={{.Version}}
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitCommit={{.Commit}}
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.gitTreeState=clean
-      - -X gitlab.com/dynamo.foss/projekt/internal/version.buildTime={{.Timestamp}}
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.version={{.Version}}
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.gitCommit={{.Commit}}
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.gitTreeState=clean
+      - -X gitlab.com/dynamo-tools/projekt/internal/version.buildTime={{.Timestamp}}
 archives:
   - name_template: >-
       {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}

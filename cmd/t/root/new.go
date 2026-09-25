@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 const newLongHelp = `Render a Go template from your template folder.

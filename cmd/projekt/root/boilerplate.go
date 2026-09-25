@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	b "gitlab.com/dynamo.foss/projekt/cmd/b/root"
+	b "gitlab.com/dynamo-tools/projekt/cmd/b/root"
 )
 
 func NewBoilerplateCmd(out io.Writer) *cobra.Command {

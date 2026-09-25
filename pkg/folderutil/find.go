@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // ErrFolderNotFound is returned when no configured folder matches a short name.

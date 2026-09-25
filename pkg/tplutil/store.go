@@ -9,7 +9,7 @@ import (
 
 	"github.com/OpenPeeDeeP/xdg"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // TemplateExt is the suffix a template file may carry. It is stripped from the

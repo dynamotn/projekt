@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 // completeTemplateNames completes the first argument with the templates of the

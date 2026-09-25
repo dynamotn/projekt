@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // GitURLs returns the URLs to try for a repository on a configured server:

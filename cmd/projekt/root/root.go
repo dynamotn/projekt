@@ -6,11 +6,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	config "gitlab.com/dynamo.foss/projekt/cmd/projekt/config"
-	folder "gitlab.com/dynamo.foss/projekt/cmd/projekt/folder"
-	worktree "gitlab.com/dynamo.foss/projekt/cmd/projekt/worktree"
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	config "gitlab.com/dynamo-tools/projekt/cmd/projekt/config"
+	folder "gitlab.com/dynamo-tools/projekt/cmd/projekt/folder"
+	worktree "gitlab.com/dynamo-tools/projekt/cmd/projekt/worktree"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 func NewRootCmd(out io.Writer) *cobra.Command {

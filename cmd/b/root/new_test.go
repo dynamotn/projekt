@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/bplutil"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/bplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 // stores writes a boilerplate store and a template store for one test.

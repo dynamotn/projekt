@@ -8,7 +8,7 @@ import (
 
 	yaml "go.yaml.in/yaml/v3"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // includeDepth is how far one file may reach through another. A configuration

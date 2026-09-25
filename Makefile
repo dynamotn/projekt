@@ -9,10 +9,10 @@ GIT_TAG    = $(shell git describe --tags --abbrev=0 --exact-match 2>/dev/null)
 GIT_DIRTY  = $(shell test -n "`git status --porcelain`" && echo "dirty" || echo "clean")
 BUILD_TIME = $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-LDFLAGS += -X gitlab.com/dynamo.foss/projekt/internal/version.gitCommit=${GIT_COMMIT}
-LDFLAGS += -X gitlab.com/dynamo.foss/projekt/internal/version.gitTreeState=${GIT_DIRTY}
-LDFLAGS += -X gitlab.com/dynamo.foss/projekt/internal/version.version=${GIT_TAG}
-LDFLAGS += -X gitlab.com/dynamo.foss/projekt/internal/version.buildTime=${BUILD_TIME}
+LDFLAGS += -X gitlab.com/dynamo-tools/projekt/internal/version.gitCommit=${GIT_COMMIT}
+LDFLAGS += -X gitlab.com/dynamo-tools/projekt/internal/version.gitTreeState=${GIT_DIRTY}
+LDFLAGS += -X gitlab.com/dynamo-tools/projekt/internal/version.version=${GIT_TAG}
+LDFLAGS += -X gitlab.com/dynamo-tools/projekt/internal/version.buildTime=${BUILD_TIME}
 LDFLAGS += $(EXT_LDFLAGS)
 
 .PHONY: t

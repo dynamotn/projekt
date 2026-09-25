@@ -9,9 +9,9 @@ import (
 
 	yaml "go.yaml.in/yaml/v3"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 // Report is what checking one recipe found.

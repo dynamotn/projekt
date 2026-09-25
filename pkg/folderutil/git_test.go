@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 func TestGitConfig(t *testing.T) {

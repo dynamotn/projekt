@@ -3,7 +3,7 @@ package folderutil
 import (
 	"testing"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 func BenchmarkParseConfig(b *testing.B) {

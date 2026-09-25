@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"sort"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // ParsedFolder represents a folder with its short name, path, and workspace

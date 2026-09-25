@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/templates"
+	"gitlab.com/dynamo-tools/projekt/pkg/templates"
 )
 
 func TestNewInitCmd(t *testing.T) {

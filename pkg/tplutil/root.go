@@ -27,7 +27,7 @@ package tplutil
 import (
 	"io"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // ListOption contains options for listing templates.

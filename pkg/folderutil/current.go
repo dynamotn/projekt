@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // ErrNotInAProject is returned when a path is not inside any known project.

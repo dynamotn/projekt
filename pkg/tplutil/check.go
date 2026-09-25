@@ -9,7 +9,7 @@ import (
 
 	"github.com/Masterminds/sprig"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // Report is what checking one template found.

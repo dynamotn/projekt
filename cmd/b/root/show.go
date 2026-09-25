@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/bplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/bplutil"
 )
 
 func NewBoilerplateShowCmd(out io.Writer) *cobra.Command {

@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // DefaultPickers are the interactive filters to look for, in order. The first

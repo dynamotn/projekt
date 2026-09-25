@@ -5,7 +5,7 @@ import (
 	"io"
 	"path/filepath"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 // ApplyOptions drives `b apply`.

@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 const worktreeLongHelp = `Work on two branches of a project at once.

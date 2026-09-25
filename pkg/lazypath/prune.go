@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // Stale is one configuration entry whose folder is no longer on disk.

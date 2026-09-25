@@ -1,8 +1,8 @@
 package main
 
 import (
-	"gitlab.com/dynamo.foss/projekt/cmd/projekt/root"
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/cmd/projekt/root"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 func main() {

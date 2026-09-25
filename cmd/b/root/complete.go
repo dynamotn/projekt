@@ -3,9 +3,9 @@ package root
 import (
 	"github.com/spf13/cobra"
 
-	t "gitlab.com/dynamo.foss/projekt/cmd/t/root"
-	"gitlab.com/dynamo.foss/projekt/pkg/bplutil"
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	t "gitlab.com/dynamo-tools/projekt/cmd/t/root"
+	"gitlab.com/dynamo-tools/projekt/pkg/bplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 // completeRecipeNames completes the first argument with the recipes of the

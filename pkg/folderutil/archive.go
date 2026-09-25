@@ -11,8 +11,8 @@ import (
 
 	"github.com/OpenPeeDeeP/xdg"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // ArchiveDir is where finished projects go. It is bound to --archive-dir;

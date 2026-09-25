@@ -28,9 +28,9 @@ import (
 	"github.com/OpenPeeDeeP/xdg"
 	yaml "go.yaml.in/yaml/v3"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 // RecipeDir is the folder recipes are read from. It is bound to the

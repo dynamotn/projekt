@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
 )
 
 const tagLongHelp = `Change the tags on a project.

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // PreviousName is what `pj -` passes: take me back where I was.

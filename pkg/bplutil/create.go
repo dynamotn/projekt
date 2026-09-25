@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
-	"gitlab.com/dynamo.foss/projekt/pkg/tplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
 // CreateOptions drives one `b new` run.

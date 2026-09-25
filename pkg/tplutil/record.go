@@ -11,7 +11,7 @@ import (
 
 	yaml "go.yaml.in/yaml/v3"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // RecordDir and RecordFile are where a project remembers what it was rendered

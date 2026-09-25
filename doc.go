@@ -5,10 +5,10 @@ import (
 
 	"github.com/spf13/cobra/doc"
 
-	b "gitlab.com/dynamo.foss/projekt/cmd/b/root"
-	projekt "gitlab.com/dynamo.foss/projekt/cmd/projekt/root"
-	t "gitlab.com/dynamo.foss/projekt/cmd/t/root"
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	b "gitlab.com/dynamo-tools/projekt/cmd/b/root"
+	projekt "gitlab.com/dynamo-tools/projekt/cmd/projekt/root"
+	t "gitlab.com/dynamo-tools/projekt/cmd/t/root"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 func main() {

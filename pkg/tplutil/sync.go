@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
-	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
 )
 
 // StoreStatus is what the template store is, as far as git is concerned.

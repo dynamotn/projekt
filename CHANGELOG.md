@@ -48,6 +48,12 @@
   its `.vars.yaml`, so one that writes GitHub Actions, Helm charts or other Go
   templates stops escaping its own syntax
 
+### Changed
+
+- The module lives at `gitlab.com/dynamo-tools/projekt`, so import it — and
+  `go install` it — under that path rather than the old
+  `gitlab.com/dynamo.foss/projekt`
+
 ### Fixed
 
 - **t**: a generated or hand-written `.vars.yaml` no longer round-trips with

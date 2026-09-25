@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // TagFolder adds or removes tags on a project, and prints what it now carries.

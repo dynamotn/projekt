@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // How well a query matched a project, from the one that needs no thought to

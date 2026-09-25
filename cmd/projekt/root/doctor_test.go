@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/doctor"
+	"gitlab.com/dynamo-tools/projekt/pkg/doctor"
 )
 
 func TestReportChecks_Text(t *testing.T) {

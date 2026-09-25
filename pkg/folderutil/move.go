@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/lazypath"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // MoveOptions drives `projekt folder move`.

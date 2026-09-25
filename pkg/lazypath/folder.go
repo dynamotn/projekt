@@ -8,7 +8,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/spf13/viper"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 const defaultRegexWorkspace = `^[^.].+`

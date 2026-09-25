@@ -1,4 +1,4 @@
-module gitlab.com/dynamo.foss/projekt
+module gitlab.com/dynamo-tools/projekt
 
 go 1.26.0
 

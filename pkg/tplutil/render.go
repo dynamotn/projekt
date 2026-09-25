@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // RenderOptions drives one `t new` run.

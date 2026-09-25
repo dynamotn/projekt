@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"gitlab.com/dynamo.foss/projekt/pkg/bplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/bplutil"
 )
 
 const checkLongHelp = `Read a recipe the way creating from it would, and report what is wrong.
