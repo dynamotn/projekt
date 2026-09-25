@@ -185,6 +185,48 @@ Created /home/me/oss/mytool from template:go-cli
 Inside the workspace /home/me/oss already, reachable with `pj oss-mytool`
 ```
 
+## Creating from a recipe again
+
+`t apply` brings a project up to date with its *template*. A recipe is more
+than the template it renders — it has questions of its own, and commands that
+follow — so a project created by `b` is brought up to date by `b`:
+
+```bash
+b apply                        # every recipe this project records
+b apply -C ~/work/myapp        # somewhere else
+b apply go-cli --set ci=true   # one recipe, one answer changed
+b apply --dry-run              # the whole plan, nothing written
+```
+
+`b new` leaves the recipe in the project's `.projekt/template.yaml`, next to
+what the template left there:
+
+```yaml
+recipes:
+  - recipe: go-cli
+    template: go-cli
+    name: myapp
+    createdAt: 2026-09-25T08:12:03Z
+    values:
+      module: example.com/myapp
+      goVersion: "1.24"
+```
+
+Those answers are replayed, so applying needs no flags. Everything `t apply`
+refuses to do on its own, `b apply` refuses too: a file edited by hand is kept
+unless `--force`, a file the template no longer writes is kept unless
+`--prune`.
+
+Two things it deliberately does *not* do. The project is not registered again
+— it is already in your configuration. And the recipe's `after` commands are
+not run again unless `--hooks` says so: they ran when the project was created,
+and repeating a `git init` or a `gh repo create` behind somebody's back is how
+an apply loses their trust. `b apply --hooks` is there for the `go mod tidy`
+kind.
+
+A recipe that clones a repository rather than rendering a template cannot be
+applied again, and says so: there is no template to re-render.
+
 ## Writing a recipe
 
 Write the template first — `t add ./some-project --name go-cli` turns a project

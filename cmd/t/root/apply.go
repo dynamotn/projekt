@@ -40,7 +40,8 @@ Examples:
   t apply go-cli                    # one of its templates
   t apply go-cli --set ci=true      # change one answer, replay the others
   t apply --force                   # rewrite what was edited by hand too
-  t apply --prune                   # and delete what it no longer writes`
+  t apply --prune                   # and delete what it no longer writes
+  t apply --hooks                   # run the template's after commands again`
 
 const diffLongHelp = `Show what applying a template would change.
 
@@ -109,6 +110,7 @@ func applyCommand(out io.Writer, diff bool) *cobra.Command {
 			o.Values = tplutil.MergeValues(fileValues, setValues)
 			o.In = cmd.InOrStdin()
 			o.Prompt = cmd.ErrOrStderr()
+			o.Log, o.HookOut, o.HookErr = out, out, cmd.ErrOrStderr()
 			o.Interactive = interactive
 
 			changes, err := tplutil.Apply(o)
@@ -130,6 +132,7 @@ func applyCommand(out io.Writer, diff bool) *cobra.Command {
 	if !diff {
 		f.BoolVarP(&o.Force, "force", "F", false, "Rewrite the files that were edited by hand too")
 		f.BoolVar(&o.Prune, "prune", false, "Delete the files the template no longer writes")
+		f.BoolVar(&o.Hooks, "hooks", false, "Run the template's `after` commands again as well")
 	}
 
 	return cmd

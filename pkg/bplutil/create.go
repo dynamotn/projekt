@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gitlab.com/dynamo.foss/projekt/pkg/cli"
 	"gitlab.com/dynamo.foss/projekt/pkg/folderutil"
@@ -264,6 +265,22 @@ func Create(o CreateOptions) (Result, error) {
 			return result, err
 		}
 	}
+	// The recipe brings questions and commands of its own; remembering only
+	// the template it rendered would lose both when the project is next
+	// brought up to date.
+	if !o.DryRun && plan.Recipe.Source.Template != "" {
+		record := tplutil.RecipeRecord{
+			Recipe:    plan.Recipe.Name,
+			Template:  plan.Template.Name,
+			Name:      plan.Name,
+			CreatedAt: time.Now().UTC(),
+			Values:    o.Values,
+		}
+		if err := tplutil.RecordRecipe(plan.Path, record); err != nil {
+			return result, err
+		}
+	}
+
 	if o.DryRun || !plan.Register {
 		return result, nil
 	}

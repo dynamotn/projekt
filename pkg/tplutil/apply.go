@@ -69,6 +69,15 @@ type ApplyOptions struct {
 	Force bool
 	// Prune deletes the files the template no longer writes.
 	Prune bool
+	// Hooks runs the template's `after` commands again.
+	//
+	// Off by default, because those commands ran when the project was created
+	// and repeating one unasked is how an apply loses somebody's trust.
+	Hooks bool
+	// Log receives what a hook is doing. Nil means nothing is said.
+	Log io.Writer
+	// HookOut and HookErr are the streams a hook runs with.
+	HookOut, HookErr io.Writer
 	// DryRun works the whole thing out without writing: `t diff`.
 	DryRun bool
 	// In, Prompt and Interactive are what a prompt function renders with.
@@ -273,14 +282,40 @@ func Apply(o ApplyOptions) ([]Change, error) {
 			return nil, err
 		}
 		all = append(all, changes...)
-		if o.DryRun {
+		if o.DryRun && !o.Hooks {
 			continue
 		}
-		if err := applyOne(o, root, changes, next); err != nil {
-			return nil, err
+		if !o.DryRun {
+			if err := applyOne(o, root, changes, next); err != nil {
+				return nil, err
+			}
+		}
+		if o.Hooks {
+			if err := runTemplateHooks(o, root, template, next.Values); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return all, nil
+}
+
+// runTemplateHooks runs what the template's own manifest asks for, in the
+// project that was just brought up to date.
+func runTemplateHooks(o ApplyOptions, root string, template Template, values Values) error {
+	base, err := BaseContext(RenderOptions{Template: template, Dest: root, Values: values})
+	if err != nil {
+		return err
+	}
+	return RunAfter(HookOptions{
+		Template: template,
+		Dir:      root,
+		Context:  base,
+		DryRun:   o.DryRun,
+		Log:      o.Log,
+		In:       o.In,
+		Out:      o.HookOut,
+		Err:      o.HookErr,
+	})
 }
 
 // applyOne writes what one template's plan asked for, and records it.

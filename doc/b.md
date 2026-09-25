@@ -14,6 +14,7 @@ Create boilerplate project folder of a language/framework/tool...
 
 ### SEE ALSO
 
+* [b apply](b_apply.md)	 - Create a project from a boilerplate again
 * [b list](b_list.md)	 - List all boilerplates of your boilerplate folder
 * [b new](b_new.md)	 - Create a project from a boilerplate
 * [b path](b_path.md)	 - Print the path of the boilerplate folder, or of one recipe

@@ -501,6 +501,7 @@ Each is also reachable as `projekt template <command>` / `projekt boilerplate <c
 | [`t check`](doc/t_check.md) | Validate a template, or the whole store; exits 1 on an error |
 | [`t init`](doc/t_init.md) | Clone a repository of templates into the store |
 | [`t sync`](doc/t_sync.md) | Bring the store up to date with its remote |
+| [`b apply`](doc/b_apply.md) | Create a project from its recipes again, replaying their recorded answers |
 | [`b new`](doc/b_new.md) | Create a project from a recipe, and register it |
 | [`b list`](doc/b_list.md) | List the recipes of the store, as a table, JSON or TSV |
 | [`b show`](doc/b_show.md) | Print a recipe as it is written |
