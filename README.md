@@ -495,7 +495,7 @@ Each is also reachable as `projekt template <command>` / `projekt boilerplate <c
 | [`t apply`](doc/t_apply.md) | Render a project's templates over it again, replaying its recorded values |
 | [`t diff`](doc/t_diff.md) | What `apply` would change, as a unified diff; exits 1 when it found something |
 | [`t list`](doc/t_list.md) | List the templates of the store, as a table, JSON or TSV |
-| [`t add`](doc/t_add.md) | Save an existing file or folder as a template |
+| [`t add`](doc/t_add.md) | Save an existing file or folder as a template, `--replace` turning its literals into `{{ .Name }}` |
 | [`t show`](doc/t_show.md) | Print the source of a template |
 | [`t path`](doc/t_path.md) | Print the store path, or one template's — handy for `$EDITOR` |
 | [`t check`](doc/t_check.md) | Validate a template, or the whole store; exits 1 on an error |

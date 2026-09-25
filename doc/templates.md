@@ -528,6 +528,39 @@ t add ./myapp --name go-cli      # a whole folder, minus its .git
 t add ./Makefile --force         # replace a template of the same name
 ```
 
+That is half the job. The project also says its own name, its own module path
+and its own author in every second file, and a template says `{{ .Name }}`.
+`--replace` does the other half:
+
+```bash
+t add ./myapp --name go-cli \
+  --replace myapp=Name \
+  --replace example.com/myapp=Values.module \
+  --replace 'Jane Doe=Values.author'
+```
+
+Each one is `literal=Expr`, where `Expr` is a template path: `.Name`, `.User`
+and the rest come for free, and anything under `.Values` becomes a question.
+The literals are replaced in the **file names** as well as in the contents, so
+`cmd/myapp/main.go` becomes `cmd/{{ .Name }}/main.go`. Longest literal first,
+so `myapp` never eats half of `example.com/myapp`. A file that is not text —
+an image, a compiled binary — is copied untouched; only its name is rewritten.
+
+The `.Values` targets are written out as a `.vars.yaml`, with what the project
+already said as the default, so the template is answerable straight away:
+
+```yaml
+# Written by `t add --replace`. The defaults are what the project
+# it came from already said; the prompts are yours to fill in.
+vars:
+    - name: author
+      default: Jane Doe
+    - name: module
+      default: example.com/myapp
+```
+
+A manifest the project already brought is left alone, unless `--force`.
+
 Then edit it in place:
 
 ```bash

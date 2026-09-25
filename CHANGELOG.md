@@ -13,6 +13,11 @@
   leaves the recipe, its answers and the template it rendered in the project's
   `.projekt/template.yaml`, so a recipe's own questions and commands are not
   lost the way they were when only the template was remembered
+- **t**: turn a project into a template with `t add --replace myapp=Name`,
+  which rewrites the literals in the file contents *and* in the file names,
+  longest first, leaves anything that is not text alone, and writes the
+  `.vars.yaml` the `.Values` targets imply with the project's own values as
+  the defaults
 - **b**: validate a recipe, or the whole store, with `b check` — every problem
   at once rather than the first, the template it renders checked too, and the
   questions it asks compared with what that template actually reads
@@ -41,6 +46,9 @@
   templates stops escaping its own syntax
 
 ### Fixed
+
+- **t**: a generated or hand-written `.vars.yaml` no longer round-trips with
+  empty `prompt`, `type` and `choices` keys on every variable
 
 - **t**: a path segment naming a value nobody set wrote a folder called
   `<no value>`; it is refused now, the way an empty or escaping segment

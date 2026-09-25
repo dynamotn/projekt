@@ -39,16 +39,16 @@ type Var struct {
 	// Name is the key under .Values, dotted to nest: "author.name".
 	Name string `yaml:"name"`
 	// Prompt is the question. It defaults to the name.
-	Prompt string `yaml:"prompt"`
+	Prompt string `yaml:"prompt,omitempty"`
 	// Default is a Go template rendered with the same context as the template
 	// itself, minus .Values, so `{{ .User }}` works as a default.
-	Default string `yaml:"default"`
+	Default string `yaml:"default,omitempty"`
 	// Type is how the answer is read. The empty value means a string.
-	Type VarType `yaml:"type"`
+	Type VarType `yaml:"type,omitempty"`
 	// Choices are the accepted answers of a choice.
-	Choices []string `yaml:"choices"`
+	Choices []string `yaml:"choices,omitempty"`
 	// Required asks again rather than accepting an empty answer.
-	Required bool `yaml:"required"`
+	Required bool `yaml:"required,omitempty"`
 }
 
 // question returns the text shown to the person answering.
@@ -69,19 +69,19 @@ func (v Var) typeName() string {
 
 // Manifest is the parsed .vars.yaml of a template.
 type Manifest struct {
-	Vars []Var `yaml:"vars"`
+	Vars []Var `yaml:"vars,omitempty"`
 	// After are the commands to run in the folder the template wrote, once
 	// every file is there: `go mod tidy`, `git init`, `pre-commit install`.
 	//
 	// Each is rendered with the same values the template was, so a command can
 	// be conditional, and a line that renders empty is skipped.
-	After []string `yaml:"after"`
+	After []string `yaml:"after,omitempty"`
 	// Delims replaces `{{` and `}}` for the whole template.
 	//
 	// A template that writes Go templates, Helm charts or GitHub Actions
 	// expressions otherwise spends its life escaping the very syntax it is
 	// written in; saying `delims: ["<%", "%>"]` once is the way out.
-	Delims []string `yaml:"delims"`
+	Delims []string `yaml:"delims,omitempty"`
 }
 
 // DefaultDelims are the delimiters a template uses unless it says otherwise.
