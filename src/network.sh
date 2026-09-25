@@ -258,7 +258,7 @@ function dybatpho::curl_do {
   fi
 
   if dybatpho::is true "${DRY_RUN}"; then
-    dybatpho::dry_run curl -fsSL "${url}" -o "${output}" "$@"
+    dybatpho::dry_run curl -sSL "${url}" -o "${output}" "$@"
     return 0
   fi
 
@@ -291,7 +291,16 @@ function dybatpho::curl_do {
     __dybatpho_http_started="$(__dybatpho_log_now_ms)"
   fi
   while :; do
-    local curl_args=(-fsSL -D "${header_file}" -w '%{http_code}' -o "${output}")
+    # No `-f`. It makes curl discard the response body on a 4xx or 5xx -- it
+    # does not even create the `-o` file -- so the part of the answer that says
+    # *why* the request was refused was gone before this function saw it, and
+    # every caller could report was the status. It also made curl exit non-zero
+    # for an HTTP error, which sent the capture below down the transport-failure
+    # path and reported `000` instead of the real status.
+    #
+    # Without it, curl exits 0 for any response it received, so a non-zero exit
+    # now means what it should: nothing came back at all.
+    local curl_args=(-sSL -D "${header_file}" -w '%{http_code}' -o "${output}")
     [[ -n "${DYBATPHO_CURL_CONNECT_TIMEOUT}" ]] && curl_args+=(--connect-timeout "${DYBATPHO_CURL_CONNECT_TIMEOUT}")
     [[ -n "${DYBATPHO_CURL_TIMEOUT}" ]] && curl_args+=(--max-time "${DYBATPHO_CURL_TIMEOUT}")
     curl_args+=(${secret_args[@]+"${secret_args[@]}"})
@@ -309,6 +318,9 @@ function dybatpho::curl_do {
         dybatpho::error "Error when access ${url}"
       }
     fi
+    # A response that is not three digits is not a response: curl printed
+    # nothing because it never got one.
+    [[ "${code}" =~ ^[0-9]{3}$ ]] || code="000"
 
     local code_description
     code_description=$(__dybatpho_network_get_http_code "${code}")

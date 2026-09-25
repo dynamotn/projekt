@@ -1038,3 +1038,29 @@ c.close()' > "${portfile}" 2> /dev/null &
   assert_output --partial "Authorization: Bearer leak-me-not"
   assert_output --partial '{"secret":"body"}'
 }
+
+@test "an HTTP error keeps its body and reports its own status" {
+  export DYBATPHO_CURL_MAX_RETRIES=0
+  local body="${BATS_TEST_TMPDIR}/error-body"
+  dybatpho::mock_http "api.example.test/reject" 422 \
+    '{"message":"Validation Failed","errors":[{"field":"title","code":"missing"}]}'
+
+  # 4 for a 4xx, not 1: the status is the answer, not a transport failure.
+  run -4 dybatpho::curl_do "https://api.example.test/reject" "${body}"
+
+  # The reason the request was refused has to survive; `-f` used to discard it
+  # before the library ever saw it.
+  assert_file_contains "${body}" "Validation Failed"
+}
+
+@test "a 5xx also keeps its body, and a transport failure is told apart" {
+  export DYBATPHO_CURL_MAX_RETRIES=0
+  local body="${BATS_TEST_TMPDIR}/server-error"
+  dybatpho::mock_http "api.example.test/broken" 503 '{"message":"try later"}'
+  run -5 dybatpho::curl_do "https://api.example.test/broken" "${body}"
+  assert_file_contains "${body}" "try later"
+
+  # Nothing came back at all: that is the case a non-zero curl exit now means.
+  dybatpho::mock_command curl 7 ""
+  run -1 dybatpho::curl_do "https://api.example.test/unreachable" "${BATS_TEST_TMPDIR}/none"
+}

@@ -52,6 +52,7 @@ token can never reach a log line even when a request is traced.
 - [`__dybatpho_forge_labels_json`](#__dybatpho_forge_labels_json) — Turn a comma-separated label list into a JSON array. GitHub wants `["a","b"]`; GitLab takes the comma-separated string as-is, so only GitHub needs this.
 - [`__dybatpho_forge_auth_header`](#__dybatpho_forge_auth_header) — Print the authentication header this forge expects.
 - [`dybatpho::forge_request`](#dybatphoforge_request) — Make an authenticated request against the forge API. The path is relative to the project, so callers write `issues` rather than repeating the API base and the project identifier on every call.
+- [`dybatpho::forge_error`](#dybatphoforge_error) — Print what the forge said about the last failed request. A forge refuses a request for a reason, and puts the reason in the response body: which field was missing, that the token cannot see this repository, that a release already exists for the tag. Reporting only `HTTP 422` throws that away and leaves a bad field, an expired token and a rate limit looking identical. The status is always included, because the body is not guaranteed to be JSON, or to be there at all.
 - [`dybatpho::forge_issue_find`](#dybatphoforge_issue_find) — Print the number of an open issue whose title matches exactly. GitLab can filter server-side; GitHub cannot search titles on the issues endpoint, so the open issues are compared here. Both are exact matches, so "Build failing" never collides with "Build failing on macOS".
 - [`dybatpho::forge_issue_create`](#dybatphoforge_issue_create) — Open an issue and print its number.
 - [`dybatpho::forge_issue_comment`](#dybatphoforge_issue_comment) — Add a comment to an existing issue.
@@ -446,6 +447,53 @@ dybatpho::json_get "$(< "${body}")" '.[0].title'
 - `0`: The forge answered with a 2xx status
 - `4`: The forge answered with a 4xx status
 - `5`: The forge answered with a 5xx status
+
+
+---
+
+### `dybatpho::forge_error`
+
+Print what the forge said about the last failed request.
+
+
+  A forge refuses a request for a reason, and puts the reason in the response
+  body: which field was missing, that the token cannot see this repository,
+  that a release already exists for the tag. Reporting only `HTTP 422` throws
+  that away and leaves a bad field, an expired token and a rate limit looking
+  identical.
+
+
+  The status is always included, because the body is not guaranteed to be
+  JSON, or to be there at all.
+
+**🧪 Example**
+
+```bash
+dybatpho::forge_request POST "issues" "${payload}" "${response}" \
+  || dybatpho::die "Could not create issue: $(dybatpho::forge_error "${response}")"
+
+```
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Response body file, defaulting to the last one parsed |
+
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`DYBATPHO_HTTP_STATUS`** | string | Status of the last request |
+| **`DYBATPHO_HTTP_BODY_FILE`** | string | Body file of the last request |
+
+**📤 Output on stdout**
+
+- The forge's own message when there is one, prefixed with the status
+
+**🚦 Exit codes**
+
+- `0`: Always
 
 
 ---

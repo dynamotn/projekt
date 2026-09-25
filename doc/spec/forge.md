@@ -155,6 +155,10 @@ dybatpho::forge_release_upload "v${version}" "dist/app-v${version}-linux-amd64.t
   store GitLab assets as a generic package and then link them to the release.
 - **FR-013**: Every failing request MUST fail the calling function with a
   message naming the operation and the HTTP status.
+- **FR-014**: A failed request MUST report what the forge said about it, not
+  only the HTTP status, so a bad field, an expired token and a rate limit are
+  told apart. The status MUST still be included, because a body is not
+  guaranteed to be present or to be JSON.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -203,6 +207,9 @@ dybatpho::forge_release_upload "v${version}" "dist/app-v${version}-linux-amd64.t
 - **IT-020**: `dybatpho::forge_release_upload` sends the asset to the GitHub upload host.
 - **IT-021**: `dybatpho::forge_release_upload` stores and links a GitLab generic package.
 - **IT-022**: `dybatpho::forge_release_upload` refuses a missing file or a missing release.
+- **IT-023**: Verify the forge's message and field-level detail are reported
+  for a 422, for both forges' wordings, and that a missing or non-JSON body
+  falls back to the status.
 
 ## Acceptance Criteria *(mandatory)*
 

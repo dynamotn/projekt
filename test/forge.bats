@@ -477,3 +477,49 @@ curl_payload() {
   assert_equal "$(__dybatpho_forge_token_vars github)" "GITHUB_TOKEN or GH_TOKEN"
   assert_equal "$(__dybatpho_forge_token_vars gitlab)" "GITLAB_TOKEN or CI_JOB_TOKEN"
 }
+
+@test "dybatpho::forge_error quotes what the forge actually said" {
+  local body="${BATS_TEST_TMPDIR}/forge-error"
+  DYBATPHO_HTTP_STATUS=422
+
+  printf '%s' '{"message":"Validation Failed","errors":[{"field":"title","code":"missing"}]}' > "${body}"
+  run dybatpho::forge_error "${body}"
+  assert_success
+  assert_output --partial "HTTP 422"
+  assert_output --partial "Validation Failed"
+  assert_output --partial "title missing"
+
+  # GitLab words it differently.
+  printf '%s' '{"error":"insufficient_scope"}' > "${body}"
+  run dybatpho::forge_error "${body}"
+  assert_output --partial "insufficient_scope"
+}
+
+@test "dybatpho::forge_error copes with a body that is not JSON, or missing" {
+  local body="${BATS_TEST_TMPDIR}/not-json"
+  DYBATPHO_HTTP_STATUS=502
+
+  printf '%s' '<html><body>Bad Gateway</body></html>' > "${body}"
+  run dybatpho::forge_error "${body}"
+  assert_success
+  assert_output --partial "HTTP 502"
+  assert_output --partial "Bad Gateway"
+
+  : > "${body}"
+  run dybatpho::forge_error "${body}"
+  assert_success
+  assert_output "HTTP 502"
+
+  run dybatpho::forge_error "${BATS_TEST_TMPDIR}/does-not-exist"
+  assert_success
+  assert_output "HTTP 502"
+}
+
+@test "a failed forge call reports the forge's reason, not just the status" {
+  dybatpho::mock_http "api.github.com" 422 \
+    '{"message":"Validation Failed","errors":[{"field":"title","code":"missing"}]}'
+
+  run --separate-stderr dybatpho::forge_issue_create "" "body text"
+  assert_failure
+  assert_stderr --partial "Validation Failed"
+}

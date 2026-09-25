@@ -430,6 +430,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An HTTP error lost its body and its status.** `dybatpho::curl_do` passed
+  `-f` to `curl`, which discards the response body on a 4xx or 5xx — it does not
+  even create the `-o` file. The part of the answer that says *why* a request was
+  refused was gone before the library saw it, and every `forge_*` failure could
+  report was `HTTP 422`. A bad field, an expired token, a rate limit and a
+  repository that does not exist all looked the same.
+
+  The same flag also cost the status: because `-f` makes `curl` exit non-zero for
+  an HTTP error, the captured `%{http_code}` was thrown away and replaced with
+  `000`, so `curl_do` returned 1 — its "unknown" branch — for a 422 rather than
+  the documented 4.
+
+  `-f` is gone. `curl` now exits non-zero only when no response arrived at all,
+  which is what a transport failure is, and the status decides the result.
+
+- **`forge_*` failures now quote the forge.** `dybatpho::forge_error` reads the
+  message out of the response — `message`, `error` or GitHub's field-level
+  `errors[]` — and every failure path reports it alongside the status. A body
+  that is missing, empty or not JSON falls back to the status, and a non-JSON
+  body is quoted in part rather than dropped.
 - **Two processes could hold the same lock.** `dybatpho::lock_acquire` claimed
   the lock with `mkdir` and wrote the holder's pid afterwards. Between those two
   steps the lock existed with nobody in it, and a second process arriving in

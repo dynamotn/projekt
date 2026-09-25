@@ -408,6 +408,66 @@ function dybatpho::forge_request {
 }
 
 #######################################
+# @description Print what the forge said about the last failed request.
+#
+#   A forge refuses a request for a reason, and puts the reason in the response
+#   body: which field was missing, that the token cannot see this repository,
+#   that a release already exists for the tag. Reporting only `HTTP 422` throws
+#   that away and leaves a bad field, an expired token and a rate limit looking
+#   identical.
+#
+#   The status is always included, because the body is not guaranteed to be
+#   JSON, or to be there at all.
+# @example
+#   dybatpho::forge_request POST "issues" "${payload}" "${response}" \
+#     || dybatpho::die "Could not create issue: $(dybatpho::forge_error "${response}")"
+#
+# @arg $1 string Response body file, defaulting to the last one parsed
+# @env DYBATPHO_HTTP_STATUS string Status of the last request
+# @env DYBATPHO_HTTP_BODY_FILE string Body file of the last request
+# @stdout The forge's own message when there is one, prefixed with the status
+# @exitcode 0 Always
+#######################################
+function dybatpho::forge_error {
+  local body_file="${1:-${DYBATPHO_HTTP_BODY_FILE:-}}"
+  local status_text="HTTP ${DYBATPHO_HTTP_STATUS:-unknown}"
+
+  if [[ -z "${body_file}" ]] || ! dybatpho::is file "${body_file}"; then
+    printf '%s\n' "${status_text}"
+    return 0
+  fi
+
+  local body
+  body="$(< "${body_file}")"
+  [[ -n "${body// /}" ]] || {
+    printf '%s\n' "${status_text}"
+    return 0
+  }
+
+  if ! dybatpho::json_valid "${body}"; then
+    # Not JSON: an HTML error page or a proxy's plain text. A little of it is
+    # more use than none of it, and all of it is not worth a log line.
+    printf '%s: %s\n' "${status_text}" "$(dybatpho::string_truncate "${body//$'\n'/ }" 200)"
+    return 0
+  fi
+
+  local message detail
+  # GitHub uses `message`, GitLab uses `message` or `error`.
+  message="$(dybatpho::json_get "${body}" \
+    '[.message?, .error?, .error_description?] | map(select(. != null and . != "")) | .[0] // ""')"
+  # GitHub says which field it did not like in a separate array.
+  detail="$(dybatpho::json_get "${body}" \
+    '[.errors[]? | [.field?, .code?] | map(select(. != null)) | join(" ")] | join(", ")' 2> /dev/null || true)"
+
+  if [[ -z "${message}" && -z "${detail}" ]]; then
+    printf '%s: %s\n' "${status_text}" "$(dybatpho::string_truncate "${body//$'\n'/ }" 200)"
+    return 0
+  fi
+
+  printf '%s: %s%s\n' "${status_text}" "${message}" "${detail:+ (${detail})}"
+}
+
+#######################################
 # @description Print the number of an open issue whose title matches exactly.
 #   GitLab can filter server-side; GitHub cannot search titles on the issues
 #   endpoint, so the open issues are compared here. Both are exact matches, so
@@ -467,7 +527,7 @@ function dybatpho::forge_issue_create {
         && payload="$(dybatpho::json_eval "${payload}" \
           ".labels = $(__dybatpho_forge_labels_json "${labels}")")"
       dybatpho::forge_request POST "issues" "${payload}" "${response}" \
-        || dybatpho::die "Could not create issue '${title}' (HTTP ${DYBATPHO_HTTP_STATUS})"
+        || dybatpho::die "Could not create issue '${title}': $(dybatpho::forge_error "${response}")"
       number="$(dybatpho::json_get "$(< "${response}")" '.number')"
       ;;
     gitlab)
@@ -475,7 +535,7 @@ function dybatpho::forge_issue_create {
       [[ -n "${labels}" ]] \
         && payload="$(dybatpho::json_eval "${payload}" ".labels = $(dybatpho::json_string "${labels}")")"
       dybatpho::forge_request POST "issues" "${payload}" "${response}" \
-        || dybatpho::die "Could not create issue '${title}' (HTTP ${DYBATPHO_HTTP_STATUS})"
+        || dybatpho::die "Could not create issue '${title}': $(dybatpho::forge_error "${response}")"
       number="$(dybatpho::json_get "$(< "${response}")" '.iid')"
       ;;
   esac
@@ -501,8 +561,10 @@ function dybatpho::forge_issue_comment {
     gitlab) path="issues/${number}/notes" ;;
   esac
 
-  dybatpho::forge_request POST "${path}" "${payload}" /dev/null \
-    || dybatpho::die "Could not comment on issue ${number} (HTTP ${DYBATPHO_HTTP_STATUS})"
+  local response
+  dybatpho::create_temp response ".json"
+  dybatpho::forge_request POST "${path}" "${payload}" "${response}" \
+    || dybatpho::die "Could not comment on issue ${number}: $(dybatpho::forge_error "${response}")"
 }
 
 #######################################
@@ -622,7 +684,7 @@ function dybatpho::forge_release_create {
       dybatpho::is true "${draft}" \
         && payload="$(dybatpho::json_eval "${payload}" '.draft = true')"
       dybatpho::forge_request POST "releases" "${payload}" "${response}" \
-        || dybatpho::die "Could not create release '${tag}' (HTTP ${DYBATPHO_HTTP_STATUS})"
+        || dybatpho::die "Could not create release '${tag}': $(dybatpho::forge_error "${response}")"
       value="$(dybatpho::json_get "$(< "${response}")" '.id')"
       ;;
     gitlab)
@@ -630,7 +692,7 @@ function dybatpho::forge_release_create {
         && dybatpho::die "GitLab has no draft release; hold the tag back instead"
       payload="$(dybatpho::json_object tag_name "${tag}" name "${name}" description "${notes}")"
       dybatpho::forge_request POST "releases" "${payload}" "${response}" \
-        || dybatpho::die "Could not create release '${tag}' (HTTP ${DYBATPHO_HTTP_STATUS})"
+        || dybatpho::die "Could not create release '${tag}': $(dybatpho::forge_error "${response}")"
       value="$(dybatpho::json_get "$(< "${response}")" '.tag_name')"
       ;;
   esac
@@ -689,7 +751,7 @@ function dybatpho::forge_release_upload {
         --request POST \
         --header "Content-Type: application/octet-stream" \
         --data-binary "@${file}" \
-        || dybatpho::die "Could not upload ${name} (HTTP ${DYBATPHO_HTTP_STATUS})"
+        || dybatpho::die "Could not upload ${name}: $(dybatpho::forge_error "${response}")"
       dybatpho::json_get "$(< "${response}")" '.browser_download_url'
       ;;
     gitlab)
@@ -703,17 +765,17 @@ function dybatpho::forge_release_upload {
       local -a DYBATPHO_CURL_SECRET_HEADERS=(
         "$(__dybatpho_forge_auth_header gitlab "${token}")"
       )
-      dybatpho::curl_request "${package_url}" /dev/null \
+      dybatpho::curl_request "${package_url}" "${response}" \
         --request PUT \
         --upload-file "${file}" \
-        || dybatpho::die "Could not upload ${name} (HTTP ${DYBATPHO_HTTP_STATUS})"
+        || dybatpho::die "Could not upload ${name}: $(dybatpho::forge_error "${response}")"
 
       # A generic package is not visible from the release until it is linked.
       local link_payload
       link_payload="$(dybatpho::json_object name "${name}" url "${package_url}")"
       dybatpho::forge_request POST \
-        "releases/$(dybatpho::url_encode "${tag}")/assets/links" "${link_payload}" /dev/null \
-        || dybatpho::die "Uploaded ${name} but could not link it to release '${tag}'"
+        "releases/$(dybatpho::url_encode "${tag}")/assets/links" "${link_payload}" "${response}" \
+        || dybatpho::die "Uploaded ${name} but could not link it to release '${tag}': $(dybatpho::forge_error "${response}")"
       printf '%s\n' "${package_url}"
       ;;
   esac
