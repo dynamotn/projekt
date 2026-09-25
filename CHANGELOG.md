@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [3.1.0]
 
 ### Added
 
@@ -62,6 +62,7 @@
 - **t**: a path segment naming a value nobody set wrote a folder called
   `<no value>`; it is refused now, the way an empty or escaping segment
   already was
+
 
 ## [3.0.0]
 
