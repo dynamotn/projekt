@@ -9,6 +9,12 @@
   up to date — which makes `projekt folder exec -t work -- t diff` a drift
   report over every project at once. The project to work on moved to
   `--project`/`-C`, leaving the positional arguments for the templates
+- **b**: create a project from its recipes again with `b apply` — `b new` now
+  leaves the recipe, its answers and the template it rendered in the project's
+  `.projekt/template.yaml`, so a recipe's own questions and commands are not
+  lost the way they were when only the template was remembered
+- **t**: the `after` commands of a template or a recipe are not run again by an
+  apply unless `--hooks` says so; they ran when the project was created
 - **t**: validate a template, or the whole store, with `t check` — every file
   and path segment parsed, every shared template resolved, the whole tree
   rendered with the manifest's own defaults, and what the manifest asks for

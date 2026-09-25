@@ -491,8 +491,10 @@ flags — `--set` and `--values` change one answer and keep the rest. And the
 | `conflict` | it differs *and* it was edited since | keeps it, unless `--force` |
 | `removed` | the template no longer writes it | keeps it, unless `--prune` |
 
-Nothing that was edited by hand is touched without `--force`, and nothing is
-deleted without `--prune`. A file left alone stays in the record exactly as it
+Nothing that was edited by hand is touched without `--force`, nothing is
+deleted without `--prune`, and the template's `after` commands are not run
+again without `--hooks`: they ran when the project was created, and repeating
+a `git init` unasked is how an apply loses somebody's trust. A file left alone stays in the record exactly as it
 was written, so the next apply reaches the same conclusion instead of
 forgetting the file.
 
