@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
-	"github.com/spf13/viper"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
@@ -92,8 +91,7 @@ func (w *Worktree) AddToConfig() error {
 	}
 
 	c.Worktrees = append(c.Worktrees, *w)
-	viper.Set("worktrees", c.Worktrees)
-	if err := viper.WriteConfig(); err != nil {
+	if err := saveConfig("worktrees"); err != nil {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}
@@ -116,8 +114,7 @@ func RemoveWorktreeFromConfig(project, name string) error {
 	}
 
 	c.Worktrees = append(c.Worktrees[:index], c.Worktrees[index+1:]...)
-	viper.Set("worktrees", c.Worktrees)
-	if err := viper.WriteConfig(); err != nil {
+	if err := saveConfig("worktrees"); err != nil {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}

@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/viper"
-
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
@@ -110,9 +108,7 @@ func PruneStale() ([]Stale, error) {
 	c.Worktrees = worktrees
 	// One write for the whole lot: a prune that failed halfway would leave a
 	// configuration nobody asked for.
-	viper.Set("folders", c.Folders)
-	viper.Set("worktrees", c.Worktrees)
-	if err := viper.WriteConfig(); err != nil {
+	if err := saveConfig("folders", "worktrees"); err != nil {
 		cli.Error("Failed to write config %v", err)
 		return nil, fmt.Errorf("cannot write the configuration: %w", err)
 	}

@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- **config**: a command that changes the configuration — `folder add`,
+  `remove`, `move`, `tag`, `prune`, `worktree add`/`remove`, `add --discover`
+  — now changes only the entries it touches. Comments, blank lines, key order,
+  quoting, indentation and the spelling of keys such as `gitServers` survive,
+  a new entry no longer spells out `prefix: ""`, `regex: ""` and
+  `priority: 0`, and a configuration linked in from a dotfiles repository is
+  written through the link instead of being replaced by a copy
 - **release**: `scripts/release.sh --no-push` stops before the push again,
   instead of tagging and pushing anyway — the option parser reserves `--no-*`
   for the negated form of a switch, so the flag never reached its variable

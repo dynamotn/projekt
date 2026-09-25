@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
-	"github.com/spf13/viper"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
@@ -186,8 +185,7 @@ func (f *Folder) AddToConfig() error {
 	}
 
 	c.Folders = append(c.Folders, *f)
-	viper.Set("folders", c.Folders)
-	err := viper.WriteConfig()
+	err := saveConfig("folders")
 	if err != nil {
 		cli.Error("Failed to write config %v", err)
 		return err
@@ -213,8 +211,7 @@ func RemoveFromConfig(path string) error {
 	}
 
 	c.Folders = append(c.Folders[:index], c.Folders[index+1:]...)
-	viper.Set("folders", c.Folders)
-	err := viper.WriteConfig()
+	err := saveConfig("folders")
 	if err != nil {
 		cli.Error("Failed to write config %v", err)
 		return err

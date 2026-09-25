@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/spf13/viper"
-
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
@@ -44,8 +42,7 @@ func AddRepoToFolder(folderPath, repoName, repoPath string) error {
 	}
 	c.Folders[index].Git.Repos = append(c.Folders[index].Git.Repos, repo)
 
-	viper.Set("folders", c.Folders)
-	if err := viper.WriteConfig(); err != nil {
+	if err := saveConfig("folders"); err != nil {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}

@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/viper"
-
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
@@ -65,9 +63,7 @@ func MoveFolder(from, to string) error {
 		}
 	}
 
-	viper.Set("folders", c.Folders)
-	viper.Set("worktrees", c.Worktrees)
-	if err := viper.WriteConfig(); err != nil {
+	if err := saveConfig("folders", "worktrees"); err != nil {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}
@@ -91,8 +87,7 @@ func SetFolderTags(path string, tags []string) error {
 
 	c.Folders[index].Tags = NormalizeTags(tags)
 
-	viper.Set("folders", c.Folders)
-	if err := viper.WriteConfig(); err != nil {
+	if err := saveConfig("folders"); err != nil {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}
