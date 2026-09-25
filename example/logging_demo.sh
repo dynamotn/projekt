@@ -2,9 +2,10 @@
 # @file logging_demo.sh
 # @brief Example showing all logging and tracing utilities
 # @description Demonstrates every logging function: debug, info, warn, error, fatal,
-#              progress, progress_bar, header, success, start/end trace, structured
-#              JSON output enriched with request ID/hostname/PID/duration, and
-#              file logging with rotation and independent verbosity
+#              progress, progress_bar, spinner, header, success, start/end trace,
+#              structured JSON output enriched with request ID/hostname/PID/duration,
+#              context fields, step timers, and file logging with rotation and
+#              independent verbosity
 # shellcheck disable=SC2030,SC2031 # the subshells scope LOG_* on purpose, so each demo
 #   section restores the caller's logging configuration by construction.
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
@@ -121,6 +122,57 @@ function _demo_file_logging {
   dybatpho::print "$(ls -1 "${demo_dir}")"
 }
 
+function _demo_log_to_file {
+  dybatpho::header "CONFIGURING THE FILE SINK IN ONE CALL"
+  local demo_dir
+  dybatpho::create_temp demo_dir "/"
+  local log_file="${demo_dir}/configured.log"
+
+  (
+    # The same sink as above, named once instead of through four variables,
+    # with the rotation threshold written the way an operator would say it.
+    dybatpho::log_to_file "${log_file}" rotate:10M keep:3 level:debug
+    dybatpho::info "Sink configured: ${LOG_FILE} (rotate at ${LOG_FILE_MAX_BYTES} bytes)"
+    dybatpho::debug "this debug event reaches the file only"
+    dybatpho::log_to_file off
+    dybatpho::info "file logging is off again, so this event stays on stderr"
+  )
+  dybatpho::info "Log file content:"
+  dybatpho::print "$(cat "${log_file}")"
+}
+
+function _demo_log_context {
+  dybatpho::header "CONTEXT FIELDS"
+  dybatpho::info "Fields registered once ride along with every later event:"
+  (
+    export LOG_FORMAT=json
+    dybatpho::log_context add run_id=demo-42 stage=build
+    dybatpho::info "compiling"
+    dybatpho::log_context add stage=test
+    dybatpho::warn "a test was skipped"
+    dybatpho::log_context remove stage
+    dybatpho::info "stage is gone, run_id stays"
+    dybatpho::log_context clear
+  )
+}
+
+function _demo_timers {
+  dybatpho::header "TIMERS"
+  dybatpho::timer_start demo_step
+  sleep 0.2
+  dybatpho::timer_end demo_step
+  dybatpho::info "The duration is also readable as ${DYBATPHO_TIMER_LAST_MS}ms"
+}
+
+function _demo_spinner {
+  dybatpho::header "SPINNER"
+  dybatpho::info "On a terminal the message spins; elsewhere it is logged once."
+  dybatpho::spinner "Pretending to download something" -- sleep 1
+  local status=0
+  dybatpho::spinner "Running a command that fails" -- false || status=$?
+  dybatpho::info "The spinner passed the command's exit code back: ${status}"
+}
+
 function _main {
   _demo_log_levels
   _demo_print
@@ -130,6 +182,10 @@ function _main {
   _demo_trace
   _demo_json_context
   _demo_file_logging
+  _demo_log_to_file
+  _demo_log_context
+  _demo_timers
+  _demo_spinner
   dybatpho::success "Logging demo complete"
 }
 

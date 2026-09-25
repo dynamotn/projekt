@@ -103,6 +103,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dybatpho::config_set` makes the in-memory setter public. It was already
   there as an internal helper, which meant the example had to reach into a
   `__dybatpho_` name to demonstrate a validation failure.
+- **`logging` — a durable sink, fields that ride along, and the time a step
+  took.** The file sink already existed, but reaching it meant exporting four
+  variables in the right order and finding out from an empty file that the
+  path was wrong. `dybatpho::log_to_file` is the front door to it:
+
+  ```sh
+  dybatpho::log_to_file /var/log/deploy.log rotate:10M keep:3 level:debug
+  dybatpho::log_to_file off # back to stderr only
+  ```
+
+  It parses the rotation size the way an operator says it, checks every
+  setting, and creates the directory and the file before it returns, so a path
+  that will not work is reported where it is configured. A log file it creates
+  is mode `600`, because a log holds whatever the script logged; one that
+  already exists keeps the mode it has. Registered secrets were already masked
+  on their way into the file, and still are — turning on a durable log has
+  never been a way to leak a token into one.
+
+  `dybatpho::log_context` attaches fields to every event that follows, instead
+  of spelling them out in every message:
+
+  ```sh
+  dybatpho::log_context add run_id=abc stage=build
+  dybatpho::error "compilation failed"
+  # {"message":"compilation failed",…,"run_id":"abc","stage":"build"}
+  ```
+
+  The fields come after the built-in ones, in the order they were added, so an
+  existing parser keeps working and two events from one run stay comparable.
+  They follow the message on a text line too. Values are escaped and redacted
+  exactly as messages are, and a name that an event already uses — `message`,
+  `level`, `pid` — is refused rather than producing a duplicated field.
+  `remove`, `clear`, `list` and `get` round it out.
+
+  `dybatpho::timer_start` and `dybatpho::timer_end` answer where the twenty
+  minutes went, without adding a metrics endpoint to find out:
+
+  ```sh
+  dybatpho::timer_start migration
+  ./migrate.sh
+  dybatpho::timer_end migration # "migration took 4182ms"
+  ```
+
+  The structured event carries `timer` and `elapsed_ms` as fields of their own,
+  and `DYBATPHO_TIMER_LAST_MS` holds the number afterwards — published rather
+  than printed, because `$(...)` would run the call in a subshell and throw the
+  measurement away. `dybatpho::metrics_timer_start` still records the same
+  measurement as a metric for a dashboard; this one puts it in the log.
+
+  `dybatpho::spinner` says that a slow command is working rather than hung:
+
+  ```sh
+  dybatpho::spinner "Downloading dependencies" -- npm ci
+  ```
+
+  The command runs in the foreground of the calling shell, so it keeps stdin,
+  its output goes where it would anyway, and its exit code comes back
+  unchanged; only the animation runs in the background, and it is torn down and
+  its line erased whether the command succeeded or failed. Without a terminal
+  on stderr — in CI, or redirected — there is nothing to animate, so the
+  message is logged once at `info` and the command runs as usual. Every run
+  leaves a `debug` event behind with its elapsed time and exit code, and a
+  secret in the message is redacted before it is drawn. `DYBATPHO_SPINNER`
+  forces the animation on or off, and `DYBATPHO_SPINNER_INTERVAL` and
+  `DYBATPHO_SPINNER_FRAMES` change how it looks.
 
 - **`helpers` — asking the library about itself, from the running shell.** The
   library documents itself in `doc/`, which answers the question while you are

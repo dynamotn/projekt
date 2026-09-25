@@ -34,6 +34,31 @@ export LOG_FILE_MAX_BYTES
 # @env LOG_FILE_MAX_BACKUPS number Number of rotated `LOG_FILE` backups to keep. Default `5`
 LOG_FILE_MAX_BACKUPS="${LOG_FILE_MAX_BACKUPS:-5}"
 export LOG_FILE_MAX_BACKUPS
+# @env DYBATPHO_SPINNER string When `dybatpho::spinner` animates (`auto|always|never`). `auto` animates only on a terminal. Default `auto`
+DYBATPHO_SPINNER="${DYBATPHO_SPINNER:-auto}"
+export DYBATPHO_SPINNER
+# @env DYBATPHO_SPINNER_INTERVAL string Seconds between spinner frames. Default `0.1`
+DYBATPHO_SPINNER_INTERVAL="${DYBATPHO_SPINNER_INTERVAL:-0.1}"
+export DYBATPHO_SPINNER_INTERVAL
+# @env DYBATPHO_SPINNER_FRAMES string Space-separated frames the spinner cycles through
+DYBATPHO_SPINNER_FRAMES="${DYBATPHO_SPINNER_FRAMES:-⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏}"
+export DYBATPHO_SPINNER_FRAMES
+# @env DYBATPHO_TIMER_LAST_MS number Elapsed milliseconds reported by the last `dybatpho::timer_end`
+DYBATPHO_TIMER_LAST_MS="${DYBATPHO_TIMER_LAST_MS:-0}"
+export DYBATPHO_TIMER_LAST_MS
+
+# Fields attached to every structured log event, keyed by field name.
+# @env __dybatpho_log_context_values
+declare -gA __dybatpho_log_context_values=()
+# Field names in the order they were first added, so events stay comparable.
+# @env __dybatpho_log_context_keys
+declare -ga __dybatpho_log_context_keys=()
+# Start time in milliseconds of each running timer, keyed by timer name.
+# @env __dybatpho_log_timer
+declare -gA __dybatpho_log_timer=()
+# Field names a structured event already carries, which a context field may not shadow.
+# @env __dybatpho_log_reserved_fields
+declare -g __dybatpho_log_reserved_fields=" timestamp level source message request_id hostname pid duration_ms "
 
 #######################################
 # @description Log a message to stdout or stderr, optionally with ANSI color.
@@ -180,21 +205,23 @@ function __dybatpho_log_hostname {
 }
 
 #######################################
-# @description Build one structured JSON log event enriched with request ID, hostname, PID, and duration.
+# @description Build one structured JSON log event enriched with request ID, hostname, PID, duration, and the fields registered with `dybatpho::log_context`.
 # @arg $1 string RFC 3339 timestamp
 # @arg $2 string Log level
 # @arg $3 string Source location
 # @arg $4 string Message
 # @arg $5 number Duration in milliseconds since the process started
+# @arg $6 string Ready-made JSON fragment of extra fields, each one leading with its own comma
 # @stdout One JSON object followed by a newline
 #######################################
 function __dybatpho_log_json_event {
   local timestamp="$1" level="$2" source="$3" message="$4" duration_ms="$5"
+  local extra_fields="${6:-}"
   # Call these directly (not inside `$(...)`) so the caches they populate
   # persist in the current shell instead of being lost with a subshell.
   __dybatpho_log_request_id > /dev/null
   __dybatpho_log_hostname > /dev/null
-  printf '{"timestamp":"%s","level":"%s","source":"%s","message":"%s","request_id":"%s","hostname":"%s","pid":%s,"duration_ms":%s}\n' \
+  printf '{"timestamp":"%s","level":"%s","source":"%s","message":"%s","request_id":"%s","hostname":"%s","pid":%s,"duration_ms":%s%s%s}\n' \
     "$(__dybatpho_log_json_escape "${timestamp}")" \
     "$(__dybatpho_log_json_escape "${level}")" \
     "$(__dybatpho_log_json_escape "${source}")" \
@@ -202,7 +229,9 @@ function __dybatpho_log_json_event {
     "$(__dybatpho_log_json_escape "${LOG_REQUEST_ID}")" \
     "$(__dybatpho_log_json_escape "${DYBATPHO_LOG_HOSTNAME}")" \
     "$$" \
-    "${duration_ms}"
+    "${duration_ms}" \
+    "$(__dybatpho_log_context_json)" \
+    "${extra_fields}"
 }
 
 #######################################
@@ -246,6 +275,7 @@ function __dybatpho_log_write_file {
   local log_level="$1"
   local source="$2"
   local message="$3"
+  local extra_fields="${4:-}"
   [[ -n "${LOG_FILE:-}" ]] || return 0
   dybatpho::compare_log_level "${log_level}" "${LOG_FILE_LEVEL:-${LOG_LEVEL}}" || return 0
 
@@ -258,7 +288,7 @@ function __dybatpho_log_write_file {
   [[ -d "${log_dir}" ]] || mkdir -p "${log_dir}" 2> /dev/null || return 0
 
   __dybatpho_log_rotate_file "${LOG_FILE}" "${LOG_FILE_MAX_BYTES}" "${LOG_FILE_MAX_BACKUPS}"
-  __dybatpho_log_json_event "$(__dybatpho_log_timestamp)" "${log_level}" "${source}" "${message}" "$(__dybatpho_log_duration_ms)" >> "${LOG_FILE}"
+  __dybatpho_log_json_event "$(__dybatpho_log_timestamp)" "${log_level}" "${source}" "${message}" "$(__dybatpho_log_duration_ms)" "${extra_fields}" >> "${LOG_FILE}"
 }
 
 #######################################
@@ -267,12 +297,14 @@ function __dybatpho_log_write_file {
 # @arg $2 string Source location
 # @arg $3 string Message
 # @arg $4 string ANSI escape color code
+# @arg $5 string Ready-made JSON fragment of extra fields, each one leading with its own comma
 #######################################
 function __dybatpho_log_structured {
   local log_level="$1"
   local source="$2"
   local message="$3"
   local color="${4:-}"
+  local extra_fields="${5:-}"
   local timestamp
   dybatpho::compare_log_level "${log_level}" || return 0
   timestamp=$(__dybatpho_log_timestamp)
@@ -282,9 +314,9 @@ function __dybatpho_log_structured {
   fi
 
   if [[ "${LOG_FORMAT}" == "json" ]]; then
-    __dybatpho_log_json_event "${timestamp}" "${log_level}" "${source}" "${message}" "$(__dybatpho_log_duration_ms)" >&2
+    __dybatpho_log_json_event "${timestamp}" "${log_level}" "${source}" "${message}" "$(__dybatpho_log_duration_ms)" "${extra_fields}" >&2
   else
-    __dybatpho_log "${log_level}" "${timestamp} ‖ ${source}: ${message}" stderr "${color}"
+    __dybatpho_log "${log_level}" "${timestamp} ‖ ${source}: ${message}$(__dybatpho_log_context_text)" stderr "${color}"
   fi
 }
 
@@ -387,6 +419,7 @@ function __dybatpho_log_text_n {
 # @arg $3 string Message
 # @arg $4 number Additional stack frames to skip when resolving the source location
 # @arg $5 string ANSI escape color code
+# @arg $6 string Ready-made JSON fragment of extra fields, each one leading with its own comma
 # @env LOG_FILE string Optional file that receives a structured JSON event regardless of `LOG_FORMAT`
 #######################################
 function __dybatpho_log_inspect {
@@ -394,6 +427,7 @@ function __dybatpho_log_inspect {
   local log_level_text=$2
   local message="${3:-}"
   local indicator="${4:-0}"
+  local extra_fields="${6:-}"
   # 2 is total stacks from dybatpho::(info|fatal|...) to this function
   local magic_number=2
   local stack_total=$((indicator + magic_number))
@@ -410,11 +444,11 @@ function __dybatpho_log_inspect {
   # Only the message is translated here: the level label beside it is padded to
   # a fixed width for the column separators and must not change.
   message="$(__dybatpho_log_translate "${message}")"
-  __dybatpho_log_write_file "${log_level}" "${indicator}" "${message}"
+  __dybatpho_log_write_file "${log_level}" "${indicator}" "${message}" "${extra_fields}"
   if [[ "${LOG_FORMAT}" == "json" ]]; then
-    __dybatpho_log_structured "${log_level}" "${indicator}" "${message}" "${color}"
+    __dybatpho_log_structured "${log_level}" "${indicator}" "${message}" "${color}" "${extra_fields}"
   else
-    __dybatpho_log "${log_level}" "$(__dybatpho_log_timestamp) ‖ ${log_level_text} ‖ ${indicator}: ${message}" stderr "${color}"
+    __dybatpho_log "${log_level}" "$(__dybatpho_log_timestamp) ‖ ${log_level_text} ‖ ${indicator}: ${message}$(__dybatpho_log_context_text)" stderr "${color}"
   fi
 }
 
@@ -830,6 +864,430 @@ function dybatpho::error {
 #######################################
 function dybatpho::fatal {
   __dybatpho_log_inspect fatal "FATAL 🛑      " "$1" "${2:-0}"
+}
+
+#######################################
+# @description Render the fields registered with `dybatpho::log_context` as a
+#   JSON fragment ready to be spliced into a structured event.
+#
+#   Values are redacted here rather than when the field is registered, so a
+#   secret registered after the fact is still masked on the next event.
+# @stdout `,"name":"value"` for every registered field, in registration order
+#######################################
+function __dybatpho_log_context_json {
+  ((${#__dybatpho_log_context_keys[@]} > 0)) || return 0
+  local key value
+  for key in ${__dybatpho_log_context_keys[@]+"${__dybatpho_log_context_keys[@]}"}; do
+    value="${__dybatpho_log_context_values[${key}]-}"
+    if ((${DYBATPHO_SECRET_COUNT:-0} > 0)) && declare -F __dybatpho_secret_mask_var > /dev/null; then
+      __dybatpho_secret_mask_var value
+    fi
+    printf ',"%s":"%s"' \
+      "$(__dybatpho_log_json_escape "${key}")" \
+      "$(__dybatpho_log_json_escape "${value}")"
+  done
+}
+
+#######################################
+# @description Render the registered context fields for a human-readable line.
+# @stdout ` name=value` for every registered field, in registration order
+#######################################
+function __dybatpho_log_context_text {
+  ((${#__dybatpho_log_context_keys[@]} > 0)) || return 0
+  local key value
+  for key in ${__dybatpho_log_context_keys[@]+"${__dybatpho_log_context_keys[@]}"}; do
+    value="${__dybatpho_log_context_values[${key}]-}"
+    if ((${DYBATPHO_SECRET_COUNT:-0} > 0)) && declare -F __dybatpho_secret_mask_var > /dev/null; then
+      __dybatpho_secret_mask_var value
+    fi
+    printf ' %s=%s' "${key}" "${value}"
+  done
+}
+
+#######################################
+# @description Register or update context fields from `name=value` pairs.
+# @arg $@ string `name=value` pairs
+# @set __dybatpho_log_context_values
+# @set __dybatpho_log_context_keys
+#######################################
+function __dybatpho_log_context_add {
+  (($# > 0)) \
+    || dybatpho::die "dybatpho::log_context: 'add' expects at least one name=value pair"
+  local pair name value existing found
+  for pair in "$@"; do
+    [[ "${pair}" == *=* ]] \
+      || dybatpho::die "dybatpho::log_context: '${pair}' is not a name=value pair"
+    name="${pair%%=*}"
+    value="${pair#*=}"
+    if [[ ! "${name}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      dybatpho::die "dybatpho::log_context: '${name}' is not a valid field name"
+    fi
+    if [[ "${__dybatpho_log_reserved_fields}" == *" ${name} "* ]]; then
+      dybatpho::die "dybatpho::log_context: '${name}' is already a field of every log event"
+    fi
+    # An update keeps the field where it was first added, so two events from
+    # the same run stay comparable field by field.
+    found=false
+    for existing in ${__dybatpho_log_context_keys[@]+"${__dybatpho_log_context_keys[@]}"}; do
+      if [[ "${existing}" == "${name}" ]]; then
+        found=true
+        break
+      fi
+    done
+    if [[ "${found}" == false ]]; then
+      __dybatpho_log_context_keys+=("${name}")
+    fi
+    __dybatpho_log_context_values["${name}"]="${value}"
+  done
+}
+
+#######################################
+# @description Drop context fields by name, ignoring names that are not set.
+# @arg $@ string Field names
+# @set __dybatpho_log_context_values
+# @set __dybatpho_log_context_keys
+#######################################
+function __dybatpho_log_context_remove {
+  (($# > 0)) \
+    || dybatpho::die "dybatpho::log_context: 'remove' expects at least one field name"
+  local name key
+  local -a kept=()
+  for name in "$@"; do
+    unset "__dybatpho_log_context_values[${name}]"
+    kept=()
+    for key in ${__dybatpho_log_context_keys[@]+"${__dybatpho_log_context_keys[@]}"}; do
+      if [[ "${key}" != "${name}" ]]; then
+        kept+=("${key}")
+      fi
+    done
+    __dybatpho_log_context_keys=(${kept[@]+"${kept[@]}"})
+  done
+}
+
+#######################################
+# @description Convert a human-readable byte size into a plain byte count.
+# @arg $1 string Size such as `1048576`, `512K`, `10M` or `2GiB`
+# @stdout The size in bytes
+# @exitcode 1 The input is not a size this function understands
+#######################################
+function __dybatpho_log_parse_size {
+  local input="${1-}"
+  [[ "${input}" =~ ^([0-9]+)[[:space:]]*([KkMmGgTt]?)([Ii]?[Bb])?$ ]] || return 1
+  local number="${BASH_REMATCH[1]}"
+  case "${BASH_REMATCH[2]}" in
+    [Kk]) number=$((number * 1024)) ;;
+    [Mm]) number=$((number * 1024 * 1024)) ;;
+    [Gg]) number=$((number * 1024 * 1024 * 1024)) ;;
+    [Tt]) number=$((number * 1024 * 1024 * 1024 * 1024)) ;;
+  esac
+  printf '%s' "${number}"
+}
+
+#######################################
+# @description Pause for a fractional number of seconds, falling back to one
+#   whole second where `sleep` only understands integers.
+# @arg $1 string Seconds to wait
+#######################################
+function __dybatpho_log_sleep {
+  sleep "${1}" 2> /dev/null || sleep 1
+}
+
+#######################################
+# @description Animate the spinner on stderr until the shell that started it
+#   kills it. Runs as a background job, so it never returns on its own.
+# @arg $1 string Message shown beside the frame, already redacted
+# @stderr One frame per interval, redrawn over the same line
+#######################################
+function __dybatpho_log_spin {
+  local message="${1-}"
+  local -a frames=()
+  read -r -a frames <<< "${DYBATPHO_SPINNER_FRAMES}"
+  ((${#frames[@]} > 0)) || frames=('-' "\\" '|' '/')
+  local index=0
+  while true; do
+    printf '\r%s %s\033[K' "${frames[index % ${#frames[@]}]}" "${message}" >&2
+    index=$((index + 1))
+    __dybatpho_log_sleep "${DYBATPHO_SPINNER_INTERVAL}"
+  done
+}
+
+#######################################
+# @description Send structured JSON events to a file alongside the
+#   human-readable output on stderr, and keep that file bounded by rotating it.
+#
+#   This is the front end to the `LOG_FILE*` variables: a script names the path
+#   once instead of exporting four of them, and gets the argument checking, the
+#   parent directory and a private mode along with it. Every registered secret
+#   is redacted before a line reaches the file, exactly as it is on stderr, so
+#   turning on a durable log never turns it into a place a token leaks to.
+# @example
+#   dybatpho::log_to_file /var/log/deploy.log rotate:10M keep:3 level:debug
+#   dybatpho::info "Deploying"  # text on stderr, JSON in the file
+#   dybatpho::log_to_file off   # stop writing to a file
+#
+# @arg $1 string Path of the log file, or `off` to stop file logging
+# @arg $@ string Optional `rotate:SIZE`, `keep:COUNT` and `level:LEVEL` settings
+# @set LOG_FILE string Path that receives the structured events
+# @set LOG_FILE_MAX_BYTES number Size threshold the file is rotated at
+# @set LOG_FILE_MAX_BACKUPS number Number of rotated backups kept
+# @set LOG_FILE_LEVEL string Verbosity threshold applied to the file alone
+# @exitcode 1 A setting is malformed, or the file cannot be written
+# @tip `rotate:0` disables rotation, and a size may be given as bytes or with a `K`, `M`, `G` or `T` suffix
+# @tip A log file this function creates gets mode `600`; one that already exists keeps the mode it has
+#######################################
+function dybatpho::log_to_file {
+  local path
+  dybatpho::expect_args path -- "$@"
+  shift
+
+  local rotate="${LOG_FILE_MAX_BYTES}"
+  local keep="${LOG_FILE_MAX_BACKUPS}"
+  local level="${LOG_FILE_LEVEL:-${LOG_LEVEL}}"
+  local setting value parsed
+  for setting in "$@"; do
+    value="${setting#*:}"
+    case "${setting}" in
+      rotate:*)
+        parsed="$(__dybatpho_log_parse_size "${value}")" \
+          || dybatpho::die "${FUNCNAME[0]}: Rotation size must be a byte count such as 10M, got '${value}'"
+        rotate="${parsed}"
+        ;;
+      keep:*)
+        if [[ ! "${value}" =~ ^[0-9]+$ ]]; then
+          dybatpho::die "${FUNCNAME[0]}: Backup count must be a whole number, got '${value}'"
+        fi
+        keep="${value}"
+        ;;
+      level:*)
+        dybatpho::validate_log_level "${value}" \
+          || dybatpho::die "${FUNCNAME[0]}: Log level of the file sink is invalid"
+        level="$(dybatpho::lower "${value}")"
+        ;;
+      *)
+        dybatpho::die "${FUNCNAME[0]}: Unknown setting '${setting}', expected rotate:SIZE, keep:COUNT or level:LEVEL"
+        ;;
+    esac
+  done
+
+  if [[ "${path}" == "off" ]]; then
+    LOG_FILE=""
+  else
+    local directory
+    directory="$(dirname "${path}")"
+    if [[ ! -d "${directory}" ]]; then
+      mkdir -p "${directory}" \
+        || dybatpho::die "${FUNCNAME[0]}: Cannot create log directory '${directory}'"
+    fi
+    if [[ ! -e "${path}" ]]; then
+      # A log file holds whatever the script logged, which is the last place a
+      # value should become world-readable. The mode is chosen at creation
+      # only, so an operator who widened it deliberately keeps their choice.
+      (
+        umask 077
+        : > "${path}"
+      ) || dybatpho::die "${FUNCNAME[0]}: Cannot create log file '${path}'"
+    fi
+    [[ -w "${path}" ]] \
+      || dybatpho::die "${FUNCNAME[0]}: Log file '${path}' is not writable"
+    LOG_FILE="${path}"
+  fi
+
+  LOG_FILE_MAX_BYTES="${rotate}"
+  LOG_FILE_MAX_BACKUPS="${keep}"
+  LOG_FILE_LEVEL="${level}"
+  export LOG_FILE LOG_FILE_MAX_BYTES LOG_FILE_MAX_BACKUPS LOG_FILE_LEVEL
+}
+
+#######################################
+# @description Attach fields to every structured log event that follows, so a
+#   run identifier or a stage name rides along with each JSON line instead of
+#   being spelled out in every message. Text output carries the same fields
+#   after the message.
+# @example
+#   dybatpho::log_context add run_id=abc stage=build
+#   dybatpho::error "compilation failed"  # the event carries both fields
+#   dybatpho::log_context remove stage
+#   dybatpho::log_context clear
+#
+# @arg $1 string One of `add`, `remove`, `clear`, `list` or `get`
+# @arg $@ string `name=value` pairs for `add`, field names for `remove` and `get`
+# @stdout One `name=value` per field for `list`, the bare value for `get`
+# @exitcode 1 `get` was asked for a field that is not set
+# @set __dybatpho_log_context_values
+# @set __dybatpho_log_context_keys
+# @tip Fields are held in the current shell, so a child process starts with none of them; export `LOG_REQUEST_ID` to correlate across processes
+# @tip Registered secrets are redacted in field values the same way they are in messages
+#######################################
+function dybatpho::log_context {
+  local action
+  dybatpho::expect_args action -- "$@"
+  shift
+  case "${action}" in
+    add | set)
+      __dybatpho_log_context_add "$@"
+      ;;
+    remove | unset)
+      __dybatpho_log_context_remove "$@"
+      ;;
+    clear)
+      __dybatpho_log_context_values=()
+      __dybatpho_log_context_keys=()
+      ;;
+    list)
+      local key
+      for key in ${__dybatpho_log_context_keys[@]+"${__dybatpho_log_context_keys[@]}"}; do
+        printf '%s=%s\n' "${key}" "${__dybatpho_log_context_values[${key}]-}"
+      done
+      ;;
+    get)
+      local name
+      dybatpho::expect_args name -- "$@"
+      [[ -v "__dybatpho_log_context_values[${name}]" ]] || return 1
+      printf '%s\n' "${__dybatpho_log_context_values[${name}]}"
+      ;;
+    *)
+      dybatpho::die "${FUNCNAME[0]}: Unknown action '${action}', expected add, remove, clear, list or get"
+      ;;
+  esac
+}
+
+#######################################
+# @description Start a named timer whose elapsed time `dybatpho::timer_end` logs.
+# @example
+#   dybatpho::timer_start migration
+#   ./migrate.sh
+#   dybatpho::timer_end migration
+#
+# @arg $1 string Timer name
+# @set __dybatpho_log_timer
+# @tip This times a step so the log says how long it took; `dybatpho::metrics_timer_start` records the same measurement as a metric for a dashboard
+#######################################
+function dybatpho::timer_start {
+  local name
+  dybatpho::expect_args name -- "$@"
+  __dybatpho_log_timer["${name}"]="$(__dybatpho_log_now_ms)"
+}
+
+#######################################
+# @description Stop a named timer and log how long it ran. The structured event
+#   carries the timer name and its elapsed milliseconds as fields of their own,
+#   so a log aggregator can chart a step without parsing the message.
+# @arg $1 string Timer name
+# @arg $2 string Level to log the duration at, default is `info`
+# @set DYBATPHO_TIMER_LAST_MS number Elapsed milliseconds of this timer
+# @set __dybatpho_log_timer
+# @stderr The duration message, at the requested level
+# @exitcode 1 The requested level is not a valid log level
+# @tip The elapsed time is published in `DYBATPHO_TIMER_LAST_MS` rather than printed, because capturing output with `$(...)` would run the call in a subshell and throw the measurement away
+#######################################
+function dybatpho::timer_end {
+  local name
+  dybatpho::expect_args name -- "$@"
+  local level="${2:-info}"
+  dybatpho::validate_log_level "${level}" || return 1
+  level="$(dybatpho::lower "${level}")"
+
+  local started="${__dybatpho_log_timer[${name}]-}"
+  [[ -n "${started}" ]] \
+    || dybatpho::die "${FUNCNAME[0]}: Timer '${name}' was never started"
+  local elapsed=$(($(__dybatpho_log_now_ms) - started))
+  if ((elapsed < 0)); then
+    elapsed=0
+  fi
+  unset "__dybatpho_log_timer[${name}]"
+  DYBATPHO_TIMER_LAST_MS="${elapsed}"
+  export DYBATPHO_TIMER_LAST_MS
+
+  local extra_fields
+  printf -v extra_fields ',"timer":"%s","elapsed_ms":%s' \
+    "$(__dybatpho_log_json_escape "${name}")" "${elapsed}"
+  local message
+  message="$(__dybatpho_log_text logging.timer_end "${name} took ${elapsed}ms" \
+    name="${name}" elapsed_ms="${elapsed}")"
+  __dybatpho_log_inspect "${level}" "TIMER ⏳      " "${message}" 0 "" "${extra_fields}"
+}
+
+#######################################
+# @description Run a command while a spinner reports that it is still going,
+#   then pass its exit code back unchanged.
+#
+#   The command runs in the foreground of the calling shell, so it keeps stdin,
+#   its output goes where it would anyway, and its exit code is the one this
+#   function returns. Only the spinner runs in the background, and it is torn
+#   down before this returns whether the command succeeded or failed.
+#
+#   Without a terminal on stderr -- in CI, or with output redirected -- there is
+#   nothing to animate, so the message is logged once at `info` instead and the
+#   command runs as usual.
+# @example
+#   dybatpho::spinner "Downloading dependencies" -- npm ci
+#   dybatpho::spinner "Building" -- make -j4 || dybatpho::die "build failed"
+#
+# @arg $1 string Message shown beside the spinner
+# @arg $2 string The literal `--`
+# @arg $@ string Command and arguments to run
+# @env DYBATPHO_SPINNER string `never` to always skip the animation, `always` to force it
+# @env DYBATPHO_SPINNER_INTERVAL string Seconds between frames
+# @env DYBATPHO_SPINNER_FRAMES string Space-separated frames to cycle through
+# @stderr The animation while the command runs, then the line is erased
+# @exitcode The exit code of the command
+# @tip Registered secrets are redacted in the message before it is drawn
+#######################################
+function dybatpho::spinner {
+  local message
+  dybatpho::expect_args message -- "$@"
+  shift
+  [[ "${1-}" == "--" ]] \
+    || dybatpho::die "${FUNCNAME[0]}: Expected -- between the message and the command"
+  shift
+  (($# > 0)) \
+    || dybatpho::die "${FUNCNAME[0]}: Expected a command after --"
+
+  if ((${DYBATPHO_SECRET_COUNT:-0} > 0)) && declare -F __dybatpho_secret_mask_var > /dev/null; then
+    __dybatpho_secret_mask_var message
+  fi
+
+  local animate=false
+  case "${DYBATPHO_SPINNER}" in
+    never) ;;
+    always) animate=true ;;
+    *)
+      if [[ -t 2 ]] && dybatpho::compare_log_level info; then
+        animate=true
+      fi
+      ;;
+  esac
+
+  local spinner_pid=""
+  if [[ "${animate}" == true ]]; then
+    __dybatpho_log_spin "${message}" &
+    spinner_pid=$!
+  else
+    __dybatpho_log_inspect info "SPIN ⏳       " "${message}"
+  fi
+
+  local started status=0
+  started="$(__dybatpho_log_now_ms)"
+  "$@" || status=$?
+
+  if [[ -n "${spinner_pid}" ]]; then
+    kill "${spinner_pid}" 2> /dev/null || true
+    wait "${spinner_pid}" 2> /dev/null || true
+    # Erase the frame so the next line starts on a clean column, whether the
+    # command printed anything of its own or not.
+    printf '\r\033[K' >&2
+  fi
+
+  local elapsed=$(($(__dybatpho_log_now_ms) - started))
+  if ((elapsed < 0)); then
+    elapsed=0
+  fi
+  local extra_fields
+  printf -v extra_fields ',"elapsed_ms":%s,"exit_code":%s' "${elapsed}" "${status}"
+  __dybatpho_log_inspect debug "SPIN ⏳       " \
+    "${message} finished in ${elapsed}ms with exit code ${status}" 0 "" "${extra_fields}"
+
+  return "${status}"
 }
 
 #######################################

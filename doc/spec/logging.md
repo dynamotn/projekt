@@ -129,6 +129,128 @@ file captures more events than stdout while every file line is valid JSON.
 
 ---
 
+### User Story 6 - Turn on the file sink in one call (Priority: P2)
+
+As a script author, I want to name the log file, its rotation threshold and
+its verbosity in a single call so that enabling a durable log does not mean
+exporting four environment variables correctly and hoping the path is
+writable.
+
+**Why this priority**: The sink already exists; what makes it usable is a
+front door that validates its settings and fails where they are set rather
+than silently dropping every later event.
+
+**Independent Test**: Call the helper with a nested path and a `rotate:10M`
+setting, then verify the file exists, its mode is `600`, and the rotation
+threshold is the byte count that size stands for.
+
+**Acceptance Scenarios**:
+
+1. **Given** a path whose parent directory does not exist, **When** the helper
+   is called, **Then** the directory and the file are created up front and the
+   `LOG_FILE*` variables are set accordingly
+2. **Given** a rotation size written as `10M`, **When** the helper is called,
+   **Then** the threshold is stored as the equivalent number of bytes
+3. **Given** a setting that cannot be honored -- an unparseable size, a
+   non-numeric backup count, an unknown level, an unknown setting name --
+   **When** the helper is called, **Then** it fails with a message naming the
+   setting instead of configuring a sink that silently drops events
+4. **Given** file logging is on, **When** the helper is called with `off`,
+   **Then** later events go to stderr only
+5. **Given** the helper creates the log file, **Then** the file is created
+   with mode `600`, and a file that already exists keeps the mode it has
+
+---
+
+### User Story 7 - Carry run-wide fields on every event (Priority: P2)
+
+As an operator aggregating logs, I want a run identifier and a stage name
+attached to every structured event so that I can filter one run or one phase
+without every call site repeating the same values in its message.
+
+**Why this priority**: A correlation ID answers "which run"; the caller's own
+fields answer "which customer, which stage, which attempt", which is what
+turns an aggregated log into something queryable.
+
+**Independent Test**: Register two fields, emit a JSON event, and verify both
+appear as fields of their own after the built-in ones.
+
+**Acceptance Scenarios**:
+
+1. **Given** fields are registered, **When** a structured event is emitted,
+   **Then** each field appears as a JSON field of its own, after the built-in
+   fields, in the order the fields were registered
+2. **Given** fields are registered, **When** a text diagnostic is emitted,
+   **Then** the same fields follow the message as `name=value` pairs
+3. **Given** a field is registered again with a new value, **When** an event
+   is emitted, **Then** the new value is used and the field keeps its original
+   position
+4. **Given** a field name that a log event already uses, or a name that is not
+   a valid identifier, **When** it is registered, **Then** the call fails
+   rather than producing a duplicated or malformed event
+5. **Given** a field value holds a registered secret, or a quote or newline,
+   **When** an event is emitted, **Then** the value is redacted and escaped
+   exactly as a message is
+
+---
+
+### User Story 8 - Time a step and log how long it took (Priority: P2)
+
+As a script author, I want to bracket a step with a timer so that the log says
+how long it took, in a field a log aggregator can chart, without hand-rolling
+epoch arithmetic at every call site.
+
+**Why this priority**: "Where did the twenty minutes go" is the first question
+asked of a slow pipeline, and answering it should not require adding the
+metrics module and a Prometheus endpoint.
+
+**Independent Test**: Start a timer, wait, end it, and verify the message
+names the timer and its elapsed milliseconds, and that the structured event
+carries both as fields.
+
+**Acceptance Scenarios**:
+
+1. **Given** a timer was started, **When** it is ended, **Then** a message
+   naming the timer and its elapsed milliseconds is logged at `info` by
+   default, and the structured event carries `timer` and `elapsed_ms` fields
+2. **Given** a timer is ended with an explicit level, **When** that level is
+   filtered out by `LOG_LEVEL`, **Then** nothing is shown
+3. **Given** a timer was never started, **When** it is ended, **Then** the
+   call fails rather than reporting a meaningless duration
+4. **Given** a timer has been ended, **Then** its elapsed milliseconds remain
+   readable in `DYBATPHO_TIMER_LAST_MS`
+
+---
+
+### User Story 9 - Show that a long command is still running (Priority: P3)
+
+As a user waiting on a script, I want a spinner beside a message while a slow
+command runs so that I can tell the difference between working and hung,
+without losing the command's output or its exit code.
+
+**Why this priority**: Presentation, not correctness -- but a script that
+looks hung gets killed.
+
+**Independent Test**: Run a failing command behind the spinner and verify the
+exit code is passed through unchanged and the command's output is untouched.
+
+**Acceptance Scenarios**:
+
+1. **Given** a command is run behind the spinner, **When** it finishes,
+   **Then** its exit code is returned unchanged and its output is not captured
+   or reordered
+2. **Given** stderr is not a terminal, **When** the spinner runs, **Then** the
+   message is logged once at `info` and nothing is animated
+3. **Given** the spinner animated, **When** the command finishes, **Then** the
+   animation is torn down and its line erased, whether the command succeeded
+   or failed
+4. **Given** any spinner run, **When** it finishes, **Then** a `debug` event
+   records the elapsed milliseconds and the exit code
+5. **Given** the message holds a registered secret, **When** the spinner draws
+   it, **Then** the secret is redacted first
+
+---
+
 ### Example Workflow
 
 ```bash
@@ -146,6 +268,20 @@ dybatpho::info "Starting deployment"
 dybatpho::debug "Only the log file records this line"
 dybatpho::progress_bar 50
 dybatpho::success "Deployment finished"
+```
+
+```bash
+# The same run, configured through the helpers instead of the variables.
+dybatpho::log_to_file /var/log/deploy.log rotate:10M keep:5 level:debug
+dybatpho::log_context add run_id=deploy-42 stage=build
+
+dybatpho::timer_start build
+dybatpho::spinner "Building the image" -- docker build -t app .
+dybatpho::timer_end build
+
+dybatpho::log_context add stage=publish
+dybatpho::spinner "Pushing the image" -- docker push app
+dybatpho::log_context clear
 ```
 
 ## Edge Cases
@@ -166,6 +302,21 @@ dybatpho::success "Deployment finished"
 - `LOG_FILE_LEVEL` is unset (defaults to `LOG_LEVEL`) or set independently
   more/less verbose than the stdout level.
 - Concurrent processes append to the same `LOG_FILE` simultaneously.
+- A rotation size is given in a form the parser does not accept (`1.5M`,
+  `ten megabytes`, a negative number), or as `0` to disable rotation.
+- The configured log path exists but is not writable, or its parent directory
+  cannot be created.
+- A context field name collides with a field every event already carries, is
+  not a valid identifier, or is registered without a value.
+- A context field value holds a quote, a newline, or a registered secret.
+- A timer is ended without being started, ended twice, or ended at a level
+  that is filtered out or is not a level at all.
+- The spinner runs without a terminal on stderr, is disabled with
+  `DYBATPHO_SPINNER=never`, or is forced with `always`.
+- `sleep` on the host understands whole seconds only, so the spinner interval
+  cannot be honored exactly.
+- The command run behind the spinner fails, reads stdin, or writes to the same
+  terminal the spinner draws on.
 
 ## Requirements *(mandatory)*
 
@@ -211,6 +362,48 @@ dybatpho::success "Deployment finished"
   and pruning older ones; `LOG_FILE_MAX_BYTES=0` MUST disable rotation.
 - **FR-019**: File log lines MUST be redacted using the same masking registry
   as stdout/stderr output.
+- **FR-020**: The module MUST provide `dybatpho::log_to_file`, configuring the
+  file sink from one path plus optional `rotate:SIZE`, `keep:COUNT` and
+  `level:LEVEL` settings, and `off` MUST turn the sink back off.
+- **FR-021**: `dybatpho::log_to_file` MUST accept a rotation size as a byte
+  count or with a `K`, `M`, `G` or `T` suffix (optionally `B`/`iB`),
+  interpreted as 1024-based, and MUST fail on a size, backup count, level or
+  setting name it cannot honor.
+- **FR-022**: `dybatpho::log_to_file` MUST create the parent directory and the
+  log file before returning, MUST create a new log file with mode `600`, MUST
+  leave the mode of an existing file untouched, and MUST fail when the file
+  cannot be written.
+- **FR-023**: The module MUST provide `dybatpho::log_context` with `add`,
+  `remove`, `clear`, `list` and `get` actions, maintaining fields that are
+  attached to every later log event.
+- **FR-024**: Context fields MUST appear in every structured event as fields of
+  their own, after the built-in fields, in registration order, and MUST follow
+  the message as `name=value` pairs in text output.
+- **FR-025**: `dybatpho::log_context` MUST reject a field name that a log event
+  already uses (`timestamp`, `level`, `source`, `message`, `request_id`,
+  `hostname`, `pid`, `duration_ms`) and a name that is not a valid identifier.
+- **FR-026**: Context field values MUST be JSON-escaped and redacted through
+  the masking registry exactly as messages are.
+- **FR-027**: The module MUST provide `dybatpho::timer_start` and
+  `dybatpho::timer_end`, logging the elapsed milliseconds of a named timer at
+  `info` or at a level given by the caller, and MUST fail when the timer was
+  never started.
+- **FR-028**: A timer's structured event MUST carry `timer` and `elapsed_ms`
+  fields, and the elapsed milliseconds MUST also be published in
+  `DYBATPHO_TIMER_LAST_MS`.
+- **FR-029**: The module MUST provide `dybatpho::spinner MESSAGE -- COMMAND`,
+  running the command in the calling shell's foreground and returning its exit
+  code unchanged, and MUST fail when the `--` separator or the command is
+  missing.
+- **FR-030**: The spinner MUST animate only when stderr is a terminal and the
+  `info` level passes filtering, MUST log the message once at `info` instead
+  when it cannot animate, and MUST honor `DYBATPHO_SPINNER` set to `never` or
+  `always`.
+- **FR-031**: The spinner MUST erase its line and stop its animation before
+  returning, and MUST record the elapsed milliseconds and the command's exit
+  code as a `debug` event.
+- **FR-032**: The spinner MUST redact registered secrets in its message before
+  drawing it.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -230,6 +423,12 @@ dybatpho::success "Deployment finished"
 - **Rotation Policy**: The size threshold (`LOG_FILE_MAX_BYTES`) and backup
   count (`LOG_FILE_MAX_BACKUPS`) governing when and how the log file is
   rotated.
+- **Context Field**: A `name=value` pair registered once and attached to every
+  later log event, held in the current shell.
+- **Timer**: A named start time, turned into an elapsed duration and a log
+  event when the step it brackets finishes.
+- **Spinner**: A background animation shown beside a message while a
+  foreground command runs.
 
 ## Success Criteria *(mandatory)*
 
@@ -249,6 +448,15 @@ dybatpho::success "Deployment finished"
   `LOG_FILE` without unbounded disk growth, thanks to automatic rotation.
 - **SC-008**: File and stdout verbosity can be tuned independently so
   operators get concise console output while retaining a fuller file record.
+- **SC-009**: A durable, rotating, secret-masked log is turned on with one
+  call, and a path or setting that would not work is reported where it is
+  configured rather than by an empty log file afterwards.
+- **SC-010**: Log events from one run can be filtered by the caller's own
+  fields, such as a run identifier or a stage, without those values being
+  repeated in every message.
+- **SC-011**: A script can report how long each step took, and show that a
+  slow step is still alive, without hand-rolled timing or output handling and
+  without changing the exit code that reaches the caller.
 
 ## Integration Tests *(mandatory)*
 
@@ -272,6 +480,29 @@ dybatpho::success "Deployment finished"
 - **IT-011**: Force `LOG_FILE` past `LOG_FILE_MAX_BYTES` and verify rotation
   creates a numbered backup while pruning backups beyond
   `LOG_FILE_MAX_BACKUPS`; verify `LOG_FILE_MAX_BYTES=0` disables rotation.
+- **IT-012**: Call `dybatpho::log_to_file` with a nested path and
+  `rotate:10M keep:3 level:debug`, and verify the file is created with mode
+  `600`, the threshold is `10485760`, and a debug event reaches the file while
+  stdout stays at `info`.
+- **IT-013**: Call `dybatpho::log_to_file` with an unparseable size, a
+  non-numeric backup count, an unknown level and an unknown setting, and
+  verify each fails; then call it with `off` and verify later events reach no
+  file.
+- **IT-014**: Register context fields, emit a JSON event and a text event, and
+  verify both carry the fields in registration order; update one field and
+  verify its position is kept.
+- **IT-015**: Register a context field holding a registered secret and one
+  holding a quote, and verify the file line is redacted and still parses as
+  JSON.
+- **IT-016**: Bracket a `sleep` with `dybatpho::timer_start` and
+  `dybatpho::timer_end`, and verify the message names the timer, the event
+  carries `timer` and `elapsed_ms`, and `DYBATPHO_TIMER_LAST_MS` is numeric;
+  verify ending an unstarted timer fails.
+- **IT-017**: Run a failing command behind `dybatpho::spinner` with the
+  animation disabled and verify the exit code and the command's output survive
+  intact, and that a `debug` event records the elapsed time and exit code.
+- **IT-018**: Force the animation with `DYBATPHO_SPINNER=always` and verify
+  frames are drawn on stderr and the line is erased when the command finishes.
 
 ## Acceptance Criteria *(mandatory)*
 

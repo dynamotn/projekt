@@ -7,6 +7,13 @@ teardown() {
   export LOG_FORMAT=text
   unset COLUMNS
   unset LOG_FILE LOG_FILE_LEVEL LOG_FILE_MAX_BYTES LOG_FILE_MAX_BACKUPS LOG_REQUEST_ID
+  # Context fields and timers live in this shell, and Bats runs every test in
+  # the same one: a field left registered would ride along on the next test's
+  # log events.
+  __dybatpho_log_context_values=()
+  __dybatpho_log_context_keys=()
+  __dybatpho_log_timer=()
+  export DYBATPHO_SPINNER=auto
 }
 
 # The logging helpers are exercised directly here so their behavior is checked
@@ -683,4 +690,268 @@ assert event["duration_ms"] >= 0
   echo "some content" > "${existing_file}"
   __dybatpho_log_rotate_file "${existing_file}" 0 3
   [ ! -e "${existing_file}.1" ]
+}
+
+@test "__dybatpho_log_parse_size understands byte counts and unit suffixes" {
+  assert_equal "$(__dybatpho_log_parse_size 1024)" "1024"
+  assert_equal "$(__dybatpho_log_parse_size 0)" "0"
+  assert_equal "$(__dybatpho_log_parse_size 512K)" "524288"
+  assert_equal "$(__dybatpho_log_parse_size 10M)" "10485760"
+  assert_equal "$(__dybatpho_log_parse_size 10MB)" "10485760"
+  assert_equal "$(__dybatpho_log_parse_size 2GiB)" "2147483648"
+  assert_equal "$(__dybatpho_log_parse_size 1t)" "1099511627776"
+  run ! __dybatpho_log_parse_size "ten megabytes"
+  run ! __dybatpho_log_parse_size "-1"
+  run ! __dybatpho_log_parse_size "1.5M"
+}
+
+@test "dybatpho::log_to_file configures the file sink in one call" {
+  local log_file="${BATS_TEST_TMPDIR}/configured/app.log"
+  dybatpho::log_to_file "${log_file}" rotate:10M keep:3 level:debug
+
+  assert_equal "${LOG_FILE}" "${log_file}"
+  assert_equal "${LOG_FILE_MAX_BYTES}" "10485760"
+  assert_equal "${LOG_FILE_MAX_BACKUPS}" "3"
+  assert_equal "${LOG_FILE_LEVEL}" "debug"
+  # The parent directory is created up front rather than on the first event,
+  # so a misconfigured path fails where it is configured.
+  assert_file_exist "${log_file}"
+
+  export LOG_LEVEL=info
+  dybatpho::debug "only the file sees this"
+  grep -q '"message":"only the file sees this"' "${log_file}"
+}
+
+@test "dybatpho::log_to_file creates a new log file that only its owner can read" {
+  local log_file="${BATS_TEST_TMPDIR}/private.log"
+  dybatpho::log_to_file "${log_file}"
+  assert_equal "$(stat -L -c '%a' "${log_file}" 2> /dev/null || stat -L -f '%Lp' "${log_file}")" "600"
+}
+
+@test "dybatpho::log_to_file leaves the mode of an existing log file alone" {
+  local log_file="${BATS_TEST_TMPDIR}/existing-mode.log"
+  : > "${log_file}"
+  chmod 644 "${log_file}"
+  dybatpho::log_to_file "${log_file}"
+  assert_equal "$(stat -L -c '%a' "${log_file}" 2> /dev/null || stat -L -f '%Lp' "${log_file}")" "644"
+}
+
+@test "dybatpho::log_to_file off stops writing to a file" {
+  local log_file="${BATS_TEST_TMPDIR}/stopped.log"
+  dybatpho::log_to_file "${log_file}"
+  dybatpho::info "before"
+  dybatpho::log_to_file off
+  assert_equal "${LOG_FILE}" ""
+  dybatpho::info "after"
+
+  grep -q '"message":"before"' "${log_file}"
+  ! grep -q '"message":"after"' "${log_file}"
+}
+
+@test "dybatpho::log_to_file rejects a setting it cannot honor" {
+  local log_file="${BATS_TEST_TMPDIR}/rejected.log"
+  run dybatpho::log_to_file "${log_file}" rotate:huge
+  assert_failure
+  assert_output --partial "10M"
+
+  run dybatpho::log_to_file "${log_file}" keep:many
+  assert_failure
+  assert_output --partial "whole number"
+
+  run dybatpho::log_to_file "${log_file}" level:shouty
+  assert_failure
+
+  run dybatpho::log_to_file "${log_file}" rotating=10M
+  assert_failure
+  assert_output --partial "Unknown setting"
+
+  run dybatpho::log_to_file
+  assert_failure
+}
+
+@test "dybatpho::log_context adds fields to every structured event" {
+  local log_file="${BATS_TEST_TMPDIR}/context.log"
+  dybatpho::log_to_file "${log_file}"
+  dybatpho::log_context add run_id=abc stage=build
+  dybatpho::info "with context"
+
+  grep -q '"run_id":"abc"' "${log_file}"
+  grep -q '"stage":"build"' "${log_file}"
+  # The built-in fields still come first, so an existing parser keeps working.
+  grep -q '"message":"with context".*"run_id":"abc"' "${log_file}"
+}
+
+@test "dybatpho::log_context shows its fields on a text log line too" {
+  export LOG_FORMAT=text
+  dybatpho::log_context add run_id=abc
+  run --separate-stderr dybatpho::warn "text carries context"
+  assert_stderr --partial "text carries context run_id=abc"
+}
+
+@test "dybatpho::log_context lists, reads, updates, and drops fields" {
+  dybatpho::log_context add run_id=abc stage=build
+  assert_equal "$(dybatpho::log_context get stage)" "build"
+
+  # An update keeps the field in the position it was first added.
+  dybatpho::log_context add run_id=def
+  run dybatpho::log_context list
+  assert_success
+  assert_line --index 0 "run_id=def"
+  assert_line --index 1 "stage=build"
+
+  dybatpho::log_context remove stage
+  run ! dybatpho::log_context get stage
+  run dybatpho::log_context list
+  assert_output "run_id=def"
+
+  dybatpho::log_context clear
+  run dybatpho::log_context list
+  assert_output ""
+}
+
+@test "dybatpho::log_context refuses a name that would corrupt an event" {
+  run dybatpho::log_context add message=oops
+  assert_failure
+  assert_output --partial "already a field"
+
+  run dybatpho::log_context add "not a name=value"
+  assert_failure
+  assert_output --partial "valid field name"
+
+  run dybatpho::log_context add lonely
+  assert_failure
+  assert_output --partial "name=value"
+
+  run dybatpho::log_context add
+  assert_failure
+
+  run dybatpho::log_context remove
+  assert_failure
+
+  run dybatpho::log_context frobnicate
+  assert_failure
+  assert_output --partial "Unknown action"
+}
+
+@test "dybatpho::log_context redacts a registered secret in a field value" {
+  local log_file="${BATS_TEST_TMPDIR}/context-secret.log"
+  dybatpho::log_to_file "${log_file}"
+  dybatpho::log_context add token=context-secret-value
+  dybatpho::secret_register "context-secret-value"
+  dybatpho::info "context masking"
+  dybatpho::secret_forget
+
+  grep -q '"token":"\*\*\*"' "${log_file}"
+  ! grep -q "context-secret-value" "${log_file}"
+}
+
+@test "dybatpho::log_context escapes a value that would break the JSON" {
+  local log_file="${BATS_TEST_TMPDIR}/context-escape.log"
+  dybatpho::log_to_file "${log_file}"
+  dybatpho::log_context add note='he said "hi"'
+  dybatpho::info "escaped context"
+  grep -q '"note":"he said \\"hi\\""' "${log_file}"
+}
+
+@test "dybatpho::timer_start and dybatpho::timer_end report a duration" {
+  local log_file="${BATS_TEST_TMPDIR}/timer.log"
+  dybatpho::log_to_file "${log_file}"
+
+  dybatpho::timer_start migration
+  sleep 0.05
+  run --separate-stderr dybatpho::timer_end migration
+  assert_success
+  assert_stderr --partial "migration took"
+
+  # The subshell `run` created threw its own measurement away, so time the step
+  # again here to assert on what the caller can read afterwards.
+  dybatpho::timer_start migration
+  dybatpho::timer_end migration
+  [[ "${DYBATPHO_TIMER_LAST_MS}" =~ ^[0-9]+$ ]]
+  grep -q '"timer":"migration"' "${log_file}"
+  grep -q '"elapsed_ms":[0-9]' "${log_file}"
+}
+
+@test "dybatpho::timer_end logs at the level it is given" {
+  export LOG_LEVEL=info
+  dybatpho::timer_start quiet
+  run --separate-stderr dybatpho::timer_end quiet debug
+  assert_success
+  refute_stderr --partial "quiet took"
+
+  dybatpho::timer_start loud
+  run --separate-stderr dybatpho::timer_end loud warn
+  assert_stderr --partial "loud took"
+}
+
+@test "dybatpho::timer_end refuses a timer that was never started and a level that is not one" {
+  run dybatpho::timer_end never_started
+  assert_failure
+  assert_output --partial "never started"
+
+  dybatpho::timer_start started
+  run ! dybatpho::timer_end started shouty
+  # The failed call left the timer running, so the name is still usable.
+  dybatpho::timer_end started
+}
+
+@test "dybatpho::spinner runs the command and passes its exit code through" {
+  export DYBATPHO_SPINNER=never
+  run dybatpho::spinner "Working" -- bash -c 'echo command output; exit 0'
+  assert_success
+  assert_output --partial "command output"
+
+  run dybatpho::spinner "Failing" -- bash -c 'exit 7'
+  assert_failure 7
+}
+
+@test "dybatpho::spinner logs the message once when there is nothing to animate" {
+  export DYBATPHO_SPINNER=never
+  run --separate-stderr dybatpho::spinner "Đang tải" -- true
+  assert_success
+  assert_stderr --partial "Đang tải"
+}
+
+@test "dybatpho::spinner animates and then erases its line" {
+  export DYBATPHO_SPINNER=always
+  export DYBATPHO_SPINNER_INTERVAL=0.02
+  run --separate-stderr dybatpho::spinner "Downloading" -- sleep 0.2
+  assert_success
+  assert_stderr --partial "Downloading"
+  # The animation ends with the line erased rather than with a stray frame.
+  [[ "${stderr}" == *$'\r'*'[K' ]]
+  unset DYBATPHO_SPINNER_INTERVAL
+}
+
+@test "dybatpho::spinner records the outcome as a structured event" {
+  local log_file="${BATS_TEST_TMPDIR}/spinner.log"
+  dybatpho::log_to_file "${log_file}" level:debug
+  export DYBATPHO_SPINNER=never
+  dybatpho::spinner "Measured step" -- true
+  grep -q '"exit_code":0' "${log_file}"
+  grep -q '"elapsed_ms":[0-9]' "${log_file}"
+}
+
+@test "dybatpho::spinner insists on the command separator" {
+  export DYBATPHO_SPINNER=never
+  run dybatpho::spinner "no separator" true
+  assert_failure
+  assert_output --partial "--"
+
+  run dybatpho::spinner "nothing to run" --
+  assert_failure
+  assert_output --partial "Expected a command"
+
+  run dybatpho::spinner
+  assert_failure
+}
+
+@test "dybatpho::spinner redacts a registered secret in its message" {
+  export DYBATPHO_SPINNER=never
+  dybatpho::secret_register "spinner-secret-value"
+  run --separate-stderr dybatpho::spinner "pushing spinner-secret-value" -- true
+  dybatpho::secret_forget
+  assert_success
+  refute_stderr --partial "spinner-secret-value"
+  assert_stderr --partial "***"
 }
