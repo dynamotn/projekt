@@ -99,6 +99,15 @@ kubectl get pods --no-headers | tr -s ' ' ',' | dybatpho::table_csv - box
 - **FR-006**: Table helpers MUST accept stdin when the input argument is `-`.
 - **FR-007**: The module MUST provide a helper for plain-table rendering with optional per-column alignment rules.
 - **FR-008**: The module MUST provide a CSV convenience wrapper that reuses the supported render styles.
+- **FR-009**: The CSV wrapper splits on the delimiter and does not parse RFC
+  4180 quoting. It MUST refuse a row whose fields are quoted rather than
+  splitting through the quotes, naming the limitation and the way to override
+  it, because splitting through them changed the number of columns in a row
+  without reporting anything.
+- **FR-010**: `DYBATPHO_TABLE_CSV_STRICT=false` MUST restore the plain
+  splitting, for data the caller knows carries no quoting.
+- **FR-011**: A quote that is not at a field boundary is data, not quoting,
+  and MUST NOT be refused.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -121,6 +130,9 @@ kubectl get pods --no-headers | tr -s ' ' ',' | dybatpho::table_csv - box
 - **IT-004**: Read row data from stdin for plain table output.
 - **IT-005**: Render a plain table with right-aligned numeric cells.
 - **IT-006**: Render comma-delimited input through the CSV convenience wrapper.
+- **IT-007**: Verify a quoted field is refused with a message naming the
+  override, that the override renders it the old way, that `5" pipe` is not
+  refused, and that stdin is still read once and rendered.
 
 ## Acceptance Criteria *(mandatory)*
 

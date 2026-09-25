@@ -321,6 +321,52 @@ function dybatpho::table_markdown {
   done
 }
 
+# @env DYBATPHO_TABLE_CSV_STRICT bool Refuse input whose fields are quoted, rather than splitting through the quotes. Default `true`
+DYBATPHO_TABLE_CSV_STRICT="${DYBATPHO_TABLE_CSV_STRICT:-true}"
+
+#######################################
+# @description Stop when a row looks like quoted CSV, which this module does not
+#   parse.
+#
+#   `dybatpho::table_csv` splits on every comma. That is the right thing for the
+#   delimiter-convenience case it exists for — `... | tr -s ' ' ',' |
+#   dybatpho::table_csv -` — and the wrong thing for a real CSV file, where a
+#   quoted field may contain a comma of its own. Splitting through the quotes
+#   turned one field into two, so the row no longer matched its header, and
+#   nothing said so: the table was simply wrong, and wrong in a way that looks
+#   like data.
+#
+#   Refusing is not a parser, and does not pretend to be one. It converts silent
+#   corruption into an error that names the limitation, which is the part that
+#   actually hurt. `DYBATPHO_TABLE_CSV_STRICT=false` restores the old splitting
+#   for callers who know their data carries no quoting.
+# @arg $1 string Rows to inspect
+# @env DYBATPHO_TABLE_CSV_STRICT bool Set to `false` to split through quotes anyway
+# @exitcode 0 No row is quoted, or the check is switched off
+# @exitcode 1 Stop the script when a field is quoted
+#######################################
+function __dybatpho_table_reject_quoted {
+  dybatpho::is true "${DYBATPHO_TABLE_CSV_STRICT}" || return 0
+
+  local -a rows=()
+  local row
+  __dybatpho_text_read_lines "${1-}" rows
+
+  for row in "${rows[@]}"; do
+    # A quote right after a field boundary -- the start of the row or a comma,
+    # either of them possibly followed by spaces -- is the shape of a quoted
+    # field. A quote anywhere else is just a character in the data, such as the
+    # inches in `5" pipe`, and is left alone.
+    if [[ "${row}" =~ (^|,)[[:space:]]*\" ]]; then
+      dybatpho::die "${FUNCNAME[1]}: This row has a quoted field, which this module does not parse: ${row}
+It splits on every comma, so a comma inside a quoted field would silently become a column separator.
+Set DYBATPHO_TABLE_CSV_STRICT=false to split anyway, or pass the fields through a real CSV parser first."
+    fi
+  done
+
+  return 0
+}
+
 #######################################
 # @description Render lightweight comma-delimited table data using one of the supported styles.
 # @arg $1 string Input CSV-like text block or `-` for stdin
@@ -333,6 +379,14 @@ function dybatpho::table_csv {
   dybatpho::expect_args input -- "$@"
   local style="${2:-plain}"
   local align_spec="${3-}"
+
+  # Standard input can only be read once, and both the check below and the
+  # renderer need it, so it is materialised here first.
+  if [[ "${input}" == "-" ]]; then
+    input="$(cat)"
+  fi
+
+  __dybatpho_table_reject_quoted "${input}"
 
   case "${style}" in
     plain)

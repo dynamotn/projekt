@@ -15,6 +15,12 @@ explicit plain-table alignment rules and lightweight CSV rendering. It
 targets small script-generated tables where readability matters more than
 strict CSV parsing.
 
+### 🌍 Environment
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`DYBATPHO_TABLE_CSV_STRICT`** | bool | Refuse input whose fields are quoted, rather than splitting through the quotes. Default `true` |
+
 ### 🚀 Highlights
 
 - [`__dybatpho_table_cell_width`](#__dybatpho_table_cell_width) — Return the display width of a table cell.
@@ -28,6 +34,7 @@ strict CSV parsing.
 - [`dybatpho::table_align`](#dybatphotable_align) — Render aligned columns with optional per-column alignment rules.
 - [`dybatpho::table_box`](#dybatphotable_box) — Render a Unicode boxed table from delimited rows.
 - [`dybatpho::table_markdown`](#dybatphotable_markdown) — Render a Markdown table from delimited rows.
+- [`__dybatpho_table_reject_quoted`](#__dybatpho_table_reject_quoted) — Stop when a row looks like quoted CSV, which this module does not parse. `dybatpho::table_csv` splits on every comma. That is the right thing for the delimiter-convenience case it exists for — `... | tr -s ' ' ',' | dybatpho::table_csv -` — and the wrong thing for a real CSV file, where a quoted field may contain a comma of its own. Splitting through the quotes turned one field into two, so the row no longer matched its header, and nothing said so: the table was simply wrong, and wrong in a way that looks like data. Refusing is not a parser, and does not pretend to be one. It converts silent corruption into an error that names the limitation, which is the part that actually hurt. `DYBATPHO_TABLE_CSV_STRICT=false` restores the old splitting for callers who know their data carries no quoting.
 - [`dybatpho::table_csv`](#dybatphotable_csv) — Render lightweight comma-delimited table data using one of the supported styles.
 
 <a id="see-also"></a>
@@ -232,6 +239,46 @@ Render a Markdown table from delimited rows.
 **📤 Output on stdout**
 
 - Markdown table using the first row as the header
+
+
+---
+
+### `__dybatpho_table_reject_quoted`
+
+Stop when a row looks like quoted CSV, which this module does not
+  parse.
+
+
+  `dybatpho::table_csv` splits on every comma. That is the right thing for the
+  delimiter-convenience case it exists for — `... | tr -s ' ' ',' |
+  dybatpho::table_csv -` — and the wrong thing for a real CSV file, where a
+  quoted field may contain a comma of its own. Splitting through the quotes
+  turned one field into two, so the row no longer matched its header, and
+  nothing said so: the table was simply wrong, and wrong in a way that looks
+  like data.
+
+
+  Refusing is not a parser, and does not pretend to be one. It converts silent
+  corruption into an error that names the limitation, which is the part that
+  actually hurt. `DYBATPHO_TABLE_CSV_STRICT=false` restores the old splitting
+  for callers who know their data carries no quoting.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Rows to inspect |
+
+**🌍 Environment variables**
+
+| Variable | Type | Description |
+| --- | --- | --- |
+| **`DYBATPHO_TABLE_CSV_STRICT`** | bool | Set to `false` to split through quotes anyway |
+
+**🚦 Exit codes**
+
+- `0`: No row is quoted, or the check is switched off
+- `1`: Stop the script when a field is quoted
 
 
 ---

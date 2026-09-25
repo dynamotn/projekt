@@ -281,6 +281,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`dybatpho::table_csv` refuses CSV it cannot read, instead of mangling it.**
+  It splits on every comma, so a quoted field containing one became two columns
+  and the row stopped matching its header — quietly. The table was simply wrong,
+  and wrong in a way that looks like data.
+
+  This was never a broken promise: the helper is scoped as a convenience over
+  comma-delimited input, not as an RFC 4180 parser, and the documented use is
+  `... | tr -s ' ' ',' | dybatpho::table_csv -`. It was the name promising more
+  than the contract. Refusing is not a parser either; it turns silent corruption
+  into an error that names the limitation, which is the part that hurt.
+
+  A quote that is not at a field boundary — `5" pipe` — is data and is still
+  rendered. `DYBATPHO_TABLE_CSV_STRICT=false` restores the old splitting for
+  data known to carry no quoting.
 - **A lock is a symbolic link on disk, not a directory.** `lock_info`,
   `lock_is_held` and `lock_field` are unchanged, and `lock_field` still reads the
   old form, but anything that inspected the lock directory by hand stops

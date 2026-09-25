@@ -106,3 +106,40 @@ EOF
   assert_line --index 1 --partial "longer"
   assert_line --index 1 --partial "extra"
 }
+
+@test "dybatpho::table_csv refuses a quoted field instead of splitting through it" {
+  # It splits on every comma, so a comma inside a quoted field used to become a
+  # column separator: the row gained a cell, stopped matching its header, and
+  # nothing said so.
+  run --separate-stderr dybatpho::table_csv "$(printf 'name,note\n"Doe, John",ok')" markdown
+  assert_failure
+  assert_stderr --partial "quoted field"
+  assert_stderr --partial "DYBATPHO_TABLE_CSV_STRICT=false"
+
+  run --separate-stderr dybatpho::table_csv "$(printf 'a,b\n"He said ""hi""",x')" markdown
+  assert_failure
+}
+
+@test "dybatpho::table_csv still splits when the caller says the data has no quoting" {
+  # `env` cannot run a shell function, so the variable is set for the call.
+  DYBATPHO_TABLE_CSV_STRICT=false \
+    run_traced dybatpho::table_csv "$(printf 'name,note\n"Doe, John",ok')" markdown
+  assert_success
+  assert_output --partial '"Doe'
+}
+
+@test "dybatpho::table_csv leaves a quote that is not a field boundary alone" {
+  # `5" pipe` is data, not CSV quoting, and refusing it would be a false alarm.
+  run_traced dybatpho::table_csv "$(printf 'size,note\n5" pipe,ok')" markdown
+  assert_success
+  assert_output --partial '5" pipe'
+}
+
+@test "dybatpho::table_csv still reads stdin once and renders it" {
+  # The check and the renderer both need the input, and standard input can only
+  # be read once.
+  run_traced bash -c "printf 'web 1/1 Running\napi 1/1 Running\n' | tr -s ' ' ',' \
+    | { . $(printf '%q' "${DYBATPHO_DIR}")/init.sh --modules table && dybatpho::table_csv - markdown; }"
+  assert_success
+  assert_output --partial "Running"
+}
