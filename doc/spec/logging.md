@@ -404,6 +404,9 @@ dybatpho::log_context clear
   code as a `debug` event.
 - **FR-032**: The spinner MUST redact registered secrets in its message before
   drawing it.
+- **FR-033**: Measuring display width and building padding MUST be available
+  in a form that writes into a caller-named variable, so boxed output does not
+  fork once per line to ask how wide a line is.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -503,6 +506,8 @@ dybatpho::log_context clear
   intact, and that a `debug` event records the elapsed time and exit code.
 - **IT-018**: Force the animation with `DYBATPHO_SPINNER=always` and verify
   frames are drawn on stderr and the line is erased when the command finishes.
+- **IT-019**: Verify boxed output is unchanged for ASCII, wide and combining
+  characters after the width helpers stopped going through `$( )`.
 
 ## Acceptance Criteria *(mandatory)*
 

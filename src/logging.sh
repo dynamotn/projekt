@@ -545,27 +545,64 @@ PY
 # @arg $1 string Input text
 # @stdout Display width of the input
 #######################################
-function __dybatpho_log_string_display_width {
-  local text="${1:-}"
+function __dybatpho_log_width_into {
+  local __dybatpho_width_name="$1"
+  local __dybatpho_width_text="${2:-}"
+  local -n __dybatpho_width_out="${__dybatpho_width_name}"
 
-  if __dybatpho_log_is_plain_ascii "${text}"; then
-    printf '%s\n' "${#text}"
+  if __dybatpho_log_is_plain_ascii "${__dybatpho_width_text}"; then
+    __dybatpho_width_out="${#__dybatpho_width_text}"
     return 0
   fi
 
-  __dybatpho_log_learn_widths "${text}"
+  __dybatpho_log_learn_widths "${__dybatpho_width_text}"
 
-  local width=0 index character
-  for ((index = 0; index < ${#text}; index++)); do
-    character="${text:index:1}"
-    if __dybatpho_log_is_plain_ascii "${character}"; then
-      width=$((width + 1))
+  local __dybatpho_width_index __dybatpho_width_char
+  __dybatpho_width_out=0
+  for ((__dybatpho_width_index = 0; __dybatpho_width_index < ${#__dybatpho_width_text}; __dybatpho_width_index++)); do
+    __dybatpho_width_char="${__dybatpho_width_text:__dybatpho_width_index:1}"
+    if __dybatpho_log_is_plain_ascii "${__dybatpho_width_char}"; then
+      __dybatpho_width_out=$((__dybatpho_width_out + 1))
     else
-      width=$((width + ${__dybatpho_log_char_width_cache[${character}]:-1}))
+      __dybatpho_width_out=$((__dybatpho_width_out + ${__dybatpho_log_char_width_cache[${__dybatpho_width_char}]:-1}))
     fi
   done
-  printf '%s\n' "${width}"
 }
+
+#######################################
+# @description Repeat a string, writing the result into a named variable.
+#   The renderers build padding one cell at a time, and reaching
+#   `dybatpho::string_repeat` through `$( )` forked once per cell.
+# @arg $1 string Name of the variable receiving the result
+# @arg $2 string Text to repeat
+# @arg $3 number Number of repetitions
+# @set The named variable
+#######################################
+function __dybatpho_log_repeat_into {
+  local __dybatpho_repeat_name="$1"
+  local __dybatpho_repeat_token="${2-}"
+  local __dybatpho_repeat_count="${3:-0}"
+  local -n __dybatpho_repeat_out="${__dybatpho_repeat_name}"
+  local __dybatpho_repeat_index
+
+  __dybatpho_repeat_out=""
+  ((__dybatpho_repeat_count > 0)) || return 0
+  for ((__dybatpho_repeat_index = 0; __dybatpho_repeat_index < __dybatpho_repeat_count; __dybatpho_repeat_index++)); do
+    __dybatpho_repeat_out+="${__dybatpho_repeat_token}"
+  done
+}
+
+#######################################
+# @description Return the display width of a string, accounting for wide Unicode glyphs when possible.
+# @arg $1 string Input text
+# @stdout Display width of the input
+#######################################
+function __dybatpho_log_string_display_width {
+  local __dybatpho_display_width
+  __dybatpho_log_width_into __dybatpho_display_width "${1:-}"
+  printf '%s\n' "${__dybatpho_display_width}"
+}
+
 
 #######################################
 # @description Wrap one text line to the requested width using word boundaries when possible.
@@ -695,7 +732,7 @@ function __dybatpho_log_box {
     while IFS= read -r wrapped_line; do
       wrapped_lines+=("${wrapped_line}")
       local wrapped_width
-      wrapped_width=$(__dybatpho_log_string_display_width "${wrapped_line}")
+      __dybatpho_log_width_into wrapped_width "${wrapped_line}"
       if ((wrapped_width > content_width)); then
         content_width=${wrapped_width}
       fi
@@ -708,16 +745,16 @@ function __dybatpho_log_box {
 
   local border_count=$((content_width + 2))
   local horizontal_line
-  horizontal_line="$(dybatpho::string_repeat "${horizontal}" "${border_count}")"
+  __dybatpho_log_repeat_into horizontal_line "${horizontal}" "${border_count}"
 
   __dybatpho_log info "${top_left}${horizontal_line}${top_right}" "${out}" "${color}"
   for line in "${wrapped_lines[@]}"; do
     local line_width padding_size
-    line_width=$(__dybatpho_log_string_display_width "${line}")
+    __dybatpho_log_width_into line_width "${line}"
     padding_size=$((content_width - line_width))
     local padding=""
     if ((padding_size > 0)); then
-      padding="$(dybatpho::string_repeat " " "${padding_size}")"
+      __dybatpho_log_repeat_into padding " " "${padding_size}"
     fi
     __dybatpho_log info "${left_border} ${line}${padding} ${right_border}" "${out}" "${color}"
   done

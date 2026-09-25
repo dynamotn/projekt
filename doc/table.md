@@ -24,11 +24,15 @@ strict CSV parsing.
 ### 🚀 Highlights
 
 - [`__dybatpho_table_cell_width`](#__dybatpho_table_cell_width) — Return the display width of a table cell.
+- [`__dybatpho_table_width_into`](#__dybatpho_table_width_into) — Measure a cell, writing the width into a named variable. The renderers measure every cell of every row, and reaching the measurement through `$( )` forked once per cell -- the single largest cost in drawing a table.
+- [`__dybatpho_table_repeat_into`](#__dybatpho_table_repeat_into) — Repeat a string into a named variable, without a subshell.
 - [`__dybatpho_table_pad`](#__dybatpho_table_pad) — Pad a cell to the requested display width.
+- [`__dybatpho_table_pad_into`](#__dybatpho_table_pad_into) — Pad a cell to a width, writing the result into a named variable.
 - [`__dybatpho_table_split_row`](#__dybatpho_table_split_row) — Split one delimited row into trimmed cells.
 - [`__dybatpho_table_measure_widths`](#__dybatpho_table_measure_widths) — Measure the widest cell in each column across all rows.
 - [`__dybatpho_table_parse_alignments`](#__dybatpho_table_parse_alignments) — Normalize a per-column alignment specification.
 - [`__dybatpho_table_format_cell`](#__dybatpho_table_format_cell) — Format a cell according to width and alignment.
+- [`__dybatpho_table_format_cell_into`](#__dybatpho_table_format_cell_into) — Align a cell in its column, writing the result into a named variable rather than onto stdout, so building a row costs no processes.
 - [`__dybatpho_table_rule`](#__dybatpho_table_rule) — Print a Unicode rule line for a boxed table.
 - [`dybatpho::table_print`](#dybatphotable_print) — Render aligned columns without borders from delimited rows.
 - [`dybatpho::table_align`](#dybatphotable_align) — Render aligned columns with optional per-column alignment rules.
@@ -67,6 +71,46 @@ Return the display width of a table cell.
 
 ---
 
+### `__dybatpho_table_width_into`
+
+Measure a cell, writing the width into a named variable.
+  The renderers measure every cell of every row, and reaching the measurement
+  through `$( )` forked once per cell -- the single largest cost in drawing a
+  table.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the variable receiving the width |
+| `$2` | string | Cell text |
+
+**🧩 Variable sets**
+
+- **`The`**: named variable
+
+
+---
+
+### `__dybatpho_table_repeat_into`
+
+Repeat a string into a named variable, without a subshell.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the variable receiving the result |
+| `$2` | string | Text to repeat |
+| `$3` | number | Number of repetitions |
+
+**🧩 Variable sets**
+
+- **`The`**: named variable
+
+
+---
+
 ### `__dybatpho_table_pad`
 
 Pad a cell to the requested display width.
@@ -81,6 +125,25 @@ Pad a cell to the requested display width.
 **📤 Output on stdout**
 
 - Right-padded cell text
+
+
+---
+
+### `__dybatpho_table_pad_into`
+
+Pad a cell to a width, writing the result into a named variable.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the variable receiving the padded cell |
+| `$2` | string | Cell text |
+| `$3` | number | Target width |
+
+**🧩 Variable sets**
+
+- **`The`**: named variable
 
 
 ---
@@ -145,6 +208,27 @@ Format a cell according to width and alignment.
 **📤 Output on stdout**
 
 - Formatted cell text
+
+
+---
+
+### `__dybatpho_table_format_cell_into`
+
+Align a cell in its column, writing the result into a named
+  variable rather than onto stdout, so building a row costs no processes.
+
+**🧾 Arguments**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `$1` | string | Name of the variable receiving the cell |
+| `$2` | string | Cell text |
+| `$3` | number | Column width |
+| `$4` | string | Alignment: `left`, `right` or `center` |
+
+**🧩 Variable sets**
+
+- **`The`**: named variable
 
 
 ---

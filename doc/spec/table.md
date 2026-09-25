@@ -108,6 +108,10 @@ kubectl get pods --no-headers | tr -s ' ' ',' | dybatpho::table_csv - box
   splitting, for data the caller knows carries no quoting.
 - **FR-011**: A quote that is not at a field boundary is data, not quoting,
   and MUST NOT be refused.
+- **FR-012**: Rendering MUST NOT start a process per cell. Measuring a cell,
+  padding it, aligning it and splitting a row into cells MUST all happen in the
+  calling shell. Reaching each of those through `$( )` made drawing a table cost
+  a fork per cell several times over, which dominated its running time.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -133,6 +137,9 @@ kubectl get pods --no-headers | tr -s ' ' ',' | dybatpho::table_csv - box
 - **IT-007**: Verify a quoted field is refused with a message naming the
   override, that the override renders it the old way, that `5" pipe` is not
   refused, and that stdin is still read once and rendered.
+- **IT-008**: Verify the rendered output is identical to the previous
+  implementation for plain, boxed and Markdown styles, including a table with
+  wide characters.
 
 ## Acceptance Criteria *(mandatory)*
 

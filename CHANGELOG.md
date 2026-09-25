@@ -281,6 +281,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Drawing a table no longer costs a process per cell.** Every function in the
+  library returns its answer on stdout, so every caller reads it with `$( )` —
+  and `$( )` forks. The renderers were built entirely out of those: measuring a
+  cell, padding it, aligning it, repeating a character for the padding, and
+  splitting a row into cells each went through a subshell, several times per
+  cell.
+
+  The internal helpers now write into a caller-named variable instead:
+  `__dybatpho_log_width_into`, `__dybatpho_log_repeat_into`,
+  `__dybatpho_table_width_into`, `__dybatpho_table_pad_into` and
+  `__dybatpho_table_format_cell_into`. Row splitting trims in place rather than
+  calling `dybatpho::split` through a process substitution and `dybatpho::trim`
+  through a subshell per field. The stdout forms are kept, so nothing outside
+  the library changes.
+
+  Measured as a ratio against the cost of one fork on the same host — wall clock
+  is meaningless on a busy machine — a 20×4 `dybatpho::table_box` went from
+  about 550 forks' worth of work to between 55 and 120, roughly five to ten
+  times less. `test/security/bench_value_return.sh` reports that ratio and fails
+  above a budget.
+
+  The rendered output is unchanged, which the table, text and logging suites
+  check.
 - **`dybatpho::table_csv` refuses CSV it cannot read, instead of mangling it.**
   It splits on every comma, so a quoted field containing one became two columns
   and the row stopped matching its header — quietly. The table was simply wrong,
