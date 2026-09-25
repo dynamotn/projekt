@@ -13,19 +13,19 @@
 ## ✨ From 200 lines of boilerplate to this
 
 ```sh
-. dybatpho/init.sh --modules git semver
-dybatpho::register_common_handlers # strict mode, error trap, signal cleanup
+. dybatpho/init.sh --modules release # git, semver and archive come with it
+dybatpho::register_common_handlers   # strict mode, error trap, signal cleanup
 
 dybatpho::git_is_clean "." || dybatpho::die "Commit your changes first"
 
-next=$(dybatpho::semver_bump "$(git describe --tags --abbrev=0)" minor)
+previous=$(dybatpho::git_latest_tag "." "v*") || previous=""
+next=$(dybatpho::release_next_version "." "${previous}") \
+  || dybatpho::die "Nothing since ${previous:-the first commit} calls for a release"
+
 dybatpho::info "Preparing release v${next}"
+dybatpho::release_changelog "." "${previous}" HEAD "${next}" > release-notes.md
 
-dybatpho::git_commits_between "." "v1.0.0" HEAD | while read -r sha; do
-  dybatpho::print "- $(dybatpho::git_commit_subject "." "${sha}")"
-done
-
-dybatpho::success "Release notes ready"
+dybatpho::success "Release notes for v${next} are ready"
 ```
 
 No dependency manager, no runtime, no build step — just Bash ≥ 4.3 and the files in this repo.
