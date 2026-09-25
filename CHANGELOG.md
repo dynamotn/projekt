@@ -1,5 +1,37 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **t**: validate a template, or the whole store, with `t check` — every file
+  and path segment parsed, every shared template resolved, the whole tree
+  rendered with the manifest's own defaults, and what the manifest asks for
+  compared with what the template reads. Exits non-zero on an error, so CI can
+  gate on it
+- **t**: keep the template store in a repository — `t init <repo>` clones one
+  into it, `t sync` brings it up to date, fast-forward only, so the same
+  templates reach your other machine without being copied by hand
+- **t**: apply a template to a project again with `t apply`, and see what it
+  would do with `t diff` — a unified diff, exiting non-zero when a project has
+  drifted, so CI can gate on it. A project records what it was rendered from in
+  `.projekt/template.yaml`, so the values are replayed without being given
+  again, a file edited by hand is a conflict and kept unless `--force`, and one
+  the template no longer writes is kept unless `--prune`
+- **t**: run commands once the files are there with `after:` in the manifest —
+  `go mod tidy`, `git init` — rendered first so a command can be conditional,
+  printed before it runs, and skippable with `--no-hooks`. `b` runs a
+  template's own commands too, before the recipe's
+- **t**: give a template delimiters of its own with `delims: ["<%", "%>"]` in
+  its `.vars.yaml`, so one that writes GitHub Actions, Helm charts or other Go
+  templates stops escaping its own syntax
+
+### Fixed
+
+- **t**: a path segment naming a value nobody set wrote a folder called
+  `<no value>`; it is refused now, the way an empty or escaping segment
+  already was
+
 ## [3.0.0]
 
 ### Added
@@ -41,39 +73,11 @@
   `stat`, `joinPath`, `toYaml` and `fromYaml`
 - **t**: new variables `.Source`, `.Store`, `.Home`, `.Hostname`, `.OS`,
   `.Arch` and `.Env`
-- **t**: validate a template, or the whole store, with `t check` — every file
-  and path segment parsed, every shared template resolved, the whole tree
-  rendered with the manifest's own defaults, and what the manifest asks for
-  compared with what the template reads. Exits non-zero on an error, so CI can
-  gate on it
-- **t**: keep the template store in a repository — `t init <repo>` clones one
-  into it, `t sync` brings it up to date, fast-forward only, so the same
-  templates reach your other machine without being copied by hand
-- **t**: apply a template to a project again with `t apply`, and see what it
-  would do with `t diff` — a unified diff, exiting non-zero when a project has
-  drifted, so CI can gate on it. A project records what it was rendered from in
-  `.projekt/template.yaml`, so the values are replayed without being given
-  again, a file edited by hand is a conflict and kept unless `--force`, and one
-  the template no longer writes is kept unless `--prune`
-- **t**: run commands once the files are there with `after:` in the manifest —
-  `go mod tidy`, `git init` — rendered first so a command can be conditional,
-  printed before it runs, and skippable with `--no-hooks`. `b` runs a
-  template's own commands too, before the recipe's
-- **t**: give a template delimiters of its own with `delims: ["<%", "%>"]` in
-  its `.vars.yaml`, so one that writes GitHub Actions, Helm charts or other Go
-  templates stops escaping its own syntax
-
-### Fixed
-
-- **t**: a path segment naming a value nobody set wrote a folder called
-  `<no value>`; it is refused now, the way an empty or escaping segment
-  already was
 
 ### Removed
 
 - **b**: `source.command`, which was never implemented; an `after:` hook
   already runs any command you like in the new project
-
 
 ## [2.1.0]
 
