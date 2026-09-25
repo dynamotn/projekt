@@ -18,20 +18,40 @@ type AddOptions struct {
 	Name string
 	// Force allows replacing a template that already exists.
 	Force bool
+	// Replace turns the literals a project repeats into template expressions,
+	// in the file contents and in the file names alike.
+	Replace []Replacement
 }
 
-// Add copies the source into the template store and returns where it landed.
+// Added is what an import did.
+type Added struct {
+	// Path is where the template landed.
+	Path string
+	// Files is how many files were copied.
+	Files int
+	// Substitutions is how many literals were turned into template
+	// expressions.
+	Substitutions int
+	// Manifest is the `.vars.yaml` the replacements implied, when there was
+	// one to write.
+	Manifest string
+}
+
+// Add copies the source into the template store and reports what it did.
 //
 // The content is copied as it is: Go template actions already in the file are
-// kept, which is what makes `t add` the natural way to start a template.
-func Add(o AddOptions) (string, error) {
+// kept, which is what makes `t add` the natural way to start a template. With
+// --replace it is copied *and* parameterised, which is the other half of the
+// job: a project says its own name in nineteen places, and every one of them
+// has to become `{{ .Name }}` before it is a template.
+func Add(o AddOptions) (Added, error) {
 	source, err := normalizeDir(o.Source)
 	if err != nil {
-		return "", err
+		return Added{}, err
 	}
 	info, err := os.Stat(source)
 	if err != nil {
-		return "", fmt.Errorf("cannot add %s: %w", o.Source, err)
+		return Added{}, fmt.Errorf("cannot add %s: %w", o.Source, err)
 	}
 
 	name := o.Name
@@ -44,15 +64,15 @@ func Add(o AddOptions) (string, error) {
 		}
 	}
 	if name != filepath.Base(name) || name == "." || name == ".." {
-		return "", fmt.Errorf("invalid template name %q", name)
+		return Added{}, fmt.Errorf("invalid template name %q", name)
 	}
 
 	dir, err := Dir()
 	if err != nil {
-		return "", err
+		return Added{}, err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("cannot create template folder %s: %w", dir, err)
+		return Added{}, fmt.Errorf("cannot create template folder %s: %w", dir, err)
 	}
 
 	target := filepath.Join(dir, name)
@@ -61,29 +81,69 @@ func Add(o AddOptions) (string, error) {
 	}
 	if _, err := os.Stat(target); err == nil {
 		if !o.Force {
-			return "", fmt.Errorf("template %q already exists at %s, use --force to replace it", name, target)
+			return Added{}, fmt.Errorf("template %q already exists at %s, use --force to replace it", name, target)
 		}
 		if err := os.RemoveAll(target); err != nil {
-			return "", fmt.Errorf("cannot replace %s: %w", target, err)
+			return Added{}, fmt.Errorf("cannot replace %s: %w", target, err)
 		}
 	} else if !os.IsNotExist(err) {
-		return "", fmt.Errorf("cannot access %s: %w", target, err)
+		return Added{}, fmt.Errorf("cannot access %s: %w", target, err)
 	}
 
+	added := Added{Path: target}
 	if info.IsDir() {
 		// Importing the store into itself would recurse forever.
 		if source == dir || strings.HasPrefix(source+string(os.PathSeparator), dir+string(os.PathSeparator)) {
-			return "", fmt.Errorf("cannot add %s: it is inside the template folder %s", source, dir)
+			return Added{}, fmt.Errorf("cannot add %s: it is inside the template folder %s", source, dir)
 		}
-		if err := CopyTree(source, target); err != nil {
-			return "", err
+		files, substitutions, err := copyTree(source, target, o.Replace)
+		if err != nil {
+			return Added{}, err
 		}
-		return target, nil
+		added.Files, added.Substitutions = files, substitutions
+	} else {
+		substitutions, err := copyOne(source, target, info.Mode().Perm(), o.Replace)
+		if err != nil {
+			return Added{}, err
+		}
+		added.Files, added.Substitutions = 1, substitutions
 	}
-	if err := copyFile(source, target, info.Mode().Perm()); err != nil {
-		return "", err
+
+	manifest, err := manifestFor(o.Replace)
+	if err != nil {
+		return Added{}, err
 	}
-	return target, nil
+	if manifest != nil {
+		path := filepath.Join(target, VarsFile)
+		if !info.IsDir() {
+			path = filepath.Join(dir, name+VarsFile)
+		}
+		if err := writeManifest(path, manifest, o.Force); err != nil {
+			return Added{}, err
+		}
+		added.Manifest = path
+	}
+	return added, nil
+}
+
+// writeManifest writes the questions the replacements imply, leaving a
+// manifest that is already there alone unless --force was given: it is more
+// likely to be the real one than anything derived from a few literals.
+func writeManifest(path string, content []byte, force bool) error {
+	if !force {
+		if _, err := os.Stat(path); err == nil {
+			return nil
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("cannot access %s: %w", path, err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("cannot create folder %s: %w", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		return fmt.Errorf("cannot write %s: %w", path, err)
+	}
+	return nil
 }
 
 // ShowTemplate prints a template: the file itself, or every file of a folder
@@ -131,7 +191,14 @@ func ShowTemplate(out io.Writer, tpl Template) error {
 // CopyTree copies a folder, leaving out the repository metadata: what is
 // being copied is the files, not where they came from.
 func CopyTree(source, target string) error {
-	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
+	_, _, err := copyTree(source, target, nil)
+	return err
+}
+
+// copyTree copies a folder, rewriting the literals as it goes, and reports how
+// many files it wrote and how many substitutions it made.
+func copyTree(source, target string, replacements []Replacement) (files, substitutions int, err error) {
+	err = filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -139,12 +206,17 @@ func CopyTree(source, target string) error {
 		if err != nil {
 			return err
 		}
-		destination := filepath.Join(target, relative)
+		// The names repeat the literals too: a folder called after the project
+		// has to become one called after `.Name`.
+		renamed, renames := applyToPath(replacements, relative)
+		destination := filepath.Join(target, renamed)
+
 		if entry.IsDir() {
 			// A .git folder is repository state, never part of a template.
 			if relative != "." && entry.Name() == ".git" {
 				return fs.SkipDir
 			}
+			substitutions += renames
 			return os.MkdirAll(destination, 0o755)
 		}
 		info, err := entry.Info()
@@ -155,20 +227,53 @@ func CopyTree(source, target string) error {
 			// Symlinks and devices have no meaning once copied into the store.
 			return nil
 		}
-		return copyFile(path, destination, info.Mode().Perm())
+
+		inside, err := copyOne(path, destination, info.Mode().Perm(), replacements)
+		if err != nil {
+			return err
+		}
+		files++
+		substitutions += renames + inside
+		return nil
 	})
+	return files, substitutions, err
 }
 
-func copyFile(source, target string, mode os.FileMode) error {
+// applyToPath rewrites each segment of a relative path on its own, so a
+// replacement can never introduce a separator.
+func applyToPath(replacements []Replacement, relative string) (string, int) {
+	if len(replacements) == 0 || relative == "." {
+		return relative, 0
+	}
+
+	segments := strings.Split(relative, string(os.PathSeparator))
+	count := 0
+	for i, segment := range segments {
+		rewritten, n := apply(replacements, segment)
+		segments[i], count = rewritten, count+n
+	}
+	return filepath.Join(segments...), count
+}
+
+// copyOne copies a file, rewriting its contents unless they are not text.
+func copyOne(source, target string, mode os.FileMode, replacements []Replacement) (int, error) {
 	data, err := os.ReadFile(source)
 	if err != nil {
-		return fmt.Errorf("cannot read %s: %w", source, err)
+		return 0, fmt.Errorf("cannot read %s: %w", source, err)
 	}
+
+	count := 0
+	if len(replacements) > 0 && isText(data) {
+		var rewritten string
+		rewritten, count = apply(replacements, string(data))
+		data = []byte(rewritten)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return fmt.Errorf("cannot create folder %s: %w", filepath.Dir(target), err)
+		return 0, fmt.Errorf("cannot create folder %s: %w", filepath.Dir(target), err)
 	}
 	if err := os.WriteFile(target, data, mode); err != nil {
-		return fmt.Errorf("cannot write %s: %w", target, err)
+		return 0, fmt.Errorf("cannot write %s: %w", target, err)
 	}
-	return nil
+	return count, nil
 }

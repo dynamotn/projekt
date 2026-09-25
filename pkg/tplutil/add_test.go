@@ -18,13 +18,13 @@ func TestAdd_File(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	path, err := Add(AddOptions{Source: source})
+	added, err := Add(AddOptions{Source: source})
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 	want := filepath.Join(store, "main.go.tmpl")
-	if path != want {
-		t.Fatalf("Add() = %v, want %v", path, want)
+	if added.Path != want {
+		t.Fatalf("Add() = %v, want %v", added.Path, want)
 	}
 	// Template actions of the source are kept as they are.
 	if got := readFile(t, want); got != "package {{ .Name }}\n" {
@@ -70,12 +70,12 @@ func TestAdd_Folder(t *testing.T) {
 	writeTemplate(t, filepath.Join(source, "cmd", "main.go"), "package main\n")
 	writeTemplate(t, filepath.Join(source, ".git", "config"), "[core]\n")
 
-	path, err := Add(AddOptions{Source: source, Name: "go-cli"})
+	added, err := Add(AddOptions{Source: source, Name: "go-cli"})
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
-	if path != filepath.Join(store, "go-cli") {
-		t.Fatalf("Add() = %v, want %v", path, filepath.Join(store, "go-cli"))
+	if added.Path != filepath.Join(store, "go-cli") {
+		t.Fatalf("Add() = %v, want %v", added.Path, filepath.Join(store, "go-cli"))
 	}
 
 	if got := readFile(t, filepath.Join(store, "go-cli", "cmd", "main.go")); got != "package main\n" {
