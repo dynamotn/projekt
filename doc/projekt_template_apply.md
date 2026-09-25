@@ -36,6 +36,7 @@ Examples:
   t apply go-cli --set ci=true      # change one answer, replay the others
   t apply --force                   # rewrite what was edited by hand too
   t apply --prune                   # and delete what it no longer writes
+  t apply --hooks                   # run the template's after commands again
 
 ```
 projekt template apply [template...] [flags]
@@ -46,6 +47,7 @@ projekt template apply [template...] [flags]
 ```
   -F, --force                Rewrite the files that were edited by hand too
   -h, --help                 help for apply
+      --hooks after          Run the template's after commands again as well
   -i, --interactive          Ask for the values the template needs
   -n, --name string          Name to render with, overriding the recorded one
       --name-only            Print the paths alone, one per line

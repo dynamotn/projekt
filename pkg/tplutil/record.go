@@ -45,10 +45,29 @@ type RenderRecord struct {
 	Files map[string]string `yaml:"files"`
 }
 
+// RecipeRecord is one boilerplate a project was created from.
+//
+// A recipe brings more than the template it renders: its own questions, and
+// the commands it runs afterwards. Remembering only the template would lose
+// both the next time the project is brought up to date.
+type RecipeRecord struct {
+	// Recipe is the boilerplate store entry.
+	Recipe string `yaml:"recipe"`
+	// Template is the template it rendered, so the two can be matched up.
+	Template string `yaml:"template,omitempty"`
+	// Name is the project name it was created with.
+	Name string `yaml:"name,omitempty"`
+	// CreatedAt is when it ran, in UTC.
+	CreatedAt time.Time `yaml:"createdAt"`
+	// Values are the values it ran with.
+	Values Values `yaml:"values,omitempty"`
+}
+
 // Record is everything a project was rendered from.
 type Record struct {
 	Version int            `yaml:"version"`
 	Renders []RenderRecord `yaml:"renders"`
+	Recipes []RecipeRecord `yaml:"recipes,omitempty"`
 }
 
 // recordPath returns where a project keeps its record.
@@ -87,6 +106,9 @@ func SaveRecord(project string, record Record) error {
 	sort.Slice(record.Renders, func(i, j int) bool {
 		return record.Renders[i].Template < record.Renders[j].Template
 	})
+	sort.Slice(record.Recipes, func(i, j int) bool {
+		return record.Recipes[i].Recipe < record.Recipes[j].Recipe
+	})
 
 	data, err := yaml.Marshal(record)
 	if err != nil {
@@ -112,6 +134,32 @@ func (r Record) Find(template string) (RenderRecord, bool) {
 		}
 	}
 	return RenderRecord{}, false
+}
+
+// FindRecipe returns what a project remembers about one boilerplate.
+func (r Record) FindRecipe(recipe string) (RecipeRecord, bool) {
+	for _, entry := range r.Recipes {
+		if entry.Recipe == recipe {
+			return entry, true
+		}
+	}
+	return RecipeRecord{}, false
+}
+
+// RecordRecipe remembers that a project was created from a boilerplate.
+func RecordRecipe(project string, recipe RecipeRecord) error {
+	record, err := LoadRecord(project)
+	if err != nil {
+		return err
+	}
+	for i, existing := range record.Recipes {
+		if existing.Recipe == recipe.Recipe {
+			record.Recipes[i] = recipe
+			return SaveRecord(project, record)
+		}
+	}
+	record.Recipes = append(record.Recipes, recipe)
+	return SaveRecord(project, record)
 }
 
 // put replaces what is remembered about a template, or adds it.
