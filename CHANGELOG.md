@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   executes a program.
 
   ```sh
-  dybatpho::run_with_timeout 30 ./deploy.sh   # 124 when it overran
-  dybatpho::run_with_timeout 5 my_function    # a function works too
+  dybatpho::run_with_timeout 30 ./deploy.sh # 124 when it overran
+  dybatpho::run_with_timeout 5 my_function  # a function works too
 
   dybatpho::trap dybatpho::kill_children EXIT INT TERM
   dybatpho::background_run api ./serve.sh --port 8080
@@ -58,6 +58,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   thing callers act on, and `dybatpho::pid_file_remove` refuses to delete a PID
   file that records a different process — the guard that stops an exiting
   service from removing the PID file its replacement just wrote.
+- **`config` — writing configuration back, profile overlays, and TOML.** The
+  module could read a configuration and validate it, but not change one. A
+  script that had to persist a setting was left rewriting the file by hand,
+  and a hand-rolled rewrite loses exactly what makes the file worth keeping:
+  the comments, the ordering, and the keys the script has no opinion about.
+
+  ```sh
+  dybatpho::config_set PORT 9090
+  dybatpho::config_save ./config.yaml PORT
+  ```
+
+  `dybatpho::config_save` writes in the format the file already uses. A dotenv
+  file is rewritten line by line, so comments, blank lines, assignment order,
+  and unrelated keys survive, and keys the file never mentioned are appended.
+  JSON, YAML, and TOML go through `jq` and `yq` as one assignment per key
+  rather than a merged second document — a node imported from JSON carries its
+  flow style with it and reflows everything around it, whereas assigning in
+  place leaves a YAML file's comments and indentation where they were. The
+  write is atomic and honors `DRY_RUN`, and values reach `jq` and `yq` through
+  the environment rather than the command line, so a configured secret does
+  not become world-readable in `/proc`.
+
+  A value is written as a number or a boolean only when
+  `dybatpho::config_schema` declared it as `int` or `bool`. Without a schema
+  there is nothing to distinguish the string `01234` from the number `1234`,
+  so the value is written as a string and the file stays honest about what it
+  was told.
+
+  ```sh
+  dybatpho::config_profile ./config.yaml prod   # config.yaml, then config.prod.yaml
+  dybatpho::config_load --optional /etc/app.env # absent is not an error
+  ```
+
+  `dybatpho::config_profile` is the overlay every deployment ends up writing:
+  a shared base file, then the per-environment file beside it, which very
+  often does not exist. The profile may also come from
+  `DYBATPHO_CONFIG_PROFILE`. `--optional` is the same tolerance for any other
+  list of files; without it a missing file is still an error, as before.
+
+  `.toml` files now load too, through the same `yq` the YAML path uses, and
+  `config_save` writes them back.
+
+  `dybatpho::config_set` makes the in-memory setter public. It was already
+  there as an internal helper, which meant the example had to reach into a
+  `__dybatpho_` name to demonstrate a validation failure.
 
 - **`helpers` — asking the library about itself, from the running shell.** The
   library documents itself in `doc/`, which answers the question while you are
@@ -66,10 +111,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   module it is in, and what it takes — and the answer is in a browser tab.
 
   ```sh
-  dybatpho::provides semver_valid        # semver
-  dybatpho::provides --path cache_run    # /path/to/src/cache.sh:245
-  dybatpho::describe cache_run           # the comment block, rendered
-  dybatpho::function_list cache          # everything that module exports
+  dybatpho::provides semver_valid     # semver
+  dybatpho::provides --path cache_run # /path/to/src/cache.sh:245
+  dybatpho::describe cache_run        # the comment block, rendered
+  dybatpho::function_list cache       # everything that module exports
   ```
 
   These ask Bash rather than the filesystem. `declare -F` under `extdebug`
@@ -269,6 +314,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`config` could not read a YAML file at all.** The loader asked `yq` for
+  `if type != "!!map" then error(...) else ... end`, which is `jq` syntax; no
+  release of the Go `yq` has ever been able to parse it, so every
+  `dybatpho::config_load` of a `.yaml` or `.yml` file died with
+  `Invalid YAML configuration` regardless of the file's contents. The tests
+  stubbed `yq`, and a stub answers whatever the test wants, so the expression
+  was never once handed to the program that had to run it.
+
+  The root check is now its own `yq` call that reads the document's tag, and
+  the entry query is a plain `to_entries`. Reading the tag first also fixes a
+  quieter case: `to_entries` on a sequence succeeds and yields the indices, so
+  a YAML file whose root was a list would have loaded under the keys `0`, `1`,
+  … instead of being rejected. The tests for both paths now drive the real
+  `yq`, and skip when it is not installed rather than substituting a stub for
+  it.
+
+  `dybatpho::doctor` now reports `config`'s `yq` as `yq>=4`, the way it already
+  did for `json`. Reading a document's tag and parsing TOML both need the Go
+  `yq` v4, so a host carrying the Python `yq` or a pre-v4 build was told it had
+  what it needed and then failed at the first call.
+
 - **`ai` under `DRY_RUN` aborted on its first call on a fresh machine.** The
   counter file moved to a 0700 directory under the XDG state home, but that
   directory was created through `dybatpho::ensure_dir`, which only *prints* the
@@ -298,7 +364,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   ```sh
   __sort_values=(c a b)
-  dybatpho::array_sort __sort_values   # was: exit 0, still c a b
+  dybatpho::array_sort __sort_values # was: exit 0, still c a b
   ```
 
   The library now reserves a namespace. Every local in a function that takes a
@@ -417,7 +483,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   query result — which is not public, and the `ai` module caches provider
   responses there. Entries are now written `0600` inside a `0700` directory,
   the same treatment `dybatpho::secret_write_file` already gave a secret.
-
 
 ## [4.0.0] - 2026-09-23
 

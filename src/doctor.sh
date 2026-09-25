@@ -73,7 +73,10 @@ declare -gA DYBATPHO_DOCTOR_OPTIONAL=(
   # Only `dybatpho::cache_key` needs one, and any of the three will do.
   [cache]="sha256sum|shasum|cksum"
   [archive]="unzip zip gzip bzip2 xz zstd"
-  [config]="jq yq"
+  # Same Go `yq` v4 the `json` module needs: `config` reads a document's tag
+  # and parses TOML with `-p toml`, neither of which the Python `yq` or the
+  # pre-v4 Go one understands.
+  [config]="jq yq>=4"
   [file]="sha256sum|shasum|openssl"
   [json]="jq"
   [logging]="python3"

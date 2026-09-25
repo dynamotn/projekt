@@ -6,11 +6,24 @@
 #   override earlier files. Environment variables loaded with
 #   `dybatpho::config_env` are applied last.
 #
+#   `dybatpho::config_profile` builds the usual two-file overlay on top of that
+#   order: a base `config.yaml` followed by the `config.<profile>.yaml` beside
+#   it, which may be absent. `dybatpho::config_load --optional` is the same
+#   tolerance for any other list of files.
+#
+#   `dybatpho::config_set` changes a value in memory and
+#   `dybatpho::config_save` writes chosen keys back to a file in the format
+#   that file already uses: a dotenv rewrite keeps its comments, its blank
+#   lines, and the order of its assignments, while JSON, YAML, and TOML are
+#   rewritten through `jq` and `yq` so the rest of the document survives.
+#
 #   Keys can also be given a typed schema with `dybatpho::config_schema`.
 #   `dybatpho::config_validate` then applies declared defaults, enforces
 #   required keys, types, ranges, and enum choices, and reports every
 #   violation together with the key that caused it. The same schema renders a
-#   configuration reference through `dybatpho::config_doc`.
+#   configuration reference through `dybatpho::config_doc`, and tells
+#   `dybatpho::config_save` which values to write as numbers or booleans
+#   rather than as strings.
 : "${DYBATPHO_DIR:?DYBATPHO_DIR must be set. Please source dybatpho/init.sh before other scripts from dybatpho.}"
 
 declare -gA DYBATPHO_CONFIG=()
@@ -50,7 +63,7 @@ function __dybatpho_config_load_dotenv {
 }
 
 function __dybatpho_config_load_structured {
-  local file format key value entries
+  local file format key value entries label root
   format="${1}"
   file="${2}"
   if [[ "${format}" == json ]]; then
@@ -59,8 +72,25 @@ function __dybatpho_config_load_structured {
       || dybatpho::die "Invalid JSON configuration: ${file}"
   else
     dybatpho::require yq
-    entries=$(yq -r 'if type != "!!map" then error("root must be a mapping") else to_entries[] | [.key, (.value | tostring)] | @tsv end' "${file}") \
-      || dybatpho::die "Invalid YAML configuration: ${file}"
+    local -a parse=()
+    if [[ "${format}" == toml ]]; then
+      label=TOML
+      parse=(-p toml -o yaml)
+    else
+      label=YAML
+      parse=(-p yaml -o yaml)
+    fi
+    # The root check is its own call on purpose. `yq` is not `jq`: it has no
+    # `if ... then ... else ... end`, and its `select` does not hold back the
+    # branch it guards here, so the check cannot ride along with the query.
+    # Reading the tag first also keeps a sequence root from being loaded under
+    # the keys `0`, `1`, ... instead of being rejected.
+    root=$(yq "${parse[@]}" -r 'tag' "${file}" 2> /dev/null) \
+      || dybatpho::die "Invalid ${label} configuration: ${file}"
+    [[ "${root}" == "!!map" ]] \
+      || dybatpho::die "Invalid ${label} configuration: ${file}"
+    entries=$(yq "${parse[@]}" -r 'to_entries[] | [.key, (.value | tostring)] | @tsv' "${file}") \
+      || dybatpho::die "Invalid ${label} configuration: ${file}"
   fi
   if [[ -n "${entries}" ]]; then
     while IFS=$'\t' read -r key value; do
@@ -70,23 +100,89 @@ function __dybatpho_config_load_structured {
 }
 
 #######################################
-# @description Load one or more configuration files.
-# @arg $@ string Files in dotenv, JSON, or YAML format, in increasing precedence order
-# @exitcode 1 A file is missing or has invalid configuration
+# @description Load one or more configuration files, merging them left to right.
+# @example
+#   dybatpho::config_load defaults.yaml production.yaml
+#
+# @example
+#   # A machine-local override that may simply not be there.
+#   dybatpho::config_load --optional /etc/app.env "${HOME}/.config/app.env"
+#
+# @arg $1 string Optional `--optional`, to skip files that do not exist instead of failing
+# @arg $@ string Files in dotenv, JSON, YAML, or TOML format, in increasing precedence order
+# @set DYBATPHO_CONFIG Merged values, where a later file replaces an earlier one
+# @exitcode 1 A required file is missing, or a file has an unsupported format or invalid configuration
+# @tip Pass `--` before a file whose own name starts with `--`.
 #######################################
 function dybatpho::config_load {
+  local optional=false
+  while (($#)); do
+    case "${1}" in
+      --optional)
+        optional=true
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      *) break ;;
+    esac
+  done
   (($# > 0)) || dybatpho::die "${FUNCNAME[0]}: Expected at least one configuration file"
   local file extension
   for file in "$@"; do
-    dybatpho::is file "${file}" || dybatpho::die "Configuration file not found: ${file}"
+    if ! dybatpho::is file "${file}"; then
+      [[ "${optional}" == true ]] \
+        || dybatpho::die "Configuration file not found: ${file}"
+      dybatpho::debug "Skipping missing configuration file: ${file}"
+      continue
+    fi
     extension="${file##*.}"
     case "${extension,,}" in
       env | dotenv) __dybatpho_config_load_dotenv "${file}" ;;
       json) __dybatpho_config_load_structured json "${file}" ;;
       yaml | yml) __dybatpho_config_load_structured yaml "${file}" ;;
+      toml) __dybatpho_config_load_structured toml "${file}" ;;
       *) dybatpho::die "Unsupported configuration format: ${file}" ;; # kcov(skip)
     esac
   done
+}
+
+#######################################
+# @description Load a base configuration file and the profile overlay beside it.
+#   The overlay is the base name with the profile inserted before the
+#   extension, so `config.yaml` with profile `prod` reads `config.prod.yaml`
+#   after it. The base file is required; the overlay is not, which is what lets
+#   the same call work on a machine that has no profile-specific file.
+# @example
+#   dybatpho::config_profile ./config.yaml prod
+#
+# @example
+#   # The profile comes from the environment when it is not passed.
+#   DYBATPHO_CONFIG_PROFILE=staging dybatpho::config_profile ./config.json
+#
+# @arg $1 string Base configuration file, whose extension selects the format
+# @arg $2 string Profile name, defaulting to `DYBATPHO_CONFIG_PROFILE`
+# @env DYBATPHO_CONFIG_PROFILE string Profile used when none is passed
+# @set DYBATPHO_CONFIG Base values, overlaid by the profile file when it exists
+# @exitcode 1 No profile is given, the profile name is invalid, or the base file is missing or unreadable
+#######################################
+function dybatpho::config_profile {
+  local file profile extension stem overlay
+  dybatpho::expect_args file -- "$@"
+  profile="${2-${DYBATPHO_CONFIG_PROFILE-}}"
+  [[ -n "${profile}" ]] \
+    || dybatpho::die "${FUNCNAME[0]}: Expected a profile name or DYBATPHO_CONFIG_PROFILE"
+  [[ "${profile}" =~ ^[a-zA-Z0-9_-]+$ ]] \
+    || dybatpho::die "Invalid configuration profile: ${profile}"
+  [[ "$(dybatpho::path_basename "${file}")" == ?*.* ]] \
+    || dybatpho::die "Configuration file has no extension: ${file}"
+  extension="${file##*.}"
+  stem="${file%.*}"
+  overlay="${stem}.${profile}.${extension}"
+  dybatpho::config_load "${file}"
+  dybatpho::config_load --optional "${overlay}"
 }
 
 #######################################
@@ -103,6 +199,26 @@ function dybatpho::config_env {
     [[ -v "${variable}" ]] || continue
     __dybatpho_config_set "${key}" "${!variable}"
   done < <(compgen -v) # kcov(skip)
+}
+
+#######################################
+# @description Set a configuration value in memory.
+#   The value joins the ones loaded from files and the environment, so a later
+#   `dybatpho::config_validate` checks it like any other, and
+#   `dybatpho::config_save` can write it back to a file.
+# @example
+#   dybatpho::config_set PORT 9090
+#   dybatpho::config_save ./config.yaml PORT
+#
+# @arg $1 string Configuration key
+# @arg $2 string Value
+# @set DYBATPHO_CONFIG The key is added or replaced
+# @exitcode 1 The key is invalid
+#######################################
+function dybatpho::config_set {
+  local key value
+  dybatpho::expect_args key value -- "$@"
+  __dybatpho_config_set "${key}" "${value}"
 }
 
 #######################################
@@ -156,6 +272,223 @@ function dybatpho::config_export {
       || dybatpho::die "Cannot export configuration key as variable: ${key}"
     export "${prefix}${key}=${DYBATPHO_CONFIG[${key}]}"
   done
+}
+
+#######################################
+# @description Render one value the way a dotenv file has to carry it.
+#   A value made only of characters the loader reads back verbatim is written
+#   bare; anything else is double-quoted, because that is the only form whose
+#   escapes the loader expands. The double quote itself is left alone on
+#   purpose: the loader strips the outer pair by position rather than by
+#   parsing, and `printf '%b'` has no `\"` escape to undo.
+# @arg $1 string Value
+# @stdout The value, bare or double-quoted
+#######################################
+function __dybatpho_config_dotenv_value {
+  local value="${1-}"
+  if [[ -n "${value}" && "${value}" =~ ^[A-Za-z0-9_./:@%+=,-]+$ ]]; then
+    printf '%s' "${value}"
+    return 0
+  fi
+  value="${value//\\/\\\\}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\t'/\\t}"
+  value="${value//$'\r'/\\r}"
+  printf '"%s"' "${value}"
+}
+
+#######################################
+# @description Rewrite the named keys into a dotenv file.
+#   Every line that assigns one of the keys is replaced in place, so comments,
+#   blank lines, unrelated assignments, and the order of the file all survive.
+#   Keys the file does not mention are appended in the order they were given.
+# @arg $1 string Destination file, which is created when it does not exist
+# @arg $@ string Configuration keys to write
+# @exitcode 1 A key cannot be spelled as a dotenv name, or the write fails
+#######################################
+function __dybatpho_config_save_dotenv {
+  local file key line name rendered=""
+  local -A wanted=() seen=()
+  file="${1}"
+  shift
+  for key in "$@"; do
+    [[ "${key}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] \
+      || dybatpho::die "Cannot save configuration key to a dotenv file: ${key}"
+    wanted["${key}"]=1
+  done
+
+  if dybatpho::is file "${file}"; then
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+      name=""
+      if [[ "${line}" =~ ^[[:space:]]*([a-zA-Z_][a-zA-Z0-9_]*)[[:space:]]*= ]]; then
+        name="${BASH_REMATCH[1]}"
+      fi
+      # Every occurrence is rewritten, not just the first: a repeated key means
+      # the last assignment is the one the loader keeps, so leaving a stale
+      # copy behind would quietly undo the save.
+      if [[ -n "${name}" && -v "wanted[${name}]" ]]; then
+        rendered+="${name}=$(__dybatpho_config_dotenv_value "${DYBATPHO_CONFIG[${name}]}")"$'\n'
+        seen["${name}"]=1
+      else
+        rendered+="${line}"$'\n'
+      fi
+    done < "${file}" # kcov(skip)
+  fi
+
+  for key in "$@"; do
+    [[ -v "seen[${key}]" ]] && continue
+    rendered+="${key}=$(__dybatpho_config_dotenv_value "${DYBATPHO_CONFIG[${key}]}")"$'\n'
+  done
+  printf '%s' "${rendered}" | dybatpho::file_write_atomic "${file}"
+}
+
+#######################################
+# @description Rewrite the named keys into a JSON, YAML, or TOML file.
+#   Each key is assigned on its own rather than merged from a second document,
+#   which is what keeps the file's own comments, indentation, and block style:
+#   a node imported from JSON carries its flow style with it and reflows
+#   everything around it.
+#
+#   Values reach `jq` and `yq` through the environment, never through the
+#   command line, so a configured secret does not become world-readable in
+#   `/proc`. Only the declared schema makes a value a number or a boolean;
+#   without one it is written as a string.
+# @arg $1 string Format: `json`, `yaml`, or `toml`
+# @arg $2 string Destination file, which is created when it does not exist
+# @arg $@ string Configuration keys to write
+# @exitcode 1 `jq` or `yq` is missing, the file cannot be parsed, or the write fails
+#######################################
+function __dybatpho_config_save_structured {
+  local format file key value type expression="" separator="" literal rendered
+  local -a values=()
+  format="${1}"
+  file="${2}"
+  shift 2
+
+  for key in "$@"; do
+    value="${DYBATPHO_CONFIG[${key}]}"
+    type="$(__dybatpho_config_schema_attr "${key}" type string)"
+    literal=""
+    if [[ "${type}" == int && "${value}" =~ ^-?[0-9]+$ ]]; then
+      literal="${value}"
+    elif [[ "${type}" == bool ]]; then
+      # `dybatpho::is true` follows the shell's exit-code convention, where `0`
+      # is success. A configuration file means the opposite by `1` and `0`, so
+      # the mapping is spelled out here instead.
+      case "${value,,}" in
+        true | yes | on | 1) literal=true ;;
+        false | no | off | 0) literal=false ;;
+        *) literal="" ;;
+      esac
+    fi
+    if [[ -n "${literal}" ]]; then
+      expression+="${separator}.[\"${key}\"] = ${literal}"
+    elif [[ "${format}" == json ]]; then
+      expression+="${separator}.[\"${key}\"] = \$ENV.__DYBATPHO_CONFIG_SAVE_${#values[@]}"
+      values+=("${value}")
+    else
+      expression+="${separator}.[\"${key}\"] = strenv(__DYBATPHO_CONFIG_SAVE_${#values[@]})"
+      values+=("${value}")
+    fi
+    separator=" | "
+  done
+
+  # `dybatpho::die` inside the command substitution below would end that
+  # subshell alone, so the dependency is checked out here where a failure still
+  # stops the caller.
+  case "${format}" in
+    json) dybatpho::require jq ;;
+    *) dybatpho::require yq ;;
+  esac
+
+  rendered="$(
+    index=0
+    for value in ${values[@]+"${values[@]}"}; do
+      export "__DYBATPHO_CONFIG_SAVE_${index}=${value}"
+      index=$((index + 1))
+    done
+    case "${format}" in
+      json)
+        if dybatpho::is file "${file}"; then
+          jq "${expression}" "${file}"
+        else
+          printf '{}\n' | jq "${expression}"
+        fi
+        ;;
+      toml)
+        if dybatpho::is file "${file}"; then
+          yq -p toml -o toml "${expression}" "${file}"
+        else
+          printf '{}\n' | yq -p yaml -o toml "${expression}"
+        fi
+        ;;
+      *)
+        if dybatpho::is file "${file}"; then
+          yq -p yaml -o yaml "${expression}" "${file}"
+        else
+          printf '{}\n' | yq -p yaml -o yaml "${expression}"
+        fi
+        ;;
+    esac
+  )" || dybatpho::die "Cannot rewrite ${format} configuration: ${file}"
+  printf '%s\n' "${rendered}" | dybatpho::file_write_atomic "${file}"
+}
+
+#######################################
+# @description Write configuration values back to a file, in the format that
+#   file already uses. The extension selects the format, the file is created
+#   when it does not exist, and the rewrite is atomic, so a reader sees either
+#   the previous file or the complete new one.
+#
+#   A dotenv file keeps its comments, blank lines, and assignment order; JSON,
+#   YAML, and TOML are rewritten with `jq` and `yq`, which leaves the keys this
+#   call does not name untouched. A value is written as a number or a boolean
+#   only when `dybatpho::config_schema` declared it as `int` or `bool`;
+#   otherwise it is written as a string.
+# @example
+#   dybatpho::config_set PORT 9090
+#   dybatpho::config_save ./config.yaml PORT
+#
+# @example
+#   # Persist everything that is currently loaded.
+#   dybatpho::config_save "${HOME}/.config/app.env"
+#
+# @arg $1 string Destination file in dotenv, JSON, YAML, or TOML format
+# @arg $@ string Configuration keys to write, defaulting to every loaded key in name order
+# @env DRY_RUN string When true-like, report the write instead of performing it
+# @exitcode 1 A key is invalid or unset, the format is unsupported, or the write fails
+# @tip Name the keys explicitly when `dybatpho::config_env` was used, so an unrelated environment variable is not persisted along with them.
+#######################################
+function dybatpho::config_save {
+  local file key extension
+  dybatpho::expect_args file -- "$@"
+  shift
+  local -a keys=()
+  if (($#)); then
+    keys=("$@")
+  elif ((${#DYBATPHO_CONFIG[@]})); then
+    while IFS= read -r key; do
+      keys+=("${key}")
+    done < <(printf '%s\n' "${!DYBATPHO_CONFIG[@]}" | LC_ALL=C sort) # kcov(skip)
+  fi
+  ((${#keys[@]} > 0)) \
+    || dybatpho::die "${FUNCNAME[0]}: Expected at least one configuration key"
+
+  for key in "${keys[@]}"; do
+    [[ "${key}" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*$ ]] \
+      || dybatpho::die "Invalid configuration key: ${key}"
+    [[ -v "DYBATPHO_CONFIG[${key}]" ]] \
+      || dybatpho::die "Cannot save a configuration key that is not set: ${key}"
+  done
+
+  extension="${file##*.}"
+  case "${extension,,}" in
+    env | dotenv) __dybatpho_config_save_dotenv "${file}" "${keys[@]}" ;;
+    json) __dybatpho_config_save_structured json "${file}" "${keys[@]}" ;;
+    yaml | yml) __dybatpho_config_save_structured yaml "${file}" "${keys[@]}" ;;
+    toml) __dybatpho_config_save_structured toml "${file}" "${keys[@]}" ;;
+    *) dybatpho::die "Unsupported configuration format: ${file}" ;; # kcov(skip)
+  esac
 }
 
 #######################################

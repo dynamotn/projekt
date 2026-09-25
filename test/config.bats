@@ -64,7 +64,9 @@ setup() {
   printf '{}' > "${json_file}"
   printf '{}' > "${yaml_file}"
   stub jq ": printf 'PORT\\t8080\\nSHARED\\tfrom-json\\n'"
-  stub yq ": printf 'SHARED\\tfrom-yaml\\nHOST\\tlocalhost\\n'"
+  # `yq` is asked for the root tag before the entries, so a sequence or a
+  # scalar is rejected instead of being loaded under positional keys.
+  stub yq ": printf '!!map\\n'" ": printf 'SHARED\\tfrom-yaml\\nHOST\\tlocalhost\\n'"
 
   DYBATPHO_CONFIG=()
   dybatpho::config_load "${json_file}" "${yaml_file}"
@@ -327,4 +329,289 @@ setup() {
   run dybatpho::config_doc json
   assert_success
   assert_output "[]"
+}
+
+# The structured helpers below drive the real `jq` and `yq` rather than a stub.
+# A stub answers whatever the test wants, which is exactly how the loader
+# shipped a `jq`-only `if ... then ... else ... end` expression that no `yq`
+# release has ever been able to parse.
+require_tool() {
+  command -v "$1" > /dev/null 2>&1 || skip "$1 is not installed"
+}
+
+@test "config_set stores values and rejects invalid keys" {
+  DYBATPHO_CONFIG=()
+  dybatpho::config_set PORT 9090
+  assert_equal "$(dybatpho::config_get PORT)" "9090"
+  dybatpho::config_set PORT 9443
+  assert_equal "$(dybatpho::config_get PORT)" "9443"
+
+  run --separate-stderr dybatpho::config_set "bad key" value
+  assert_failure
+  assert_stderr --partial "Invalid configuration key"
+
+  run --separate-stderr dybatpho::config_set ONLY_A_KEY
+  assert_failure
+}
+
+@test "config_load --optional skips absent files and keeps the merge order" {
+  local base="${BATS_TEST_TMPDIR}/base.env"
+  local overlay="${BATS_TEST_TMPDIR}/overlay.env"
+  printf 'HOST=example.test\nPORT=80\n' > "${base}"
+  printf 'PORT=443\n' > "${overlay}"
+
+  DYBATPHO_CONFIG=()
+  dybatpho::config_load --optional "${base}" \
+    "${BATS_TEST_TMPDIR}/absent.env" "${overlay}"
+  assert_equal "$(dybatpho::config_get HOST)" "example.test"
+  assert_equal "$(dybatpho::config_get PORT)" "443"
+
+  # Without the flag the same missing file is still an error.
+  run --separate-stderr dybatpho::config_load "${BATS_TEST_TMPDIR}/absent.env"
+  assert_failure
+  assert_stderr --partial "Configuration file not found"
+
+  run --separate-stderr dybatpho::config_load --optional
+  assert_failure
+  assert_stderr --partial "Expected at least one configuration file"
+
+  # `--` ends the flags, so a file may be named like one.
+  run --separate-stderr dybatpho::config_load -- "${BATS_TEST_TMPDIR}/absent.env"
+  assert_failure
+  assert_stderr --partial "Configuration file not found"
+}
+
+@test "config_profile overlays the profile file beside the base file" {
+  local base="${BATS_TEST_TMPDIR}/config.env"
+  printf 'HOST=localhost\nPORT=8080\nMODE=dev\n' > "${base}"
+  printf 'PORT=443\nMODE=prod\n' > "${BATS_TEST_TMPDIR}/config.prod.env"
+
+  DYBATPHO_CONFIG=()
+  dybatpho::config_profile "${base}" prod
+  assert_equal "$(dybatpho::config_get HOST)" "localhost"
+  assert_equal "$(dybatpho::config_get PORT)" "443"
+  assert_equal "$(dybatpho::config_get MODE)" "prod"
+
+  # A profile with no file of its own leaves the base values in place.
+  DYBATPHO_CONFIG=()
+  dybatpho::config_profile "${base}" staging
+  assert_equal "$(dybatpho::config_get PORT)" "8080"
+
+  DYBATPHO_CONFIG=()
+  DYBATPHO_CONFIG_PROFILE=prod dybatpho::config_profile "${base}"
+  assert_equal "$(dybatpho::config_get MODE)" "prod"
+}
+
+@test "config_profile rejects a missing profile, a bad name, and an extensionless file" {
+  local base="${BATS_TEST_TMPDIR}/config.env"
+  printf 'HOST=localhost\n' > "${base}"
+
+  run --separate-stderr env -u DYBATPHO_CONFIG_PROFILE \
+    bash -c ". '${DYBATPHO_DIR}/init.sh' --modules config
+    dybatpho::config_profile '${base}'"
+  assert_failure
+  assert_stderr --partial "Expected a profile name or DYBATPHO_CONFIG_PROFILE"
+
+  run --separate-stderr dybatpho::config_profile "${base}" "../escape"
+  assert_failure
+  assert_stderr --partial "Invalid configuration profile"
+
+  printf 'HOST=localhost\n' > "${BATS_TEST_TMPDIR}/plainfile"
+  run --separate-stderr dybatpho::config_profile "${BATS_TEST_TMPDIR}/plainfile" prod
+  assert_failure
+  assert_stderr --partial "Configuration file has no extension"
+}
+
+@test "config_save rewrites a dotenv file in place and keeps everything else" {
+  local file="${BATS_TEST_TMPDIR}/app.env"
+  printf '%s\n' \
+    '# leading comment' \
+    'HOST=localhost' \
+    '' \
+    '# the port' \
+    'PORT=8080' \
+    'KEEP=untouched' \
+    'PORT=8081' > "${file}"
+
+  DYBATPHO_CONFIG=()
+  dybatpho::config_load "${file}"
+  dybatpho::config_set PORT 9090
+  dybatpho::config_set NOTE 'has spaces # and a hash'
+  dybatpho::config_set EMPTY ''
+  dybatpho::config_save "${file}" PORT NOTE EMPTY
+
+  # The whole file is compared rather than single lines, because the comments,
+  # the blank line, and the order are the point here. `run` drops blank lines
+  # from `lines`, so an index-based assertion would not see that one at all.
+  #
+  # Both assignments of the repeated key are rewritten: the loader keeps the
+  # last one, so leaving a stale copy behind would undo the save.
+  local expected="${BATS_TEST_TMPDIR}/expected.env"
+  printf '%s\n' \
+    '# leading comment' \
+    'HOST=localhost' \
+    '' \
+    '# the port' \
+    'PORT=9090' \
+    'KEEP=untouched' \
+    'PORT=9090' \
+    'NOTE="has spaces # and a hash"' \
+    'EMPTY=""' > "${expected}"
+  run diff -u "${expected}" "${file}"
+  assert_success
+
+  # What was written is what comes back.
+  DYBATPHO_CONFIG=()
+  dybatpho::config_load "${file}"
+  assert_equal "$(dybatpho::config_get PORT)" "9090"
+  assert_equal "$(dybatpho::config_get NOTE)" 'has spaces # and a hash'
+  assert_equal "$(dybatpho::config_get EMPTY)" ''
+  assert_equal "$(dybatpho::config_get KEEP)" "untouched"
+}
+
+@test "config_save round-trips values that need escaping and creates a missing file" {
+  local file="${BATS_TEST_TMPDIR}/created.env"
+  DYBATPHO_CONFIG=()
+  dybatpho::config_set MULTILINE $'first\tsecond\nthird'
+  dybatpho::config_set WINDOWS 'C:\path\to\thing'
+  dybatpho::config_set QUOTED 'say "hi"'
+  dybatpho::config_save "${file}" MULTILINE WINDOWS QUOTED
+
+  DYBATPHO_CONFIG=()
+  dybatpho::config_load "${file}"
+  assert_equal "$(dybatpho::config_get MULTILINE)" $'first\tsecond\nthird'
+  assert_equal "$(dybatpho::config_get WINDOWS)" 'C:\path\to\thing'
+  assert_equal "$(dybatpho::config_get QUOTED)" 'say "hi"'
+}
+
+@test "config_save defaults to every loaded key and honors DRY_RUN" {
+  local file="${BATS_TEST_TMPDIR}/all.env"
+  DYBATPHO_CONFIG=()
+  dybatpho::config_set BRAVO two
+  dybatpho::config_set ALPHA one
+  dybatpho::config_save "${file}"
+  run cat "${file}"
+  assert_line --index 0 'ALPHA=one'
+  assert_line --index 1 'BRAVO=two'
+
+  dybatpho::config_set ALPHA changed
+  DRY_RUN=true dybatpho::config_save "${file}" ALPHA
+  run cat "${file}"
+  assert_line --index 0 'ALPHA=one'
+}
+
+@test "config_save rejects unknown keys, unsupported formats, and non-dotenv names" {
+  DYBATPHO_CONFIG=()
+  run --separate-stderr dybatpho::config_save "${BATS_TEST_TMPDIR}/empty.env"
+  assert_failure
+  assert_stderr --partial "Expected at least one configuration key"
+
+  run --separate-stderr dybatpho::config_save "${BATS_TEST_TMPDIR}/a.env" ABSENT
+  assert_failure
+  assert_stderr --partial "Cannot save a configuration key that is not set"
+
+  run --separate-stderr dybatpho::config_save "${BATS_TEST_TMPDIR}/a.env" "bad key"
+  assert_failure
+  assert_stderr --partial "Invalid configuration key"
+
+  dybatpho::config_set VALUE set
+  run --separate-stderr dybatpho::config_save "${BATS_TEST_TMPDIR}/a.txt" VALUE
+  assert_failure
+  assert_stderr --partial "Unsupported configuration format"
+
+  # A dotted key is valid configuration but cannot be spelled as a shell name.
+  dybatpho::config_set "with.dot" set
+  run --separate-stderr dybatpho::config_save "${BATS_TEST_TMPDIR}/a.env" "with.dot"
+  assert_failure
+  assert_stderr --partial "Cannot save configuration key to a dotenv file"
+}
+
+@test "config_load reads TOML and rejects a non-mapping root" {
+  require_tool yq
+  local file="${BATS_TEST_TMPDIR}/app.toml"
+  printf '# a comment\nhost = "localhost"\nport = 8080\n' > "${file}"
+
+  DYBATPHO_CONFIG=()
+  dybatpho::config_load "${file}"
+  assert_equal "$(dybatpho::config_get host)" "localhost"
+  assert_equal "$(dybatpho::config_get port)" "8080"
+
+  local sequence="${BATS_TEST_TMPDIR}/sequence.yaml"
+  printf -- '- one\n- two\n' > "${sequence}"
+  run --separate-stderr dybatpho::config_load "${sequence}"
+  assert_failure
+  assert_stderr --partial "Invalid YAML configuration"
+
+  local malformed="${BATS_TEST_TMPDIR}/malformed.yaml"
+  printf 'key: [\n' > "${malformed}"
+  run --separate-stderr dybatpho::config_load "${malformed}"
+  assert_failure
+  assert_stderr --partial "Invalid YAML configuration"
+}
+
+@test "config_load reads a real YAML mapping" {
+  require_tool yq
+  local file="${BATS_TEST_TMPDIR}/settings.yaml"
+  printf '# comment\nhost: localhost\nport: 8080\n' > "${file}"
+
+  DYBATPHO_CONFIG=()
+  dybatpho::config_load "${file}"
+  assert_equal "$(dybatpho::config_get host)" "localhost"
+  assert_equal "$(dybatpho::config_get port)" "8080"
+}
+
+@test "config_save keeps YAML comments and writes schema types as scalars" {
+  require_tool yq
+  local file="${BATS_TEST_TMPDIR}/config.yaml"
+  printf '%s\n' '# service settings' 'host: localhost' 'port: 8080' \
+    'debug: false' > "${file}"
+
+  DYBATPHO_CONFIG=()
+  dybatpho::config_schema_reset
+  dybatpho::config_load "${file}"
+  dybatpho::config_schema port int
+  dybatpho::config_schema debug bool
+  dybatpho::config_set port 9090
+  dybatpho::config_set debug 1
+  dybatpho::config_set note 'a: literal string'
+  dybatpho::config_save "${file}" port debug note
+
+  run cat "${file}"
+  assert_line --index 0 '# service settings'
+  assert_line 'host: localhost'
+  # The schema is what makes these scalars rather than quoted strings.
+  assert_line 'port: 9090'
+  assert_line 'debug: true'
+  assert_line "note: 'a: literal string'"
+}
+
+@test "config_save rewrites JSON and TOML without disturbing other keys" {
+  require_tool jq
+  require_tool yq
+  local json_file="${BATS_TEST_TMPDIR}/settings.json"
+  printf '{"host":"localhost","port":8080}\n' > "${json_file}"
+
+  DYBATPHO_CONFIG=()
+  dybatpho::config_schema_reset
+  dybatpho::config_schema port int
+  dybatpho::config_set port 9090
+  dybatpho::config_set mode prod
+  dybatpho::config_save "${json_file}" port mode
+  assert_equal "$(jq -r '.host' "${json_file}")" "localhost"
+  assert_equal "$(jq -r '.port' "${json_file}")" "9090"
+  assert_equal "$(jq -r '.port | type' "${json_file}")" "number"
+  assert_equal "$(jq -r '.mode' "${json_file}")" "prod"
+
+  local toml_file="${BATS_TEST_TMPDIR}/settings.toml"
+  printf '# a comment\nhost = "localhost"\nport = 8080\n' > "${toml_file}"
+  dybatpho::config_save "${toml_file}" port mode
+  run cat "${toml_file}"
+  assert_line 'host = "localhost"'
+  assert_line 'port = 9090'
+  assert_line 'mode = "prod"'
+
+  # A file that is not there yet is created in the requested format.
+  local created="${BATS_TEST_TMPDIR}/created.json"
+  dybatpho::config_save "${created}" mode
+  assert_equal "$(jq -r '.mode' "${created}")" "prod"
 }

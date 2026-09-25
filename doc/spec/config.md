@@ -6,10 +6,16 @@
 
 ## Problem Statement *(mandatory)*
 
-Shell scripts need to combine dotenv, JSON, and YAML configuration without
-sourcing untrusted shell code or hand-writing precedence and validation logic.
-They also need a predictable way to overlay environment variables and expose
-the resulting values to shell commands.
+Shell scripts need to combine dotenv, JSON, YAML, and TOML configuration
+without sourcing untrusted shell code or hand-writing precedence and validation
+logic. They also need a predictable way to overlay environment variables and
+expose the resulting values to shell commands.
+
+Reading is only half of it. A script that changes a setting has to write it
+back, and a hand-rolled rewrite loses the comments, the ordering, and the
+structure the file already had. Deployments also layer a per-environment file
+on top of a shared one, where the overlay is frequently absent, so a loader
+that treats every missing file as fatal cannot express that shape.
 
 ## Business Value *(mandatory)*
 
@@ -18,6 +24,10 @@ the resulting values to shell commands.
 - Make required settings and optional defaults easy to validate.
 - Allow the same loaded configuration to be queried or exported for child
   processes.
+- Persist changed settings without destroying the comments and layout a
+  human maintains in the same file.
+- Express the common base-plus-profile overlay in one call, including the case
+  where the profile has no file of its own.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -129,12 +139,65 @@ reference in each supported format.
 3. **Given** an unsupported format, **When** `config_doc` runs, **Then** it
    fails with a diagnostic
 
+### User Story 7 - Overlay a profile on a base file (Priority: P1)
+
+As an operator, I want a base configuration file and an environment-specific
+overlay beside it so that one call selects the right settings per deployment.
+
+**Independent Test**: Load `config.env` with profile `prod` and verify the
+values from `config.prod.env` win, then repeat with a profile that has no file
+and verify the base values remain.
+
+**Acceptance Scenarios**:
+
+1. **Given** a base file and a sibling `<stem>.<profile>.<extension>` file,
+   **When** `config_profile` runs, **Then** the overlay values replace the base
+   values
+2. **Given** the profile file does not exist, **When** `config_profile` runs,
+   **Then** the base values load and no error is reported
+3. **Given** no profile argument, **When** `DYBATPHO_CONFIG_PROFILE` is set,
+   **Then** it names the profile, and without it the call fails
+4. **Given** a list of files where some may be absent, **When**
+   `config_load --optional` runs, **Then** the missing ones are skipped and the
+   present ones still merge left to right
+
+### User Story 8 - Write settings back to their file (Priority: P1)
+
+As a script author, I want to change a value and save it to the file it came
+from so that the file keeps the format, comments, and structure it already has.
+
+**Independent Test**: Load a commented dotenv file, change one key, save it,
+and verify the comments, blank lines, order, and untouched keys all survive.
+
+**Acceptance Scenarios**:
+
+1. **Given** a loaded configuration, **When** `config_set` runs, **Then** the
+   value joins the shared map and is visible to lookup, validation, and saving
+2. **Given** a dotenv file with comments and blank lines, **When**
+   `config_save` writes some of its keys, **Then** every other line is
+   preserved verbatim and keys the file lacks are appended
+3. **Given** a JSON, YAML, or TOML file, **When** `config_save` writes some of
+   its keys, **Then** the keys it does not name keep their values and the
+   document's own comments and layout survive
+4. **Given** a key declared as `int` or `bool`, **When** it is saved to a
+   structured file, **Then** it is written as a number or a boolean rather than
+   as a string
+5. **Given** a value that a dotenv file cannot carry bare, **When** it is
+   saved, **Then** it is quoted and escaped so that loading the file returns
+   the same value
+6. **Given** the destination does not exist, **When** `config_save` runs,
+   **Then** the file is created in the format its extension names
+
 ### Example Workflow
 
 ```bash
 # Layer files, then overlay the environment.
 dybatpho::config_load defaults.env production.yaml
+dybatpho::config_load --optional /etc/app.local.env
 dybatpho::config_env APP_
+
+# Or let a profile name the overlay: config.yaml, then config.prod.yaml.
+dybatpho::config_profile ./config.yaml prod
 
 # Declare the contract, then enforce it once.
 dybatpho::config_schema HOST url required:true description:"API base URL"
@@ -146,6 +209,10 @@ dybatpho::config_validate
 host="$(dybatpho::config_get HOST)"
 dybatpho::config_export
 dybatpho::config_doc markdown "App settings" > CONFIGURATION.md
+
+# Change a value and write it back, keeping the file's comments and layout.
+dybatpho::config_set PORT 9090
+dybatpho::config_save ./config.yaml PORT
 ```
 
 ## Edge Cases
@@ -172,6 +239,21 @@ dybatpho::config_doc markdown "App settings" > CONFIGURATION.md
 - An enum value is not included in its comma-separated choices.
 - Several keys fail at once and must all be reported.
 - Documentation is requested for an empty schema or an unsupported format.
+- An optional file is absent, so the merge must continue rather than fail.
+- A file is named like an option, so `--` has to end the flag list.
+- A profile is requested with no name, with a name that is not a bare word, or
+  for a base file that has no extension.
+- A profile overlay file does not exist beside its base file.
+- A save is asked for a key that is not set, for a key a dotenv file cannot
+  spell, or for a file whose extension names no supported format.
+- A save names no keys at all, so every loaded key is written.
+- A dotenv file assigns the same key twice, so every occurrence has to be
+  rewritten rather than only the first.
+- A saved value is empty, holds a `#`, whitespace, a backslash, a quote, or a
+  newline, and must survive the round trip.
+- A structured root is a sequence or a scalar rather than a mapping, which must
+  be rejected instead of loaded under positional keys.
+- `DRY_RUN` is set, so a save reports the write instead of performing it.
 
 ## Requirements *(mandatory)*
 
@@ -179,15 +261,16 @@ dybatpho::config_doc markdown "App settings" > CONFIGURATION.md
 
 - **FR-001**: The module MUST maintain a shared key/value configuration map.
 - **FR-002**: `config_load` MUST require at least one file and support `.env`,
-  `.dotenv`, `.json`, `.yaml`, and `.yml` files.
+  `.dotenv`, `.json`, `.yaml`, `.yml`, and `.toml` files.
 - **FR-003**: Configuration files MUST be applied from left to right, with
   later files taking precedence.
 - **FR-004**: Dotenv loading MUST parse comments, whitespace, single quotes,
   double quotes, and escaped double-quoted values without sourcing the file.
 - **FR-005**: JSON loading MUST use `jq`, require an object root, and reject
   malformed data or invalid keys.
-- **FR-006**: YAML loading MUST use the supported `yq` interface, require a
-  mapping root, and reject malformed data or invalid keys.
+- **FR-006**: YAML and TOML loading MUST use the supported `yq` interface,
+  determine the root's tag before reading entries, require a mapping root, and
+  reject malformed data or invalid keys.
 - **FR-007**: Configuration keys MUST match
   `[a-zA-Z_][a-zA-Z0-9_.-]*`.
 - **FR-008**: `config_env` MUST import all variables matching an optional
@@ -215,6 +298,31 @@ dybatpho::config_doc markdown "App settings" > CONFIGURATION.md
   `config_schema_reset` MUST forget every declared schema.
 - **FR-019**: `config_doc` MUST render the declared schema in declaration order
   as `markdown`, `text`, or `json`, and MUST reject other formats.
+- **FR-020**: `config_load` MUST accept a leading `--optional` that skips files
+  that do not exist, and a `--` that ends the flag list.
+- **FR-021**: `config_profile` MUST load a base file and then, optionally, the
+  sibling file whose name inserts the profile before the base extension.
+- **FR-022**: `config_profile` MUST take the profile from its second argument
+  or from `DYBATPHO_CONFIG_PROFILE`, and MUST reject an empty profile, a
+  profile that is not a bare word, and a base file with no extension.
+- **FR-023**: `config_set` MUST store a validated key and value in the shared
+  configuration map.
+- **FR-024**: `config_save` MUST write the named keys, or every loaded key when
+  none are named, to a file whose extension selects the format, MUST create the
+  file when it is absent, MUST write atomically, and MUST honor `DRY_RUN`.
+- **FR-025**: Saving to a dotenv file MUST rewrite every assignment of a named
+  key in place, preserve every other line verbatim, append keys the file does
+  not mention, and quote and escape values the loader could not otherwise read
+  back unchanged.
+- **FR-026**: Saving to a JSON, YAML, or TOML file MUST assign each key through
+  `jq` or `yq` so that unnamed keys and the document's own comments and layout
+  survive, and MUST pass values through the environment rather than the command
+  line.
+- **FR-027**: A saved value MUST be written as a number or a boolean when its
+  schema declares `int` or `bool` and the value matches that type, and as a
+  string otherwise.
+- **FR-028**: `config_save` MUST reject a key that is not set, a key a dotenv
+  file cannot spell, an unsupported format, and an empty key list.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -231,6 +339,8 @@ dybatpho::config_doc markdown "App settings" > CONFIGURATION.md
   `DYBATPHO_CONFIG_SCHEMA`, ordered by `DYBATPHO_CONFIG_SCHEMA_KEYS`.
 - **Validation Report**: The `DYBATPHO_CONFIG_ERRORS` array holding one
   key-specific message per violation from the last validation run.
+- **Profile Overlay**: The sibling file whose name inserts a profile before the
+  base file's extension, loaded after the base file and allowed to be absent.
 
 ## Success Criteria *(mandatory)*
 
@@ -247,6 +357,12 @@ dybatpho::config_doc markdown "App settings" > CONFIGURATION.md
   operator does not need repeated runs to find all problems.
 - **SC-007**: The published configuration reference is generated from the same
   schema that validation enforces, so the two cannot drift.
+- **SC-008**: A per-environment overlay needs one call, and works unchanged on
+  a machine that has no file for that environment.
+- **SC-009**: A setting can be changed and written back without a hand-rolled
+  rewrite, and the file a human maintains comes back with its comments,
+  ordering, and structure intact.
+- **SC-010**: A value written to a file is the value the next load returns.
 
 ## Integration Tests *(mandatory)*
 
@@ -268,6 +384,25 @@ dybatpho::config_doc markdown "App settings" > CONFIGURATION.md
 - **IT-010**: Fail several keys at once and verify each is reported by name.
 - **IT-011**: Render the schema as Markdown, text, and JSON, and reject an
   unsupported format.
+- **IT-012**: Set values through `config_set` and reject an invalid key.
+- **IT-013**: Merge files with `--optional`, skipping the absent ones, and
+  verify that the same file is still an error without the flag.
+- **IT-014**: Overlay a profile file, fall back to the base when the profile
+  has no file, read the profile from `DYBATPHO_CONFIG_PROFILE`, and reject a
+  missing profile, an invalid name, and an extensionless base file.
+- **IT-015**: Rewrite a commented dotenv file in place and verify the comments,
+  the blank line, the order, the untouched keys, and both assignments of a
+  repeated key.
+- **IT-016**: Round-trip values holding whitespace, a `#`, a backslash, a
+  quote, a tab, and a newline, and create a file that did not exist.
+- **IT-017**: Save every loaded key when none are named, and verify `DRY_RUN`
+  leaves the file untouched.
+- **IT-018**: Reject an unset key, an invalid key, an unsupported format, and a
+  key a dotenv file cannot spell.
+- **IT-019**: Load a real TOML mapping and a real YAML mapping, and reject a
+  sequence root and a malformed document.
+- **IT-020**: Save to real YAML, JSON, and TOML files and verify the comments,
+  the untouched keys, and the number and boolean scalars the schema selects.
 
 ## Acceptance Criteria *(mandatory)*
 
@@ -276,3 +411,5 @@ dybatpho::config_doc markdown "App settings" > CONFIGURATION.md
 2. File, environment, lookup, validation, and export workflows use one shared
    precedence model.
 3. Failures identify the invalid file, key, prefix, or missing requirement.
+4. Writing a file preserves everything the call was not asked to change, and a
+   value written is the value the next load returns.
