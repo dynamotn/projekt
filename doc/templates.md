@@ -568,6 +568,22 @@ $EDITOR (t path go-cli)          # fish
 $EDITOR "$(t path go-cli)"       # bash
 ```
 
+Tab completion knows what a template asks for, so the values do not have to be
+remembered either:
+
+```console
+$ t new invoice ./INV-001.md --set <TAB>
+number=    Invoice number        currency=  choice [EUR]
+from=      Who is invoicing      netDays=   Payment terms, in days [14]
+$ t new invoice ./INV-001.md --set currency=<TAB>
+EUR  USD  GBP  VND
+```
+
+The keys come from the template's `.vars.yaml`, or from the `.Values` keys read
+out of the template itself; a `choice` and a `bool` complete their answers too.
+It works the same on `t apply`, `b new` and `b apply` — and on `t apply` with
+no template named, the keys come from what the project records.
+
 `t list` shows what the store holds and `t show <template>` prints the source
 of one, a folder template file by file. To see what a template will ask for,
 run it with `-i --dry-run`. The examples folder is the other way in:

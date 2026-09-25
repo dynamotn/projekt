@@ -89,7 +89,7 @@ func applyCommand(out io.Writer, diff bool) *cobra.Command {
 		Long:              long,
 		Args:              cobra.ArbitraryArgs,
 		Aliases:           aliases,
-		ValidArgsFunction: completeTemplateNames,
+		ValidArgsFunction: completeMoreTemplateNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			for _, name := range args {
 				tpl, err := tplutil.Get(name)
@@ -129,6 +129,8 @@ func applyCommand(out io.Writer, diff bool) *cobra.Command {
 	f.BoolVarP(&interactive, "interactive", "i", false, "Ask for the values the template needs")
 	f.BoolVar(&namesOnly, "name-only", false, "Print the paths alone, one per line")
 	f.IntVarP(&context, "unified", "U", 3, "Lines of context around each change")
+	registerValueCompletion(cmd, completeSetKeys)
+
 	if !diff {
 		f.BoolVarP(&o.Force, "force", "F", false, "Rewrite the files that were edited by hand too")
 		f.BoolVar(&o.Prune, "prune", false, "Delete the files the template no longer writes")
