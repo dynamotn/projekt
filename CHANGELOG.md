@@ -9,6 +9,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`process` — a general time limit, named background jobs, and PID files.**
+  The library could bound a curl request and nothing else, so every script that
+  needed a command not to hang reached for the `timeout` binary — which a stock
+  macOS does not ship, and which cannot run a shell function because it
+  executes a program.
+
+  ```sh
+  dybatpho::run_with_timeout 30 ./deploy.sh   # 124 when it overran
+  dybatpho::run_with_timeout 5 my_function    # a function works too
+
+  dybatpho::trap dybatpho::kill_children EXIT INT TERM
+  dybatpho::background_run api ./serve.sh --port 8080
+  dybatpho::background_run worker ./worker.sh
+  dybatpho::wait_all \
+    || dybatpho::die "worker exited $(dybatpho::background_status worker)"
+
+  dybatpho::pid_file_is_running /var/run/app.pid && dybatpho::die "Already running"
+  dybatpho::pid_file_write /var/run/app.pid
+  dybatpho::trap 'dybatpho::pid_file_remove /var/run/app.pid' EXIT
+  ```
+
+  `dybatpho::run_with_timeout` uses the system `timeout` when it is there and
+  usable, and a Bash watchdog when it is not, so the behaviour is the same on a
+  machine with no coreutils. A shell function always takes the Bash path. The
+  watchdog records that it fired in a marker file rather than reading the exit
+  status, because a command killed by SIGTERM and a command that chose to exit
+  143 look identical and only the first is a timeout. The limit is enforced
+  with SIGTERM and then SIGKILL after `DYBATPHO_TIMEOUT_KILL_AFTER` seconds, so
+  a job that cleans up on SIGTERM still gets to, and one that ignores it still
+  goes.
+
+  Timed and background commands run under job control, leading their own
+  process group, so ending one ends what it started — otherwise a "killed"
+  build leaves its compiler running. A job that does not lead its own group is
+  never signalled as a group, because that group is the calling script's.
+
+  `dybatpho::wait_all` records each job's exit code under its name instead of
+  collapsing them: `wait` reports only one status, so a script that started
+  three jobs could not say which of them failed. `dybatpho::background_run`
+  refuses a name whose job is still running rather than forgetting the first
+  one.
+
+  `dybatpho::pid_file_write` stages the file and moves it into place, so a
+  reader never sees the empty file that makes a supervisor believe a healthy
+  service is dead. `dybatpho::pid_file_is_running` answers "nothing is running"
+  for a missing, empty, malformed, or stale file alike, since that is the one
+  thing callers act on, and `dybatpho::pid_file_remove` refuses to delete a PID
+  file that records a different process — the guard that stops an exiting
+  service from removing the PID file its replacement just wrote.
+
 - **`helpers` — asking the library about itself, from the running shell.** The
   library documents itself in `doc/`, which answers the question while you are
   reading it. It does not answer it while you are writing: at a prompt, or

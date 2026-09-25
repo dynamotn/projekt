@@ -277,3 +277,293 @@ SCRIPT
   run dybatpho::dry_run touch "${test_file}"
   assert_failure
 }
+
+# --- dybatpho::run_with_timeout -------------------------------------------
+
+@test "dybatpho::run_with_timeout returns the command's own exit code when it finishes in time" {
+  local status=0
+  run_traced dybatpho::run_with_timeout 5 bash -c 'printf "in time\n"; exit 0'
+  assert_success
+  assert_output "in time"
+
+  status=0
+  dybatpho::run_with_timeout 5 bash -c 'exit 3' || status=$?
+  assert_equal "${status}" 3
+}
+
+@test "dybatpho::run_with_timeout reports 124 when the command outlives the limit" {
+  local status=0
+  dybatpho::run_with_timeout 1 sleep 30 || status=$?
+  assert_equal "${status}" 124
+}
+
+@test "dybatpho::run_with_timeout runs a shell function, which the timeout binary cannot" {
+  # `timeout` executes a program, so it can never see a function the caller
+  # defined; the Bash watchdog is what makes this work.
+  __dybatpho_test_slow() { sleep 30; }
+  __dybatpho_test_quick() { printf 'called with %s\n' "$1"; }
+
+  local status=0
+  dybatpho::run_with_timeout 1 __dybatpho_test_slow || status=$?
+  assert_equal "${status}" 124
+
+  run_traced dybatpho::run_with_timeout 5 __dybatpho_test_quick argument
+  assert_success
+  assert_output "called with argument"
+}
+
+@test "dybatpho::run_with_timeout without the timeout binary behaves the same" {
+  # The fallback is the path macOS takes by default, where coreutils is absent,
+  # so it is exercised explicitly rather than left to the runner's toolbox.
+  __dybatpho_process_timeout_probe=no
+
+  local status=0
+  dybatpho::run_with_timeout 1 sleep 30 || status=$?
+  assert_equal "${status}" 124
+
+  run_traced dybatpho::run_with_timeout 5 bash -c 'printf "fallback\n"'
+  assert_success
+  assert_output "fallback"
+
+  status=0
+  dybatpho::run_with_timeout 5 bash -c 'exit 7' || status=$?
+  assert_equal "${status}" 7
+}
+
+@test "dybatpho::run_with_timeout does not mistake exit code 143 for a timeout" {
+  # A command that chooses to exit 143 looks exactly like one killed by
+  # SIGTERM, which is why the watchdog reports a timeout through a marker file
+  # rather than through the exit status.
+  __dybatpho_process_timeout_probe=no
+  local status=0
+  dybatpho::run_with_timeout 5 bash -c 'exit 143' || status=$?
+  assert_equal "${status}" 143
+}
+
+@test "dybatpho::run_with_timeout ends the processes the command started" {
+  # Ending the job alone would orphan its children, which is how a "killed"
+  # build leaves a compiler running.
+  __dybatpho_process_timeout_probe=no
+  local pid_file="${BATS_TEST_TMPDIR}/grandchild.pid"
+  __dybatpho_test_nest() {
+    bash -c "printf '%s\n' \"\$\$\" > '${pid_file}'; sleep 30" &
+    wait
+  }
+
+  local status=0
+  dybatpho::run_with_timeout 1 __dybatpho_test_nest || status=$?
+  assert_equal "${status}" 124
+
+  local grandchild
+  grandchild="$(< "${pid_file}")"
+  # The kill is asynchronous, so give it a moment before asking.
+  sleep 1
+  run kill -0 "${grandchild}"
+  assert_failure
+}
+
+@test "dybatpho::run_with_timeout with a limit of 0 runs without a limit" {
+  run_traced dybatpho::run_with_timeout 0 bash -c 'printf "unbounded\n"'
+  assert_success
+  assert_output "unbounded"
+}
+
+@test "dybatpho::run_with_timeout rejects a limit that is not a number and a missing command" {
+  run dybatpho::run_with_timeout abc true
+  assert_failure
+  assert_output --partial "non-negative integer"
+
+  run dybatpho::run_with_timeout 5
+  assert_failure
+  assert_output --partial "Expected: seconds command"
+
+  DYBATPHO_TIMEOUT_KILL_AFTER="soon" run dybatpho::run_with_timeout 5 true
+  assert_failure
+  assert_output --partial "DYBATPHO_TIMEOUT_KILL_AFTER"
+}
+
+# --- background jobs ------------------------------------------------------
+
+@test "dybatpho::background_run records a job that dybatpho::wait_all reaps by name" {
+  __dybatpho_test_ok() { return 0; }
+  __dybatpho_test_bad() { return 4; }
+
+  dybatpho::background_run first __dybatpho_test_ok
+  dybatpho::background_run second __dybatpho_test_bad
+
+  run_traced dybatpho::background_pid first
+  assert_success
+  assert_output --regexp '^[0-9]+$'
+
+  # An exit code exists only once the job has been waited for.
+  run dybatpho::background_status first
+  assert_failure
+
+  local status=0
+  dybatpho::wait_all || status=$?
+  assert_equal "${status}" 1
+
+  run_traced dybatpho::background_status first
+  assert_output "0"
+  run_traced dybatpho::background_status second
+  assert_output "4"
+}
+
+@test "dybatpho::wait_all succeeds when every job succeeded and when there are none" {
+  local status=0
+  dybatpho::wait_all || status=$?
+  assert_equal "${status}" 0
+
+  __dybatpho_test_ok() { return 0; }
+  dybatpho::background_run only __dybatpho_test_ok
+  status=0
+  dybatpho::wait_all || status=$?
+  assert_equal "${status}" 0
+}
+
+@test "dybatpho::background_pid and dybatpho::background_status fail for an unknown job" {
+  run dybatpho::background_pid nosuch
+  assert_failure
+  refute_output
+  run dybatpho::background_status nosuch
+  assert_failure
+  refute_output
+}
+
+@test "dybatpho::background_run refuses an invalid name, a missing command and a running duplicate" {
+  run dybatpho::background_run '1bad' true
+  assert_failure
+  assert_output --partial "Invalid job name"
+
+  run dybatpho::background_run lonely
+  assert_failure
+  assert_output --partial "Expected: name command"
+
+  dybatpho::background_run busy sleep 30
+  run dybatpho::background_run busy sleep 30
+  assert_failure
+  assert_output --partial "already running"
+  dybatpho::kill_children
+}
+
+@test "dybatpho::background_run reuses a name once its job has been reaped" {
+  __dybatpho_test_ok() { return 0; }
+  dybatpho::background_run again __dybatpho_test_ok
+  dybatpho::wait_all
+  dybatpho::background_run again __dybatpho_test_ok
+  dybatpho::wait_all
+  # The name keeps its single place in the order rather than being listed twice.
+  assert_equal "${#DYBATPHO_BACKGROUND_NAMES[@]}" 1
+  run_traced dybatpho::background_status again
+  assert_output "0"
+}
+
+@test "dybatpho::kill_children ends every background job and empties the registry" {
+  dybatpho::background_run sleeper sleep 30
+  local pid
+  pid="$(dybatpho::background_pid sleeper)"
+
+  dybatpho::kill_children
+  assert_equal "${#DYBATPHO_BACKGROUND_NAMES[@]}" 0
+  assert_equal "${#DYBATPHO_BACKGROUND_PIDS[@]}" 0
+
+  run kill -0 "${pid}"
+  assert_failure
+}
+
+@test "dybatpho::kill_children ends the processes a background job started" {
+  local pid_file="${BATS_TEST_TMPDIR}/bg_grandchild.pid"
+  __dybatpho_test_nest() {
+    bash -c "printf '%s\n' \"\$\$\" > '${pid_file}'; sleep 30" &
+    wait
+  }
+  dybatpho::background_run nested __dybatpho_test_nest
+  # Wait for the grandchild to record itself before ending the job.
+  local waited=0
+  while [[ ! -s "${pid_file}" ]] && ((waited < 5)); do
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  dybatpho::kill_children
+  sleep 1
+  run kill -0 "$(< "${pid_file}")"
+  assert_failure
+}
+
+@test "dybatpho::kill_children is safe to call when no job was ever started" {
+  run dybatpho::kill_children
+  assert_success
+  refute_output
+}
+
+# --- PID files ------------------------------------------------------------
+
+@test "dybatpho::pid_file_write records a process id, creating the directory it needs" {
+  local pid_file="${BATS_TEST_TMPDIR}/run/app.pid"
+  dybatpho::pid_file_write "${pid_file}"
+  assert_file_exist "${pid_file}"
+  assert_equal "$(< "${pid_file}")" "$$"
+
+  dybatpho::pid_file_write "${pid_file}" 4242
+  assert_equal "$(< "${pid_file}")" "4242"
+  # The staging file used for the atomic move must not be left behind.
+  run bash -c "ls '${BATS_TEST_TMPDIR}/run' | grep -c tmp"
+  assert_output "0"
+}
+
+@test "dybatpho::pid_file_write rejects something that is not a process id" {
+  run dybatpho::pid_file_write "${BATS_TEST_TMPDIR}/bad.pid" "not-a-pid"
+  assert_failure
+  assert_output --partial "positive integer"
+}
+
+@test "dybatpho::pid_file_is_running answers for a live, a dead, a malformed and a missing file" {
+  local pid_file="${BATS_TEST_TMPDIR}/state.pid"
+
+  dybatpho::pid_file_write "${pid_file}"
+  run dybatpho::pid_file_is_running "${pid_file}"
+  assert_success
+
+  # A process id that is valid but has long since exited.
+  printf '%s\n' "99999999" > "${pid_file}"
+  run dybatpho::pid_file_is_running "${pid_file}"
+  assert_failure
+
+  printf '%s\n' "garbage" > "${pid_file}"
+  run dybatpho::pid_file_is_running "${pid_file}"
+  assert_failure
+
+  : > "${pid_file}"
+  run dybatpho::pid_file_is_running "${pid_file}"
+  assert_failure
+
+  run dybatpho::pid_file_is_running "${BATS_TEST_TMPDIR}/absent.pid"
+  assert_failure
+}
+
+@test "dybatpho::pid_file_is_running tolerates the padding a foreign PID file may carry" {
+  local pid_file="${BATS_TEST_TMPDIR}/padded.pid"
+  printf ' %s \n' "$$" > "${pid_file}"
+  run dybatpho::pid_file_is_running "${pid_file}"
+  assert_success
+}
+
+@test "dybatpho::pid_file_remove leaves a file that records another process alone" {
+  local pid_file="${BATS_TEST_TMPDIR}/owned.pid"
+  dybatpho::pid_file_write "${pid_file}" 4242
+
+  # The guard is what stops an exiting service from deleting the PID file its
+  # replacement has already written.
+  run dybatpho::pid_file_remove "${pid_file}"
+  assert_failure
+  assert_file_exist "${pid_file}"
+
+  run dybatpho::pid_file_remove "${pid_file}" 4242
+  assert_success
+  assert_file_not_exist "${pid_file}"
+
+  # Removing a file that is already gone is not a failure.
+  run dybatpho::pid_file_remove "${pid_file}"
+  assert_success
+}

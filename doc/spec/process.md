@@ -1,4 +1,4 @@
-# Feature Specification: Process Lifecycle, Traps, Cleanup, and Dry Run
+# Feature Specification: Process Lifecycle, Traps, Cleanup, Dry Run, Timeouts, Background Jobs, and PID Files
 
 **Feature Branch**: `[reverse-spec-process]`
 **Status**: Implemented
@@ -7,6 +7,8 @@
 ## Problem Statement *(mandatory)*
 
 Operational shell scripts need predictable exit behavior, signal handling, composable traps, deferred cleanup, and safe dry-run execution. Without a shared module, these concerns are typically reimplemented poorly and inconsistently.
+
+They also need to bound how long a command may run, to start and supervise several long-running commands at once, and to record which process is serving so a second copy is not started. Until now the library only bounded a curl request, so every script that needed a general time limit reached for the `timeout` binary — which is absent on a stock macOS and cannot run a shell function — and hand-rolled its own process bookkeeping.
 
 ## Business Value *(mandatory)*
 
@@ -48,6 +50,81 @@ As an operator, I want files and directories removed on shell exit so that tempo
 
 ---
 
+### User Story 3 - Bound how long a command may run (Priority: P1)
+
+As a script author, I want any command to be ended once it overruns a time
+limit so that an automation run cannot hang forever on a wedged network call,
+build, or deploy.
+
+**Why this priority**: An unbounded command is the usual cause of a CI job that
+has to be cancelled by hand, and of a cron run that overlaps the next one.
+
+**Independent Test**: Run a command that sleeps past its limit and verify it is
+ended and reported as a timeout, while a command that finishes in time keeps
+its own exit code.
+
+**Acceptance Scenarios**:
+
+1. **Given** a command that outlives its limit, **When** it is run under the
+   time limit, **Then** it is ended and the caller sees exit code 124
+2. **Given** a command that finishes in time, **When** it is run under the time
+   limit, **Then** the caller sees the command's own exit code and output
+3. **Given** the `timeout` binary is missing or unusable, **When** a command is
+   run under a time limit, **Then** the behaviour is unchanged
+4. **Given** a shell function rather than a program, **When** it is run under a
+   time limit, **Then** it runs and is bounded like any other command
+
+---
+
+### User Story 4 - Run and supervise several background jobs (Priority: P2)
+
+As a script author, I want to start long-running commands under a name, wait
+for all of them, and learn which one failed, so that a script can run a server
+and a worker side by side without losing either job's exit code.
+
+**Why this priority**: `wait` on its own reports only one status, so a script
+that starts several jobs cannot say which of them failed.
+
+**Independent Test**: Start one succeeding and one failing job, wait for both,
+and verify each job's exit code is reported under its own name.
+
+**Acceptance Scenarios**:
+
+1. **Given** several named background jobs, **When** they are all waited for,
+   **Then** each job's exit code is available under its name and the wait fails
+   when any job failed
+2. **Given** a background job that started processes of its own, **When** the
+   jobs are ended, **Then** those processes are ended with it rather than
+   orphaned
+3. **Given** a name whose job is still running, **When** the same name is
+   started again, **Then** the request is refused instead of losing the first
+   job
+
+---
+
+### User Story 5 - Record and check a PID file (Priority: P2)
+
+As an operator, I want a script to record its process ID and to check whether a
+recorded process is still alive, so that a service is not started twice and a
+PID file left behind by a crash does not block a restart.
+
+**Why this priority**: A half-written or stale PID file is what makes a
+supervisor either start a second copy or refuse to start at all.
+
+**Independent Test**: Write a PID file, verify it reads as running, replace it
+with a process ID that has exited, and verify it reads as not running.
+
+**Acceptance Scenarios**:
+
+1. **Given** a PID file recording a live process, **When** it is checked,
+   **Then** it reads as running
+2. **Given** a PID file that is missing, empty, malformed, or records a process
+   that has exited, **When** it is checked, **Then** it reads as not running
+3. **Given** a PID file that records another process, **When** removal is
+   requested for this process, **Then** the file is left alone
+
+---
+
 ### Example Workflow
 
 ```bash
@@ -62,6 +139,22 @@ dybatpho::trap 'dybatpho::warn "Interrupted, rolling back"; ./rollback.sh' INT T
 dybatpho::dry_run "rsync -a ${workdir}/ /srv/app/"
 
 [[ -f "${workdir}/manifest" ]] || dybatpho::die "Build produced no manifest" 2
+
+# Nothing may hang the run: 120 seconds, then SIGTERM and SIGKILL.
+dybatpho::run_with_timeout 120 ./integration-tests.sh \
+  || (($? == 124)) && dybatpho::die "Integration tests did not finish in 120s"
+
+# Two long-running jobs, each reported under its own name.
+dybatpho::trap dybatpho::kill_children EXIT INT TERM
+dybatpho::background_run api ./serve.sh --port 8080
+dybatpho::background_run worker ./worker.sh
+dybatpho::wait_all \
+  || dybatpho::die "worker exited $(dybatpho::background_status worker)"
+
+# One copy at a time.
+dybatpho::pid_file_is_running /var/run/app.pid && dybatpho::die "Already running"
+dybatpho::pid_file_write /var/run/app.pid
+dybatpho::trap 'dybatpho::pid_file_remove /var/run/app.pid' EXIT
 ```
 
 ## Edge Cases
@@ -72,6 +165,21 @@ dybatpho::dry_run "rsync -a ${workdir}/ /srv/app/"
   arguments (executed directly).
 - Cleanup registration runs under normal scripts and Bats test environments.
 - An existing trap must be preserved when cleanup or another handler is added.
+- The `timeout` binary is absent, or present but rejects `-k`.
+- A timed command is a shell function, which no external program can execute.
+- A timed command exits with 143 of its own accord, which is indistinguishable
+  from being killed by SIGTERM unless the timeout is recorded separately.
+- A timed or background command started processes of its own, which must not be
+  orphaned when it is ended.
+- A timed or background command ignores SIGTERM and has to be sent SIGKILL.
+- A time limit of `0` means no limit.
+- A background job name is started again after its previous job was reaped, or
+  while that job is still running.
+- `dybatpho::wait_all` and `dybatpho::kill_children` are called when no job was
+  ever started.
+- A PID file is missing, unreadable, empty, malformed, padded with whitespace by
+  another tool, or records a process that has exited.
+- A PID file is removed by a process other than the one it records.
 
 ## Requirements *(mandatory)*
 
@@ -90,6 +198,29 @@ dybatpho::dry_run "rsync -a ${workdir}/ /srv/app/"
 - **FR-009**: Signal handlers MUST return 130 for SIGINT and 143 for SIGTERM.
 - **FR-010**: Cleanup registration MUST append to existing traps and remove
   registered files or directories on EXIT, HUP, INT, or TERM.
+- **FR-011**: The module MUST provide a general time limit for any command,
+  reporting exit code 124 when the limit elapses and the command's own exit
+  code otherwise.
+- **FR-012**: The time limit MUST work without the `timeout` binary, and MUST
+  accept a shell function as the command.
+- **FR-013**: A timed command MUST be sent SIGTERM first and SIGKILL after
+  `DYBATPHO_TIMEOUT_KILL_AFTER` seconds, and the processes it started MUST be
+  ended with it.
+- **FR-014**: A time limit of `0` MUST run the command without a limit, and a
+  limit that is not a non-negative integer MUST stop the script.
+- **FR-015**: The module MUST provide named background jobs, recording each
+  job's process ID and refusing to start a name whose job is still running.
+- **FR-016**: Waiting for the background jobs MUST record each job's exit code
+  under its name and MUST fail when any job failed.
+- **FR-017**: Ending the background jobs MUST also end the processes those jobs
+  started, MUST reap them, and MUST empty the registry so the names can be
+  reused.
+- **FR-018**: PID file writes MUST be atomic, MUST default to the current
+  script's `$$`, and MUST create the directory the file lives in.
+- **FR-019**: A PID file check MUST report "not running" for a missing,
+  unreadable, empty, or malformed file and for a process that has exited.
+- **FR-020**: PID file removal MUST leave a file that records a different
+  process alone, and MUST succeed when the file is already gone.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -97,6 +228,12 @@ dybatpho::dry_run "rsync -a ${workdir}/ /srv/app/"
 - **Deferred Cleanup Target**: A file or directory scheduled for removal when the owning shell exits.
 - **Dry-Run Command**: A command represented as a shell string or argument
   vector and optionally printed instead of run.
+- **Timed Command**: A command with a limit in seconds, ended with SIGTERM and
+  then SIGKILL once the limit elapses.
+- **Background Job**: A named command running in a subshell of the caller, with
+  a process ID while it runs and an exit code once it has been reaped.
+- **PID File**: A file holding the process ID of the script that owns a
+  resource, used to answer whether that process is still running.
 
 ## Success Criteria *(mandatory)*
 
@@ -107,6 +244,12 @@ dybatpho::dry_run "rsync -a ${workdir}/ /srv/app/"
 - **SC-003**: Operators can preview command execution safely when dry-run mode is enabled.
 - **SC-004**: Existing trap behavior is retained when dybatpho handlers and
   cleanup actions are registered.
+- **SC-005**: No command run through the module can hang a script for longer
+  than its stated limit, on any platform, with or without coreutils.
+- **SC-006**: A script that starts several background jobs can name which one
+  failed and with what code.
+- **SC-007**: An interrupted script leaves behind neither running children nor
+  a PID file that belongs to another process.
 
 ## Integration Tests *(mandatory)*
 
@@ -115,6 +258,19 @@ dybatpho::dry_run "rsync -a ${workdir}/ /srv/app/"
 - **IT-003**: Set `DRY_RUN=true` and verify the dry-run helper prints the command without executing it.
 - **IT-004**: Verify false-like dry-run execution, signal-specific statuses,
   and trap composition with pre-existing handlers.
+- **IT-005**: Run a command past its limit and verify exit code 124, both with
+  the `timeout` binary and with the probe forced off.
+- **IT-006**: Run a shell function under a time limit and verify it is bounded,
+  and that a command exiting 143 of its own accord is not reported as a
+  timeout.
+- **IT-007**: Time out a command that started a grandchild and verify the
+  grandchild is gone.
+- **IT-008**: Start a succeeding and a failing background job, wait for both,
+  and verify each exit code and the aggregate failure.
+- **IT-009**: End the background jobs and verify the jobs, their children, and
+  the registry are all gone.
+- **IT-010**: Write, check, and remove a PID file across the live, stale,
+  malformed, missing, padded, and foreign-owner cases.
 
 ## Acceptance Criteria *(mandatory)*
 

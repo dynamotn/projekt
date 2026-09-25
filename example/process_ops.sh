@@ -4,6 +4,8 @@
 # @description Demonstrates dybatpho::retry, retry_until, dry_run, breakpoint,
 #              expect_args, expect_envs, require, command_exists_all, is,
 #              coalesce, coalesce_cmd, default_env, require_envs_any, assert,
+#              run_with_timeout, background_run, wait_all, kill_children,
+#              pid_file_write, pid_file_is_running, pid_file_remove,
 #              and error/signal handlers
 # shellcheck disable=SC2154 # `dybatpho::expect_args` assigns these names through a nameref
 SCRIPTDIR="$(dirname "${BASH_SOURCE[0]}")"
@@ -148,6 +150,105 @@ function _demo_retry_until {
   dybatpho::success "Fixed-delay retry succeeded"
 }
 
+
+# --- run_with_timeout -----------------------------------------------------
+
+function _demo_run_with_timeout {
+  dybatpho::header "RUN WITH TIMEOUT"
+
+  dybatpho::run_with_timeout 5 echo "Finished well inside the limit"
+
+  local status=0
+  dybatpho::run_with_timeout 1 sleep 30 || status=$?
+  if ((status == 124)); then
+    dybatpho::success "A command that overran was ended, reported as 124"
+  else
+    dybatpho::warn "Expected 124 for a timeout, got ${status}"
+  fi
+
+  # Unlike the `timeout` binary, this works on a shell function too.
+  _slow_function() { sleep 30; }
+  status=0
+  dybatpho::run_with_timeout 1 _slow_function || status=$?
+  dybatpho::info "A shell function also times out, reported as ${status}"
+}
+
+# --- background jobs ------------------------------------------------------
+
+function _demo_background_jobs {
+  dybatpho::header "BACKGROUND JOBS"
+
+  _quick_job() { sleep 1; }
+  _failing_job() {
+    sleep 1
+    return 4
+  }
+
+  dybatpho::background_run fetch _quick_job
+  dybatpho::background_run build _failing_job
+  dybatpho::info "fetch is running as pid $(dybatpho::background_pid fetch)"
+
+  local status=0
+  dybatpho::wait_all || status=$?
+  dybatpho::info "fetch exited $(dybatpho::background_status fetch)"
+  dybatpho::info "build exited $(dybatpho::background_status build)"
+  if ((status != 0)); then
+    dybatpho::warn "At least one background job failed, as expected here"
+  fi
+}
+
+function _demo_kill_children {
+  dybatpho::header "KILL CHILDREN"
+
+  dybatpho::background_run watcher sleep 300
+  local pid
+  pid="$(dybatpho::background_pid watcher)"
+  dybatpho::info "Started a long-running job as pid ${pid}"
+
+  # In a real script this belongs on a trap, so an interrupt leaves nothing
+  # behind: dybatpho::trap dybatpho::kill_children EXIT INT TERM
+  dybatpho::kill_children
+  if kill -0 "${pid}" 2> /dev/null; then
+    dybatpho::warn "Job ${pid} is somehow still running"
+  else
+    dybatpho::success "Job ${pid} and its children are gone"
+  fi
+}
+
+# --- PID files ------------------------------------------------------------
+
+function _demo_pid_file {
+  dybatpho::header "PID FILE"
+
+  local run_dir pid_file
+  dybatpho::create_temp run_dir "/" "pid-demo"
+  pid_file="${run_dir}/app.pid"
+
+  dybatpho::pid_file_write "${pid_file}"
+  dybatpho::info "Recorded pid $(cat "${pid_file}") in ${pid_file}"
+
+  if dybatpho::pid_file_is_running "${pid_file}"; then
+    dybatpho::success "The recorded process is alive"
+  fi
+
+  # A PID file left behind by a process that has since exited reads as "nothing
+  # is running", which is what a supervisor acts on.
+  printf '%s\n' "99999999" > "${pid_file}"
+  if dybatpho::pid_file_is_running "${pid_file}"; then
+    dybatpho::warn "A stale PID file should not read as running"
+  else
+    dybatpho::success "A stale PID file reads as not running"
+  fi
+
+  # The removal only happens when the file still records this process, so an
+  # exiting script cannot delete the PID file its replacement just wrote.
+  dybatpho::pid_file_remove "${pid_file}" \
+    || dybatpho::info "Left ${pid_file} alone: it records another process"
+  dybatpho::pid_file_write "${pid_file}"
+  dybatpho::pid_file_remove "${pid_file}"
+  dybatpho::success "PID file removed on the way out"
+}
+
 # --- main -----------------------------------------------------------------
 
 function _main {
@@ -162,6 +263,10 @@ function _main {
   _demo_env_defaults
   _demo_assert
   _demo_retry_until
+  _demo_run_with_timeout
+  _demo_background_jobs
+  _demo_kill_children
+  _demo_pid_file
   dybatpho::success "Process operations demo complete"
 }
 

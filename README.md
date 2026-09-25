@@ -154,7 +154,7 @@ scripts/release.sh --version 3.0.0 --sign
 | --------------------------------- | ------------------------------------------------------------------ |
 | [helpers.sh](doc/helpers.md)      | Argument expectation, dry-run, retries and other everyday patterns  |
 | [logging.sh](doc/logging.md)      | Levelled logs, boxed output, structured JSON logging                |
-| [process.sh](doc/process.md)      | Process management, traps, signal-safe cleanup                      |
+| [process.sh](doc/process.md)      | Process management, traps, timeouts, background jobs, PID files     |
 | [lock.sh](doc/lock.md)            | Portable file locking to serialize concurrent script runs           |
 | [parallel.sh](doc/parallel.md)  | Bounded worker pool: ordered output, per-job exit codes, fail-fast |
 
