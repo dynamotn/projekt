@@ -260,3 +260,106 @@ func TestRender_BrokenTemplate(t *testing.T) {
 		t.Error("Render() wrote a file although the template is broken")
 	}
 }
+
+func TestRender_ManifestNameGivesTheOutputName(t *testing.T) {
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "license.tmpl"), "{{ .Name }} for {{ .Values.author }}\n")
+	writeTemplate(t, filepath.Join(store, "license.vars.yaml"), "name: LICENSE\n")
+
+	tpl, err := Get("license")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	dest := t.TempDir()
+
+	written, err := Render(RenderOptions{Template: tpl, Dest: dest, Values: Values{"author": "Jane"}})
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	want := filepath.Join(dest, "LICENSE")
+	if len(written) != 1 || written[0] != want {
+		t.Fatalf("Render() = %v, want [%s]", written, want)
+	}
+	if content := readFile(t, want); !strings.Contains(content, "LICENSE for Jane") {
+		t.Errorf("rendered content = %q, want .Name to be the manifest name", content)
+	}
+}
+
+func TestRender_NameFlagBeatsManifestName(t *testing.T) {
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "license.tmpl"), "{{ .Name }}\n")
+	writeTemplate(t, filepath.Join(store, "license.vars.yaml"), "name: LICENSE\n")
+
+	tpl, err := Get("license")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	dest := t.TempDir()
+
+	written, err := Render(RenderOptions{Template: tpl, Dest: dest, Name: "COPYING"})
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	want := filepath.Join(dest, "COPYING")
+	if len(written) != 1 || written[0] != want {
+		t.Errorf("Render() = %v, want [%s]", written, want)
+	}
+}
+
+func TestRender_ManifestNameReadsTheValues(t *testing.T) {
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "note.tmpl"), "# {{ .Values.slug }}\n")
+	writeTemplate(t, filepath.Join(store, "note.vars.yaml"), "name: \"{{ .Values.slug }}.md\"\nvars:\n  - name: slug\n")
+
+	tpl, err := Get("note")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	dest := t.TempDir()
+
+	written, err := Render(RenderOptions{Template: tpl, Dest: dest, Values: Values{"slug": "first-note"}})
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	want := filepath.Join(dest, "first-note.md")
+	if len(written) != 1 || written[0] != want {
+		t.Errorf("Render() = %v, want [%s]", written, want)
+	}
+}
+
+func TestRender_ManifestNameWithoutItsValueFallsBack(t *testing.T) {
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "note.tmpl"), "note\n")
+	writeTemplate(t, filepath.Join(store, "note.vars.yaml"), "name: \"{{ .Values.slug }}.md\"\n")
+
+	tpl, err := Get("note")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	dest := t.TempDir()
+
+	// Nothing answered the question yet, so the template name stands rather
+	// than a file called "<no value>.md" being written.
+	written, err := Render(RenderOptions{Template: tpl, Dest: dest})
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	want := filepath.Join(dest, "note")
+	if len(written) != 1 || written[0] != want {
+		t.Errorf("Render() = %v, want [%s]", written, want)
+	}
+}
+
+func TestLoadManifest_NameMustBeOneSegment(t *testing.T) {
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "note.tmpl"), "note\n")
+	writeTemplate(t, filepath.Join(store, "note.vars.yaml"), "name: docs/note.md\n")
+
+	tpl, err := Get("note")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if _, err := LoadManifest(tpl); err == nil {
+		t.Error("LoadManifest() error = nil, want a path to be refused")
+	}
+}

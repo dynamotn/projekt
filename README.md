@@ -247,7 +247,8 @@ worth typing twice), repeatable `--set key=value` (dots nest, values keep their
 YAML type), `--values file.yaml` (deep-merged, `--set` wins), or
 `--interactive`, which asks for what's missing — from the template's
 `.vars.yaml`, or else from the `.Values` keys in the template itself. Templates
-also get `.Name`, `.Project`, `.Dir`, `.Path`, `.Template`, `.Source`, `.Store`,
+also get `.Name` (from `--name`, the manifest's `name:`, or the destination),
+`.Project`, `.Dir`, `.Path`, `.Template`, `.Source`, `.Store`,
 `.User`, `.Home`, `.Hostname`, `.OS`, `.Arch`, `.Env`, `.Now`, `.Date` and
 `.Year`. An unset value does not fail the render, so
 `{{ .Values.license | default "MIT" }}` makes one optional. Nothing is
@@ -259,7 +260,7 @@ between them one template covers what would otherwise be four:
 
 | | |
 | --- | --- |
-| `.vars.yaml` | what to ask for |
+| `.vars.yaml` | what to ask for, and the `name:` the output takes without `--name` |
 | `.data.yaml` | what is already known — the lowest layer of `.Values` |
 | `.ignore` | what *not* to write, rendered first: `{{ if not .Values.ci }}.github/{{ end }}` |
 | `.templates/` | pieces several templates share: `{{ template "header" . }}` |

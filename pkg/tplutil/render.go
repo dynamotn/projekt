@@ -53,6 +53,10 @@ type RenderOptions struct {
 // so that a default like `{{ .User }}` in a manifest renders the same way the
 // template itself would.
 func BaseContext(o RenderOptions) (map[string]any, error) {
+	o, err := withManifestName(o)
+	if err != nil {
+		return nil, err
+	}
 	values, err := WithData(o)
 	if err != nil {
 		return nil, err
@@ -72,6 +76,10 @@ func BaseContext(o RenderOptions) (map[string]any, error) {
 // Destination returns the folder a render writes into, which is where a
 // template's `after` commands run.
 func Destination(o RenderOptions) (string, error) {
+	o, err := withManifestName(o)
+	if err != nil {
+		return "", err
+	}
 	if !o.Template.IsDir() {
 		target, err := fileTarget(o)
 		if err != nil {
@@ -79,6 +87,7 @@ func Destination(o RenderOptions) (string, error) {
 		}
 		return filepath.Dir(target), nil
 	}
+
 	dest := o.Dest
 	if dest == "" {
 		dest = "."
@@ -104,6 +113,12 @@ func Render(o RenderOptions) ([]string, error) {
 	}
 	o.Values = values
 
+	// The manifest name is resolved once the values are known, so that a
+	// template can name its output after an answer.
+	if o, err = withManifestName(o); err != nil {
+		return nil, err
+	}
+
 	engine, err := newEngine(o)
 	if err != nil {
 		return nil, err
@@ -113,6 +128,48 @@ func Render(o RenderOptions) ([]string, error) {
 		return renderDir(engine, o)
 	}
 	return renderFile(engine, o)
+}
+
+// withManifestName fills in the output name the template's manifest gives,
+// for a run that did not pass one.
+//
+// A template that always writes the same file — a licence, a Dockerfile —
+// says so once in its .vars.yaml instead of every caller repeating --name.
+// The name is a template itself, and a value it reads that nobody has
+// answered yet leaves the name unresolved rather than failing: `t new
+// --interactive` works out the name again once the questions are answered.
+func withManifestName(o RenderOptions) (RenderOptions, error) {
+	if o.Name != "" || o.Template.Path == "" {
+		return o, nil
+	}
+	manifest, err := LoadManifest(o.Template)
+	if err != nil {
+		return o, err
+	}
+	if manifest.Name == "" {
+		return o, nil
+	}
+
+	values, err := WithData(o)
+	if err != nil {
+		return o, err
+	}
+	withValues := o
+	withValues.Values = values
+
+	rendered, err := executeWith(TemplateOrigin(o.Template), manifest.delims(), "name:"+o.Template.Name, manifest.Name, context(withValues, ""))
+	if err != nil {
+		return o, fmt.Errorf("name of %s: %w", o.Template.Name, err)
+	}
+	name := strings.TrimSpace(string(rendered))
+	if name == "" || strings.Contains(name, noValue) {
+		return o, nil
+	}
+	if name != filepath.Base(name) || name == ".." {
+		return o, fmt.Errorf("name of %s renders to an invalid name %q", o.Template.Name, name)
+	}
+	o.Name = name
+	return o, nil
 }
 
 // renderFile renders a single file template.
@@ -203,6 +260,10 @@ func Collect(o RenderOptions) ([]Rendered, error) {
 		return nil, err
 	}
 	o.Values = values
+
+	if o, err = withManifestName(o); err != nil {
+		return nil, err
+	}
 
 	engine, err := newEngine(o)
 	if err != nil {

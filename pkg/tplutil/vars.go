@@ -70,6 +70,13 @@ func (v Var) typeName() string {
 // Manifest is the parsed .vars.yaml of a template.
 type Manifest struct {
 	Vars []Var `yaml:"vars,omitempty"`
+	// Name is the output name a template takes when --name is left out: a
+	// licence is always written to LICENSE, a Dockerfile to Dockerfile.
+	//
+	// It is rendered like a default, with the values already known, so a
+	// template can name itself after an answer: `{{ .Values.slug }}.md`. It
+	// names one file or one folder, never a path, and --name still wins.
+	Name string `yaml:"name,omitempty"`
 	// After are the commands to run in the folder the template wrote, once
 	// every file is there: `go mod tidy`, `git init`, `pre-commit install`.
 	//
@@ -125,6 +132,21 @@ func validateDelims(path string, delims []string) error {
 	}
 }
 
+// validateName refuses a name that could not be a file name, rather than
+// letting it escape the destination one render later.
+func validateName(path, name string) error {
+	if name == "" {
+		return nil
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("%s: name is empty", path)
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return fmt.Errorf("%s: name %q is a path, it must be a single file or folder name", path, name)
+	}
+	return nil
+}
+
 // varsPath returns where a template's manifest lives.
 func varsPath(tpl Template) string {
 	if tpl.IsDir() {
@@ -151,6 +173,9 @@ func LoadManifest(tpl Template) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("cannot parse %s: %w", path, err)
 	}
 	if err := validateDelims(path, manifest.Delims); err != nil {
+		return Manifest{}, err
+	}
+	if err := validateName(path, manifest.Name); err != nil {
 		return Manifest{}, err
 	}
 	for i, v := range manifest.Vars {
@@ -278,6 +303,12 @@ func scanValues(tpl Template) (*varScan, error) {
 // folder template its path segments too.
 func templateSources(tpl Template) (map[string]string, error) {
 	sources := map[string]string{}
+
+	// The output name is rendered like any other piece of the template, so a
+	// value it reads is one the template reads.
+	if manifest, err := LoadManifest(tpl); err == nil && manifest.Name != "" {
+		sources[VarsFile+":name"] = manifest.Name
+	}
 
 	if !tpl.IsDir() {
 		data, err := os.ReadFile(tpl.Path)

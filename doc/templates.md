@@ -135,7 +135,7 @@ Besides `.Values`, a template is given:
 
 | Variable    | Content                                                        |
 |-------------|----------------------------------------------------------------|
-| `.Name`     | Output name, from `--name` or the destination file name         |
+| `.Name`     | Output name, from `--name`, the manifest's `name:` or the destination file name |
 | `.Project`  | Folder the files are written to, or `.Name` for a folder template |
 | `.Dir`      | Absolute destination folder                                     |
 | `.Path`     | Absolute path of the file being rendered                        |
@@ -211,6 +211,50 @@ A template without a manifest is still usable interactively: the questions are
 then the `.Values` keys read out of the template itself, in the order they
 appear. Keys the template loops over are left out — a list or a map is not
 something to type at a prompt, and belongs in a `--values` file.
+
+### A name of its own
+
+A licence is always written to `LICENSE`, a Dockerfile to `Dockerfile`. A
+template that knows what it produces says so once, instead of every command
+line repeating `--name`:
+
+```yaml
+# templates/license.vars.yaml
+name: LICENSE
+vars:
+  - name: license
+    type: choice
+    choices: [MIT, Apache-2.0, GPL-3.0]
+    default: MIT
+```
+
+```bash
+t new license          # writes ./LICENSE
+t new license ./docs   # writes ./docs/LICENSE
+t new license --name COPYING   # --name still wins
+```
+
+The name is rendered like a default, with the values already known, so a
+template can name its output after an answer:
+
+```yaml
+# templates/zettel.vars.yaml
+name: "{{ .Now.Format \"20060102\" }}-{{ .Values.slug }}.md"
+vars:
+  - name: slug
+    required: true
+```
+
+With `--interactive` the questions come first and the name is worked out
+afterwards, so a value the name reads can be one that was just typed. A name
+whose values are still unknown is left alone rather than written as
+`<no value>`: the template's own file name is used instead. It names one file
+or one folder — a `name:` holding a `/` is refused when the manifest is read,
+since that is what the destination argument is for.
+
+For a folder template the name feeds `.Name` and `.Project`, which is what the
+path segments are usually written against; the folder it all lands in stays the
+destination argument.
 
 ### Running something afterwards
 

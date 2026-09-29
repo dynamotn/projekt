@@ -8,6 +8,10 @@
   template or recipe from a cloned store run its commands, as it is now —
   beforehand, so CI or `folder exec` can use it without a terminal to ask on.
   Trusting a recipe trusts the template it renders too
+- **t**: a template can say what its output is called with `name:` in its
+  `.vars.yaml`, so `t new license` writes `LICENSE` without `--name`. The name
+  is rendered like a default, so `name: "{{ .Values.slug }}.md"` names the
+  file after an answer, and `--name` still overrides it
 
 ### Fixed
 
@@ -95,7 +99,6 @@
   `<no value>`; it is refused now, the way an empty or escaping segment
   already was
 
-
 ## [3.0.0]
 
 ### Added
@@ -164,7 +167,6 @@
 - remove duplicate function outputLines
 - lack of refresh after pruning stale entries
 
-
 ## [2.0.0]
 
 ### Added
@@ -200,4 +202,3 @@
 - **folder**: store an absolute path when adding a folder
 - **cli**: report a failure to write the table
 - **shell**: use the exit code of `folder get`, add bash completion
-
