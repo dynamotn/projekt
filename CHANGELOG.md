@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [4.1.0]
 
 ### Added
 
@@ -35,6 +35,7 @@
   else the command is refused with the `t trust`/`b trust` line that allows
   it. Trust covers the exact content, shared `.templates` included, so any
   later change asks again. Stores you keep yourself are not affected
+
 
 ## [3.1.0]
 
