@@ -562,15 +562,37 @@ flags — `--set` and `--values` change one answer and keep the rest. And the
 | `added` | the template writes it, the project has not got it | writes it |
 | `updated` | the template writes it differently, and it is byte for byte what was written last time | writes it |
 | `unchanged` | it is already what the template says | nothing |
-| `conflict` | it differs *and* it was edited since | keeps it, unless `--force` |
+| `merged` | it was edited since *and* the template changed elsewhere in it | writes the merge: the template's change in, the hand edits kept |
+| `conflict` | it was edited since, where the template changed too — or the template has nothing new for it | keeps it, unless `--force` |
 | `removed` | the template no longer writes it | keeps it, unless `--prune` |
 
-Nothing that was edited by hand is touched without `--force`, nothing is
-deleted without `--prune`, and the template's `after` commands are not run
-again without `--hooks`: they ran when the project was created, and repeating
-a `git init` unasked is how an apply loses somebody's trust. A file left alone stays in the record exactly as it
-was written, so the next apply reaches the same conclusion instead of
-forgetting the file.
+Nothing that was edited by hand is lost without `--force`, nothing is deleted
+without `--prune`, and the template's `after` commands are not run again
+without `--hooks`: they ran when the project was created, and repeating a
+`git init` unasked is how an apply loses somebody's trust. A file left alone
+stays in the record exactly as it was written, so the next apply reaches the
+same conclusion instead of forgetting the file.
+
+### Merging
+
+Most template changes do not land on the lines somebody edited, so most of
+what used to be a `conflict` is a `merged` now. Beside the record, a project
+keeps a copy of what each template **last rendered**, in `.projekt/base/`, and
+that is the third point a merge needs: the file as it was written, the file as
+it is now, and the file as the template renders it today. A region only one
+side changed takes that side; a region both changed the same way is taken
+once; a region they changed differently is a conflict, and the **whole file**
+is kept as it is — nothing is ever written with conflict markers in it.
+
+```bash
+t diff        # a merged file shows as the diff from what is there to the merge
+t apply       # writes it; the hand edits are still there afterwards
+```
+
+After a merge the file counts as untouched, so the next template change merges
+again around the same edits. Commit `.projekt/base/` with the record: a project
+made before there was a base can only tell "edited" from "not edited", and
+gains a base the first time an apply finds its files unchanged.
 
 A project with no record at all — one created before there was one — is not a
 problem: every file it already has comes out as a `conflict` and is left alone,

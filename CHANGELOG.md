@@ -25,6 +25,12 @@
   attaches them by tag. `folder hooks <name>` shows what would run and why,
   `PROJEKT_NO_HOOKS=1` turns them off. Re-run `projekt init` for your shell
   to pick this up
+- **t**: `t apply` merges a template's change into a file that was edited by
+  hand, when the two do not touch the same lines, and reports it as `merged`;
+  only an overlap is still a `conflict`, and nothing is written with conflict
+  markers in it. The merge is a three-way one against the copy of the last
+  render a project now keeps in `.projekt/base/`, written by `t new` and
+  `t apply` and worth committing with the record. `t diff` previews the merge
 
 ### Changed
 

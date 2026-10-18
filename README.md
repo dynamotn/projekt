@@ -302,8 +302,11 @@ Named no template, `apply` and `diff` cover every template the project records,
 so nothing needs to be remembered about a project to bring it up to date.
 
 A file that is byte for byte what was written is updated; one that was edited
-by hand is a `conflict` and kept, unless `--force`; one the template no longer
-writes is kept, unless `--prune`.
+by hand where the template did not change is `merged` — the template's change
+goes in, the edits stay — against the copy of the last render the project
+keeps in `.projekt/base/`; one edited where the template changed too is a
+`conflict` and kept, unless `--force`; one the template no longer writes is
+kept, unless `--prune`.
 
 `b` renders a template, works out where the project belongs and registers it,
 so starting something new ends with `pj`, not another `cd`:

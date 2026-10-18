@@ -27,8 +27,15 @@ tells an out-of-date file apart from one somebody edited:
   added      the template writes it and the project does not have it
   updated    the template writes it differently, and it is untouched since
   unchanged  it is already what the template says
-  conflict   it differs *and* it was edited by hand — kept, unless --force
+  merged     it was edited by hand *and* the template changed elsewhere in it:
+             the template's change is merged in, the hand edits stay
+  conflict   it was edited by hand where the template changed too — kept,
+             unless --force
   removed    the template no longer writes it — kept, unless --prune
+
+A merge is a three-way one, against the copy of the last render the project
+keeps in .projekt/base/. Nothing is ever written with conflict markers in it:
+a region both sides changed differently is a conflict, and the file is kept.
 
 The recorded values are replayed, so applying needs no flags; --set and
 --values change one answer and keep the rest.

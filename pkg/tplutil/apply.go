@@ -21,9 +21,13 @@ const (
 	ChangeUpdated ChangeStatus = "updated"
 	// ChangeUnchanged is a file that is already what the template says.
 	ChangeUnchanged ChangeStatus = "unchanged"
+	// ChangeMerged is a file the template writes differently *and* which was
+	// edited by hand since, where the two sets of changes do not touch: the
+	// template's are merged into the file, and the hand edits stay.
+	ChangeMerged ChangeStatus = "merged"
 	// ChangeConflict is a file the template writes differently *and* which was
-	// edited by hand since. Replacing it would throw that away, so it takes
-	// --force.
+	// edited by hand since, in a way that cannot be merged. Replacing it would
+	// throw that away, so it takes --force.
 	ChangeConflict ChangeStatus = "conflict"
 	// ChangeRemoved is a file the template used to write and no longer does.
 	// It is deleted only with --prune.
@@ -46,6 +50,10 @@ type Change struct {
 	// recorded is the hash the project remembers writing, which is what a
 	// change the apply leaves alone must go on remembering.
 	recorded string
+	// render is what the template renders today, which is what the project
+	// keeps as the base for the next merge. It is After for every change
+	// but a merged one, where After is the merge.
+	render []byte
 }
 
 // Writes reports whether this change touches the disk at all.
@@ -207,14 +215,22 @@ func planOne(o ApplyOptions, root string, template Template) ([]Change, RenderRe
 		if err != nil {
 			return nil, RenderRecord{}, err
 		}
+		var base []byte
+		if !file.Attrs.Symlink {
+			if base, err = loadBase(root, file.Rel); err != nil {
+				return nil, RenderRecord{}, err
+			}
+		}
+		status, after := decide(before, file.Content, base, previous.Files[file.Rel], remembered)
 		changes = append(changes, Change{
 			Path:     file.Rel,
-			Status:   statusOf(before, file.Content, previous.Files[file.Rel], remembered),
+			Status:   status,
 			Before:   before,
-			After:    file.Content,
+			After:    after,
 			Template: template.Name,
 			Attrs:    file.Attrs,
 			recorded: previous.Files[file.Rel],
+			render:   file.Content,
 		})
 	}
 
@@ -245,19 +261,51 @@ func planOne(o ApplyOptions, root string, template Template) ([]Change, RenderRe
 	return changes, next, nil
 }
 
-// statusOf decides what one file's change is.
-func statusOf(before, after []byte, recorded string, remembered bool) ChangeStatus {
-	switch {
-	case before == nil:
-		return ChangeAdded
-	case string(before) == string(after):
-		return ChangeUnchanged
-	case remembered && hashOf(before) == recorded:
-		// Exactly what was written last time, so it is ours to replace.
-		return ChangeUpdated
-	default:
-		return ChangeConflict
+// decide works out what one file's change is, and what the file should
+// become.
+//
+// Two questions settle it. Has the file been touched since the last apply —
+// the record's hash says. Has the template changed since — the base, the copy
+// of the last render, says. When both moved, the base is what lets the two be
+// merged; a project from before there was a base falls back to telling
+// "touched" from "not touched" alone.
+func decide(before, after, base []byte, recorded string, remembered bool) (ChangeStatus, []byte) {
+	if before == nil {
+		return ChangeAdded, after
 	}
+	if string(before) == string(after) {
+		return ChangeUnchanged, after
+	}
+
+	touched := !remembered || hashOf(before) != recorded
+	templateChanged := base == nil || string(base) != string(after)
+
+	switch {
+	case !templateChanged:
+		if !touched {
+			// The file is the last merge, and the template has nothing new.
+			return ChangeUnchanged, after
+		}
+		// Edited by hand, and the template has nothing to say about it.
+		return ChangeConflict, after
+	case !touched && (base == nil || string(before) == string(base)):
+		// Exactly what was written last time, so it is ours to replace.
+		return ChangeUpdated, after
+	case base == nil:
+		return ChangeConflict, after
+	}
+
+	// The file carries edits — by hand, or from an earlier merge — and the
+	// template moved too. Bring the template's change in around them.
+	merged, ok := merge3(base, before, after)
+	if !ok {
+		return ChangeConflict, after
+	}
+	if string(merged) == string(before) {
+		// The template's change was already made by hand.
+		return ChangeUnchanged, after
+	}
+	return ChangeMerged, merged
 }
 
 // Apply renders a template over a project it was already rendered into.
@@ -324,12 +372,35 @@ func applyOne(o ApplyOptions, root string, changes []Change, next RenderRecord) 
 		target := filepath.Join(root, filepath.FromSlash(change.Path))
 		switch change.Status {
 		case ChangeUnchanged:
+			// A project made before there was a base gains one here, so its
+			// next apply can merge too.
+			if change.render != nil && !change.Attrs.Symlink {
+				if err := ensureBase(root, change.Path, change.render); err != nil {
+					return err
+				}
+			}
 			continue
 		case ChangeAdded, ChangeUpdated:
 			if err := confinedTarget(root, target); err != nil {
 				return err
 			}
 			if err := writeFile(target, change.After, true, change.Attrs); err != nil {
+				return err
+			}
+			if err := saveBase(root, change.Path, change.render); err != nil {
+				return err
+			}
+		case ChangeMerged:
+			if err := confinedTarget(root, target); err != nil {
+				return err
+			}
+			if err := writeFile(target, change.After, true, change.Attrs); err != nil {
+				return err
+			}
+			// What is on disk is the merge; what the next merge starts from
+			// is the template's own render.
+			next.Files[change.Path] = hashOf(change.After)
+			if err := saveBase(root, change.Path, change.render); err != nil {
 				return err
 			}
 		case ChangeConflict:
@@ -343,12 +414,18 @@ func applyOne(o ApplyOptions, root string, changes []Change, next RenderRecord) 
 				if err := remove(root, target); err != nil {
 					return err
 				}
+				if err := removeBase(root, change.Path); err != nil {
+					return err
+				}
 				continue
 			}
 			if err := confinedTarget(root, target); err != nil {
 				return err
 			}
 			if err := writeFile(target, change.After, true, change.Attrs); err != nil {
+				return err
+			}
+			if err := saveBase(root, change.Path, change.render); err != nil {
 				return err
 			}
 		case ChangeRemoved:
@@ -360,6 +437,9 @@ func applyOne(o ApplyOptions, root string, changes []Change, next RenderRecord) 
 				continue
 			}
 			if err := remove(root, target); err != nil {
+				return err
+			}
+			if err := removeBase(root, change.Path); err != nil {
 				return err
 			}
 		}
@@ -430,7 +510,7 @@ func Summary(changes []Change) string {
 	}
 
 	var parts []string
-	for _, status := range []ChangeStatus{ChangeAdded, ChangeUpdated, ChangeConflict, ChangeRemoved, ChangeUnchanged} {
+	for _, status := range []ChangeStatus{ChangeAdded, ChangeUpdated, ChangeMerged, ChangeConflict, ChangeRemoved, ChangeUnchanged} {
 		if counts[status] > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", counts[status], status))
 		}

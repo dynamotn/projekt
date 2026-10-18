@@ -414,6 +414,13 @@ func renderDir(e *engine, o RenderOptions) ([]string, error) {
 			return nil, err
 		}
 		record.Files[file.Rel] = hashOf(file.Content)
+		if !file.Attrs.Symlink {
+			// Kept beside the record so that a later apply can merge a
+			// template's change into a file that was edited since.
+			if err := saveBase(root, file.Rel, file.Content); err != nil {
+				return nil, err
+			}
+		}
 		written = append(written, target)
 	}
 
