@@ -68,7 +68,7 @@ func collectPartials(root string, into map[string]string) error {
 		if err != nil {
 			return err
 		}
-		data, err := os.ReadFile(path)
+		data, err := confinedRead(root, path)
 		if err != nil {
 			return fmt.Errorf("cannot read shared template %s: %w", path, err)
 		}

@@ -75,11 +75,11 @@ func TestVersionCmd_Run(t *testing.T) {
 			cmd := NewVersionCmd(&buf)
 
 			if tt.short {
-				cmd.Flags().Set("short", "true")
+				_ = cmd.Flags().Set("short", "true")
 			}
 
 			if tt.template != "" {
-				cmd.Flags().Set("template", tt.template)
+				_ = cmd.Flags().Set("template", tt.template)
 			}
 
 			err := cmd.Execute()

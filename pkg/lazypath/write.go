@@ -26,6 +26,9 @@ const defaultIndent = 2
 // written exactly as it was read. A command that adds one folder produces a
 // diff of one folder.
 func saveConfig(sections ...string) error {
+	if loadErr != nil {
+		return fmt.Errorf("not writing the configuration: %w", loadErr)
+	}
 	path := ConfigFile()
 	if path == "" {
 		return errors.New("no config file to write")
@@ -236,7 +239,7 @@ func mergeScalar(have, want *yaml.Node) {
 	quoted := have.Style&(yaml.DoubleQuotedStyle|yaml.SingleQuotedStyle) != 0
 	have.Value, have.Tag = want.Value, want.Tag
 	// Keep the quotes someone chose, unless the new value needs its own.
-	if !(quoted && want.Style == 0 && want.ShortTag() == "!!str") {
+	if !quoted || want.Style != 0 || want.ShortTag() != "!!str" {
 		have.Style = want.Style
 	}
 }
@@ -327,14 +330,20 @@ func replaceFile(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(temp.Name())
+	defer func() { _ = os.Remove(temp.Name()) }()
 
 	if _, err := temp.Write(data); err != nil {
-		temp.Close()
+		_ = temp.Close()
 		return err
 	}
 	if err := temp.Chmod(mode); err != nil {
-		temp.Close()
+		_ = temp.Close()
+		return err
+	}
+	// Flushed before the rename, or a crash in between could leave the new
+	// name pointing at an empty file.
+	if err := temp.Sync(); err != nil {
+		_ = temp.Close()
 		return err
 	}
 	if err := temp.Close(); err != nil {

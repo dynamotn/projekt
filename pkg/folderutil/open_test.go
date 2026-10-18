@@ -40,7 +40,9 @@ func TestOpenFolder(t *testing.T) {
 	if err := OpenFolder(&out, "myapp", OpenOptions{With: "pwd", Out: &out}); err != nil {
 		t.Fatalf("OpenFolder() error = %v", err)
 	}
-	if strings.TrimSpace(out.String()) != project {
+	// Compared resolved: a GNU `pwd` prints the physical folder, and on macOS
+	// the temporary folder is reached through a link.
+	if got := lazypath.Canonical(strings.TrimSpace(out.String())); got != lazypath.Canonical(project) {
 		t.Errorf("the editor ran in %q, want %q", out.String(), project)
 	}
 }

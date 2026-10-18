@@ -191,16 +191,3 @@ func hashOf(content []byte) string {
 	sum := sha256.Sum256(content)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
-
-// hashFile returns the hash of what is on disk, or an empty string when there
-// is nothing there.
-func hashFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", fmt.Errorf("cannot read %s: %w", path, err)
-	}
-	return hashOf(data), nil
-}

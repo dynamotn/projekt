@@ -33,13 +33,13 @@ func LoadData(tpl Template) (Values, error) {
 	if err != nil {
 		return nil, err
 	}
-	shared, err := readData(filepath.Join(dir, DataFile))
+	shared, err := readData(dir, filepath.Join(dir, DataFile))
 	if err != nil {
 		return nil, err
 	}
 	values = MergeValues(values, shared)
 
-	own, err := readData(dataPath(tpl))
+	own, err := readData(storeRoot(tpl), dataPath(tpl))
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func dataPath(tpl Template) string {
 }
 
 // readData reads one data file, trying every spelling of it.
-func readData(base string) (Values, error) {
+func readData(root, base string) (Values, error) {
 	if base == "" {
 		return nil, nil
 	}
@@ -110,7 +110,7 @@ func readData(base string) (Values, error) {
 
 	for _, ext := range dataExtensions {
 		path := stem + ext
-		data, err := os.ReadFile(path)
+		data, err := confinedRead(root, path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue

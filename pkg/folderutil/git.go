@@ -50,6 +50,9 @@ type syncJob struct {
 	// worktreePaths is where each of repo.Worktrees belongs, resolved against
 	// the folder while the configuration is still being read.
 	worktreePaths []string
+	// batch says the job runs beside others, with nobody able to answer a
+	// question git would ask on the terminal.
+	batch bool
 }
 
 // SyncGitRepos synchronizes all Git repositories in the configuration.
@@ -181,6 +184,7 @@ func runSyncJobsWith(jobs []syncJob, opts SyncOptions, run func(syncJob, bool) e
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
+				job.batch = true
 				results[i] = run(job, opts.DryRun)
 			}()
 		}
@@ -215,7 +219,11 @@ func syncRepo(job syncJob, dryRun bool) error {
 }
 
 func cloneIfMissing(job syncJob, dryRun bool) error {
-	if _, err := os.Stat(job.repoPath); !os.IsNotExist(err) {
+	if _, err := os.Stat(job.repoPath); err != nil && !os.IsNotExist(err) {
+		// Not there is one thing; unreadable is another, and reporting it as
+		// "already exists" would send the user looking in the wrong place.
+		return fmt.Errorf("cannot access %s: %w", job.repoPath, err)
+	} else if err == nil {
 		// Repository exists, check if it's valid
 		if dryRun {
 			cli.Info("[DRY RUN] Would check: %s", job.repoPath)
@@ -230,15 +238,15 @@ func cloneIfMissing(job syncJob, dryRun bool) error {
 	if dryRun {
 		primaryURL, fallbackURL := getGitURLs(job.server, job.group, job.repo.Name)
 		if fallbackURL != "" {
-			cli.Info("[DRY RUN] Would clone: %s (fallback: %s) -> %s", primaryURL, fallbackURL, job.repoPath)
+			cli.Info("[DRY RUN] Would clone: %s (fallback: %s) -> %s", cli.RedactURL(primaryURL), cli.RedactURL(fallbackURL), job.repoPath)
 		} else {
-			cli.Info("[DRY RUN] Would clone: %s -> %s", primaryURL, job.repoPath)
+			cli.Info("[DRY RUN] Would clone: %s -> %s", cli.RedactURL(primaryURL), job.repoPath)
 		}
 		return nil
 	}
 
 	cli.Info("Cloning %s to %s", job.repo.Name, job.repoPath)
-	if err := cloneRepoWithFallback(job.server, job.group, job.repo.Name, job.repoPath); err != nil {
+	if err := cloneRepoWithFallback(job.server, job.group, job.repo.Name, job.repoPath, job.batch); err != nil {
 		cli.Error("Failed to clone %s: %v", job.repo.Name, err)
 		// Keep going with the other repos, but remember the failure so the
 		// command exits non-zero.
@@ -259,7 +267,7 @@ func ensureRemotes(job syncJob, dryRun bool) error {
 
 	if dryRun {
 		for _, name := range names {
-			cli.Info("[DRY RUN] Would set remote %s -> %s in %s", name, job.repo.Remotes[name], job.repoPath)
+			cli.Info("[DRY RUN] Would set remote %s -> %s in %s", name, cli.RedactURL(job.repo.Remotes[name]), job.repoPath)
 		}
 		return nil
 	}
@@ -276,17 +284,17 @@ func ensureRemotes(job syncJob, dryRun bool) error {
 
 		switch {
 		case !present:
-			if err := runGit(job.repoPath, "remote", "add", name, want); err != nil {
+			if err := runGit(job.repoPath, "remote", "add", "--", name, want); err != nil {
 				errs = append(errs, fmt.Errorf("add remote %s to %s: %w", name, job.repo.Name, err))
 				continue
 			}
-			cli.Info("Added remote %s -> %s in %s", name, want, job.repo.Name)
+			cli.Info("Added remote %s -> %s in %s", name, cli.RedactURL(want), job.repo.Name)
 		case current != want:
-			if err := runGit(job.repoPath, "remote", "set-url", name, want); err != nil {
+			if err := runGit(job.repoPath, "remote", "set-url", "--", name, want); err != nil {
 				errs = append(errs, fmt.Errorf("update remote %s of %s: %w", name, job.repo.Name, err))
 				continue
 			}
-			cli.Info("Updated remote %s -> %s in %s", name, want, job.repo.Name)
+			cli.Info("Updated remote %s -> %s in %s", name, cli.RedactURL(want), job.repo.Name)
 		default:
 			cli.Debug("Remote %s of %s already points at %s", name, job.repo.Name, want)
 		}
@@ -331,9 +339,9 @@ func addWorktree(repoPath, worktreePath, branch string) error {
 	// and -b creates it. Checking first means an existing branch keeps its
 	// history instead of the command failing.
 	if branchExists(repoPath, branch) {
-		return runGit(repoPath, "worktree", "add", worktreePath, branch)
+		return runGit(repoPath, "worktree", "add", "--", worktreePath, branch)
 	}
-	return runGit(repoPath, "worktree", "add", "-b", branch, worktreePath)
+	return runGit(repoPath, "worktree", "add", "-b", branch, "--", worktreePath)
 }
 
 func branchExists(repoPath, branch string) bool {
@@ -431,11 +439,11 @@ func checkExtraRemotes(repoPath string, repo lazypath.GitRepo) {
 		want := repo.Remotes[name]
 		switch current, present := existing[name]; {
 		case !present:
-			cli.Warn("    [REMOTE MISSING] %s -> %s", name, want)
+			cli.Warn("    [REMOTE MISSING] %s -> %s", name, cli.RedactURL(want))
 		case current != want:
-			cli.Warn("    [REMOTE MISMATCH] %s: got %s, expected %s", name, current, want)
+			cli.Warn("    [REMOTE MISMATCH] %s: got %s, expected %s", name, cli.RedactURL(current), cli.RedactURL(want))
 		default:
-			cli.Info("    [REMOTE OK] %s -> %s", name, want)
+			cli.Info("    [REMOTE OK] %s -> %s", name, cli.RedactURL(want))
 		}
 	}
 }
@@ -575,12 +583,12 @@ func getGitURLs(server *lazypath.GitServer, group string, repoName string) (prim
 	return httpsURL, sshURL
 }
 
-func cloneRepoWithFallback(server *lazypath.GitServer, group string, repoName string, targetPath string) error {
+func cloneRepoWithFallback(server *lazypath.GitServer, group string, repoName string, targetPath string, batch bool) error {
 	primaryURL, fallbackURL := getGitURLs(server, group, repoName)
 
 	// Try primary URL
-	cli.Debug("Attempting to clone from: %s", primaryURL)
-	err := cloneRepo(primaryURL, targetPath)
+	cli.Debug("Attempting to clone from: %s", cli.RedactURL(primaryURL))
+	err := cloneRepo(primaryURL, targetPath, batch)
 	if err == nil {
 		return nil
 	}
@@ -595,8 +603,8 @@ func cloneRepoWithFallback(server *lazypath.GitServer, group string, repoName st
 
 		cli.Warn("Failed to clone via %s, trying fallback %s",
 			getURLType(primaryURL), getURLType(fallbackURL))
-		cli.Debug("Attempting to clone from: %s", fallbackURL)
-		return cloneRepo(fallbackURL, targetPath)
+		cli.Debug("Attempting to clone from: %s", cli.RedactURL(fallbackURL))
+		return cloneRepo(fallbackURL, targetPath, batch)
 	}
 
 	return err
@@ -609,8 +617,14 @@ func getURLType(url string) string {
 	return "SSH"
 }
 
-func cloneRepo(gitURL, targetPath string) error {
-	cmd := exec.Command("git", "clone", gitURL, targetPath)
+func cloneRepo(gitURL, targetPath string, batch bool) error {
+	cmd := exec.Command("git", "clone", "--", gitURL, targetPath)
+	if batch {
+		// Four clones at once cannot share one terminal: a password or a
+		// host-key question from one of them, with its text hidden in the
+		// buffer, would hang the whole run. Better to fail and say so.
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -oBatchMode=yes")
+	}
 	// Concurrent clones would interleave git's progress output line by line on
 	// the shared streams, so buffer it per clone and surface it as a whole:
 	// attached to the error when the clone fails, and only at debug level when
@@ -626,7 +640,7 @@ func cloneRepo(gitURL, targetPath string) error {
 		return err
 	}
 
-	cli.Debug("git clone %s:\n%s", gitURL, strings.TrimSpace(output.String()))
+	cli.Debug("git clone %s:\n%s", cli.RedactURL(gitURL), strings.TrimSpace(output.String()))
 
 	return nil
 }
@@ -645,7 +659,7 @@ func checkGitRemote(repoPath string, server *lazypath.GitServer, gitConfig *lazy
 	expectedHTTPS := fmt.Sprintf("%s/%s/%s.git", server.HTTPS, gitConfig.Group, repo.Name)
 
 	if remoteURL != expectedURL && remoteURL != expectedHTTPS && !strings.Contains(remoteURL, repo.Name) {
-		return fmt.Errorf("remote URL mismatch: got %s, expected %s", remoteURL, expectedURL)
+		return fmt.Errorf("remote URL mismatch: got %s, expected %s", cli.RedactURL(remoteURL), cli.RedactURL(expectedURL))
 	}
 
 	return nil

@@ -119,7 +119,7 @@ func cloneFullWithFallback(primary, fallback, ref, target string) error {
 	if err == nil || strings.TrimSpace(fallback) == "" {
 		return err
 	}
-	cli.Debug("Cloning %s failed, trying %s", primary, fallback)
+	cli.Debug("Cloning %s failed, trying %s", cli.RedactURL(primary), cli.RedactURL(fallback))
 	if fallbackErr := folderutil.CloneFull(fallback, ref, target); fallbackErr != nil {
 		return fmt.Errorf("%w; and %v", err, fallbackErr)
 	}

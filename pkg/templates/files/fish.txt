@@ -9,22 +9,22 @@ function pj --description "Jump to a project"
   # argument there is nothing to resolve, so ask instead.
   set -l target
   if test (count $argv) -eq 0
-    set target (command projekt folder select --verbose=error)
+    set target (command projekt folder select --verbose=error | string collect)
     or return 1
   else
-    set target (command projekt folder get --verbose=error $argv[1])
+    set target (command projekt folder get --verbose=error -- $argv[1] | string collect)
     or return 1
   end
   if not test -d "$target"
     echo "Project folder does not exist: $target" >&2
     return 1
   end
-  cd $target
+  cd -- $target
   or return 1
 
   # The argument is not the name we landed on when it was "-", a loose match
   # or nothing at all, so the tab is named after the folder itself.
-  set -l label (basename $target)
+  set -l label (basename -- $target)
   test -n "$ZELLIJ"; and zellij action rename-tab $label
   test -n "$TMUX"; and tmux rename-window $label
 end

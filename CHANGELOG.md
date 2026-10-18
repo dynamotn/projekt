@@ -1,5 +1,85 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **t**: a dry run, `t check` and `b check` no longer run anything: `output`
+  and `env` in a template or an `after:` line render empty while only being
+  looked at, instead of executing a command or asking for trust
+- **b**: `b new` says where the project is going before it writes anything,
+  and `--dry-run` refuses the same non-empty folder a real run would
+- **version**: a binary built with `go install module@version` reports that
+  version, and one built from a checkout reports a development version
+  instead of a constant nobody updated. `make build` off a tag stamps
+  `git describe` instead of an empty string
+- **config**: only a `PROJEKT_`-prefixed environment variable can override a
+  configuration key; a bare `INCLUDE` or `FOLDERS` in the shell is left alone
+- **go**: built with Go 1.26.9 and sprig v3; `getHostByName` is no longer
+  available to templates
+
+### Fixed
+
+- **folder**, **worktree**, **t**: paths are compared with their links
+  resolved, so a project under a linked folder — `/var` on macOS is
+  `/private/var` — is recognised by `folder current`, `worktree list` no
+  longer reports `NOT A WORKTREE`, `t sync` sees the store as a repository,
+  and `folder add` does not register one folder twice under two spellings
+- **config**: a file that parses but does not decode — `priority: abc`,
+  `tags: foo` — stops every command that writes, instead of being written back
+  as the fragment that did decode
+- **init**: `projekt init <shell>` prints the integration even when the
+  configuration is broken, so `pj` stays available to go and fix it
+- **pj**: `pj --anything` and a project whose name starts with a dash reach
+  `folder get` as a name rather than a flag; the fish function no longer
+  splits a path holding a newline; `cd` is passed `--`
+- **config edit**, **folder open**: `EDITOR` may hold quotes, so an editor
+  whose path has a space in it works
+- **folder prune**, **worktree prune**: an entry that is gone but comes from an
+  included file is reported rather than claimed forgotten, and no longer stops
+  the rest of the prune
+- **folder sync**: clones running beside each other never wait on a terminal
+  question nobody can see; an unreadable repository path is reported as such
+  rather than as "already exists"
+- **pj -**: goes back only to the exact project visited, never to a loose match
+  when that project is gone
+- **config**, **history**, **trust**: files are flushed to disk before they
+  replace the old one, and a name or path holding a tab or newline is not
+  recorded in the jump history, where it could not be read back
+- **b**: `b check` rejects a name that is a path; two recipes differing only
+  in `.yaml`/`.yml` are listed once; `~user` is not mistaken for a path
+- **release**: `scripts/release.sh` no longer leaves a stray blank line at
+  the top of the changelog; `make lint` fails on unformatted files
+- **t**, **b**, **folder**: a user name and password in a git URL are hidden
+  in every message that prints the URL
+
+### Performance
+
+- **pj**, completion: the workspace regex is compiled once per pattern per
+  process and the configuration is no longer validated — every folder stat'ed —
+  on every jump; `config check` and `doctor` still do that
+- **t**: the environment, user, host and store are read once per render
+  instead of once per path segment and per file, and the data files once
+  instead of twice
+
+### Security
+
+- **t**, **b**: a symbolic link in a template store that points outside it is
+  refused wherever the store is read — rendering, `include`, `t show`, the
+  manifest, data and ignore files, shared partials — so a cloned store cannot
+  copy a file of this machine into the output. A link a template writes is
+  never written *through*: a later file of the same template cannot land
+  outside the destination, by `t new` or by `t apply`
+- **t**, **b**: `.Env`, `env` and `expandenv` are behind the same trust as
+  `output`: a template from a cloned store reads the environment only once
+  you trust it, so a token in the shell cannot be copied into a file
+- **b**, **t**, **folder**: a repository URL, a branch and a path are passed
+  to git after `--`, and a URL starting with a dash is rejected, so a recipe's
+  `repo:` cannot smuggle an option such as `--upload-pack`
+- **pj**: bash completion no longer passes project names through `compgen
+  -W`, which expands each one as shell code; a workspace child named
+  `$(...)` is offered literally instead of run
+
 ## [4.1.0]
 
 ### Added

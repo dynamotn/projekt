@@ -26,18 +26,38 @@ func PruneWorktrees(out io.Writer, o PruneWorktreeOptions) error {
 		return err
 	}
 
-	worktrees := lazypath.GetConfig().Worktrees
+	parsed, err := ParseConfig(lazypath.GetConfig())
+	if err != nil {
+		return err
+	}
+	byName := make(map[string]ParsedFolder, len(parsed))
+	for _, folder := range parsed {
+		byName[folder.ShortName] = folder
+	}
+	own := make(map[string]struct{})
+	for _, worktree := range lazypath.OwnConfig().Worktrees {
+		own[worktree.ShortName()] = struct{}{}
+	}
 
 	// One `git worktree prune` per project, not per working tree.
 	projects := map[string]string{}
 	var gone []lazypath.Worktree
-	for _, worktree := range worktrees {
-		if folder, err := FindFolder(worktree.Project); err == nil {
+	for _, worktree := range lazypath.GetConfig().Worktrees {
+		if folder, ok := byName[worktree.Project]; ok {
 			projects[worktree.Project] = folder.Path
 		}
-		if _, err := os.Stat(worktree.Path); os.IsNotExist(err) {
-			gone = append(gone, worktree)
+		if _, err := os.Stat(worktree.Path); !os.IsNotExist(err) {
+			continue
 		}
+		if _, ours := own[worktree.ShortName()]; !ours {
+			// An included file is read, never written: say so instead of
+			// failing to forget what was never ours.
+			if _, err := fmt.Fprintf(out, "%s is gone but comes from an included file; edit that file to forget it\n", worktree.ShortName()); err != nil {
+				return err
+			}
+			continue
+		}
+		gone = append(gone, worktree)
 	}
 
 	if o.DryRun {
@@ -83,7 +103,7 @@ func PruneWorktrees(out io.Writer, o PruneWorktreeOptions) error {
 		_, err := fmt.Fprintln(out, "Nothing to prune")
 		return err
 	}
-	_, err := fmt.Fprintf(out, "%d entr%s forgotten, %d repositor%s pruned\n",
+	_, err = fmt.Fprintf(out, "%d entr%s forgotten, %d repositor%s pruned\n",
 		len(gone), entryPlural(len(gone)), pruned, repoPlural(pruned))
 	return err
 }

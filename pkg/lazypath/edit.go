@@ -16,9 +16,9 @@ import (
 func FindOwnFolder(path string) (Folder, int, bool) {
 	unmarshalConfig()
 
-	key := cleanPath(path)
+	key := Canonical(path)
 	for i, folder := range c.Folders {
-		if cleanPath(folder.Path) == key {
+		if Canonical(folder.Path) == key {
 			return folder, i, true
 		}
 	}

@@ -11,6 +11,8 @@ import (
 	"text/template"
 
 	yaml "go.yaml.in/yaml/v3"
+
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // funcs returns the functions a template gets on top of the sprig set.
@@ -23,6 +25,8 @@ func (e *engine) funcs() template.FuncMap {
 		"include":         e.include,
 		"includeTemplate": e.includeTemplate,
 		"output":          e.output,
+		"env":             e.envFunc,
+		"expandenv":       e.expandenv,
 		"lookPath":        lookPath,
 		"stat":            stat,
 		"joinPath":        path.Join,
@@ -44,7 +48,7 @@ func (e *engine) include(rel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data, err := os.ReadFile(target)
+	data, err := confinedRead(e.source, target)
 	if err != nil {
 		return "", fmt.Errorf("include %q: %w", rel, err)
 	}
@@ -73,7 +77,14 @@ func (e *engine) includeTemplate(name string, data ...any) (string, error) {
 // newline kept so `{{ output "git" "config" "user.name" | trim }}` reads the
 // way the shell does.
 func (e *engine) output(name string, args ...string) (string, error) {
-	if err := Authorize(e.origin, strings.Join(append([]string{name}, args...), " ")); err != nil {
+	command := strings.Join(append([]string{name}, args...), " ")
+	if e.noExec {
+		// A check or a dry run renders the template to look at it; running
+		// its commands would be acting on its behalf.
+		cli.Debug("Not running %q: nothing is run while only looking", command)
+		return "", nil
+	}
+	if err := Authorize(e.origin, command); err != nil {
 		return "", err
 	}
 	cmd := exec.Command(name, args...)
@@ -83,6 +94,56 @@ func (e *engine) output(name string, args ...string) (string, error) {
 		return "", fmt.Errorf("output %s: %w", name, err)
 	}
 	return string(out), nil
+}
+
+// envFunc is sprig's `env`, behind the same trust a command needs: a template
+// from a repository reads a variable only once this version of it is
+// trusted, because a token in the shell is as much worth protecting as what a
+// command could do with it.
+func (e *engine) envFunc(name string) (string, error) {
+	if err := e.authorizeEnv(fmt.Sprintf("env %q", name)); err != nil {
+		return "", err
+	}
+	return os.Getenv(name), nil
+}
+
+// expandenv is sprig's `expandenv`, behind the same trust as `env`.
+func (e *engine) expandenv(text string) (string, error) {
+	if err := e.authorizeEnv(fmt.Sprintf("expandenv %q", text)); err != nil {
+		return "", err
+	}
+	return os.ExpandEnv(text), nil
+}
+
+// authorizeEnv says whether a function may read the environment. Nothing is
+// read while only looking, and nothing is asked then either.
+func (e *engine) authorizeEnv(what string) error {
+	if e.noExec {
+		return nil
+	}
+	return Authorize(e.origin, what)
+}
+
+// environment is the environment a template sees as `.Env`: all of it for
+// a template of your own or one you trusted, none of it for one from a
+// repository you have not looked at. Unlike `env`, reading `.Env` never asks,
+// because a map is read all at once and a question per key would be absurd.
+func (e *engine) environment() map[string]string {
+	if e.envOnce {
+		return e.env
+	}
+	e.envOnce = true
+	e.env = map[string]string{}
+	if e.noExec || !isTrustedOrigin(e.origin) {
+		return e.env
+	}
+	for _, entry := range os.Environ() {
+		key, value, found := strings.Cut(entry, "=")
+		if found {
+			e.env[key] = value
+		}
+	}
+	return e.env
 }
 
 // lookPath returns where an executable is, or an empty string when it is not
@@ -287,6 +348,6 @@ func (e *engine) read(v Var, fallback string) (any, error) {
 		if eof {
 			return nil, fmt.Errorf("%s: %w", v.Name, err)
 		}
-		fmt.Fprintf(e.out, "    %v\n", err)
+		_, _ = fmt.Fprintf(e.out, "    %v\n", err)
 	}
 }

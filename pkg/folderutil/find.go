@@ -36,6 +36,9 @@ func FindFolderByShortName(out io.Writer, shortName string, o GetOptions) error 
 			return fmt.Errorf("no previous project to go back to")
 		}
 		shortName = previous.Name
+		// The name was a project when it was visited; if it is not one any
+		// more, a loose match would be a jump to somewhere never asked for.
+		o.ExactOnly = true
 	}
 
 	folder, err := ResolveFolder(shortName, o)

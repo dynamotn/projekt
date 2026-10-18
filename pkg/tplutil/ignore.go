@@ -43,7 +43,7 @@ func (e *engine) loadIgnore(o RenderOptions, data map[string]any) (*IgnoreSet, e
 	}
 	file := filepath.Join(o.Template.Path, IgnoreFile)
 
-	raw, err := os.ReadFile(file)
+	raw, err := confinedRead(storeRoot(o.Template), file)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &IgnoreSet{}, nil

@@ -71,7 +71,12 @@ func isGone(path string) bool {
 	return os.IsNotExist(err)
 }
 
-// PruneStale removes every entry FindStale reports, in one write.
+// PruneStale removes every entry FindStale reports from this machine's own
+// configuration file, in one write, and returns the ones it removed.
+//
+// A stale entry that comes from an included file is not this file's to
+// change: it is left where it is and left out of what is reported, so that
+// what the command says was forgotten is what actually was.
 func PruneStale() ([]Stale, error) {
 	if loadErr != nil {
 		return nil, loadErr
@@ -83,14 +88,16 @@ func PruneStale() ([]Stale, error) {
 		return nil, nil
 	}
 
-	gone := make(map[string]struct{}, len(stale))
+	gone := make(map[string]Stale, len(stale))
 	for _, entry := range stale {
-		gone[cleanPath(entry.Path)] = struct{}{}
+		gone[Canonical(entry.Path)] = entry
 	}
 
+	var removed []Stale
 	folders := make([]Folder, 0, len(c.Folders))
 	for _, folder := range c.Folders {
-		if _, drop := gone[cleanPath(folder.Path)]; drop {
+		if entry, drop := gone[Canonical(folder.Path)]; drop {
+			removed = append(removed, entry)
 			continue
 		}
 		folders = append(folders, folder)
@@ -98,12 +105,16 @@ func PruneStale() ([]Stale, error) {
 
 	worktrees := make([]Worktree, 0, len(c.Worktrees))
 	for _, worktree := range c.Worktrees {
-		if _, drop := gone[cleanPath(worktree.Path)]; drop {
+		if entry, drop := gone[Canonical(worktree.Path)]; drop {
+			removed = append(removed, entry)
 			continue
 		}
 		worktrees = append(worktrees, worktree)
 	}
 
+	if len(removed) == 0 {
+		return nil, nil
+	}
 	c.Folders = folders
 	c.Worktrees = worktrees
 	// One write for the whole lot: a prune that failed halfway would leave a
@@ -114,5 +125,5 @@ func PruneStale() ([]Stale, error) {
 	}
 	refreshEffective()
 
-	return stale, nil
+	return removed, nil
 }

@@ -43,6 +43,9 @@ type RenderOptions struct {
 	// Origin is where the template comes from, when that is not the store:
 	// a repository cloned to be rendered. Empty means the template itself.
 	Origin Origin
+	// dataMerged says Values already hold the data files, so nothing has to
+	// read them again for the manifest name.
+	dataMerged bool
 	// lenient lets a prompt function without a default render empty instead of
 	// failing. It is what `t check` renders with: a template that asks a
 	// question is not a broken template.
@@ -112,6 +115,7 @@ func Render(o RenderOptions) ([]string, error) {
 		return nil, err
 	}
 	o.Values = values
+	o.dataMerged = true
 
 	// The manifest name is resolved once the values are known, so that a
 	// template can name its output after an answer.
@@ -150,12 +154,14 @@ func withManifestName(o RenderOptions) (RenderOptions, error) {
 		return o, nil
 	}
 
-	values, err := WithData(o)
-	if err != nil {
-		return o, err
-	}
 	withValues := o
-	withValues.Values = values
+	if !o.dataMerged {
+		values, err := WithData(o)
+		if err != nil {
+			return o, err
+		}
+		withValues.Values = values
+	}
 
 	rendered, err := executeWith(TemplateOrigin(o.Template), manifest.delims(), "name:"+o.Template.Name, manifest.Name, context(withValues, ""))
 	if err != nil {
@@ -179,12 +185,12 @@ func renderFile(e *engine, o RenderOptions) ([]string, error) {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(o.Template.Path)
+	data, err := confinedRead(storeRoot(o.Template), o.Template.Path)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read template %s: %w", o.Template.Path, err)
 	}
 
-	rendered, err := e.execute(o.Template.Name, string(data), context(o, target))
+	rendered, err := e.execute(o.Template.Name, string(data), e.context(o, target))
 	if err != nil {
 		return nil, err
 	}
@@ -260,6 +266,7 @@ func Collect(o RenderOptions) ([]Rendered, error) {
 		return nil, err
 	}
 	o.Values = values
+	o.dataMerged = true
 
 	if o, err = withManifestName(o); err != nil {
 		return nil, err
@@ -279,7 +286,7 @@ func collectDir(e *engine, o RenderOptions) ([]Rendered, error) {
 		return nil, err
 	}
 
-	ignore, err := e.loadIgnore(o, context(o, ""))
+	ignore, err := e.loadIgnore(o, e.context(o, ""))
 	if err != nil {
 		return nil, err
 	}
@@ -322,12 +329,12 @@ func collectDir(e *engine, o RenderOptions) ([]Rendered, error) {
 			return nil
 		}
 
-		data, err := os.ReadFile(path)
+		data, err := confinedRead(storeRoot(o.Template), path)
 		if err != nil {
 			return fmt.Errorf("cannot read template file %s: %w", path, err)
 		}
 		target := filepath.Join(root, filepath.FromSlash(rendered))
-		content, err := e.execute(o.Template.Name+"/"+relative, string(data), context(o, target))
+		content, err := e.execute(o.Template.Name+"/"+relative, string(data), e.context(o, target))
 		if err != nil {
 			return err
 		}
@@ -381,6 +388,11 @@ func renderDir(e *engine, o RenderOptions) ([]string, error) {
 			if o.DryRun {
 				continue
 			}
+			// A link written by an earlier entry must not turn a folder of
+			// the template into a folder somewhere else.
+			if err := confinedTarget(root, target); err != nil {
+				return nil, err
+			}
 			if err := os.MkdirAll(target, file.Attrs.DirMode()); err != nil {
 				return nil, err
 			}
@@ -395,6 +407,9 @@ func renderDir(e *engine, o RenderOptions) ([]string, error) {
 			continue
 		}
 
+		if err := confinedTarget(root, target); err != nil {
+			return nil, err
+		}
 		if err := writeFile(target, file.Content, o.Force, file.Attrs); err != nil {
 			return nil, err
 		}
@@ -478,7 +493,7 @@ func renderRelative(e *engine, o RenderOptions, relative string) (string, Attrib
 			attrs = segmentAttrs
 		}
 
-		rendered, err := e.execute("path:"+relative, bare, context(o, ""))
+		rendered, err := e.execute("path:"+relative, bare, e.context(o, ""))
 		if err != nil {
 			return "", attrs, err
 		}
@@ -505,8 +520,26 @@ func renderRelative(e *engine, o RenderOptions, relative string) (string, Attrib
 	return strings.Join(segments, "/"), attrs, nil
 }
 
-// context builds the data a template is executed with.
+// context builds the data a template is executed with, outside a session.
 func context(o RenderOptions, target string) map[string]any {
+	origin := o.Origin
+	if origin.key() == "" {
+		origin = TemplateOrigin(o.Template)
+	}
+	return (&engine{origin: origin}).context(o, target)
+}
+
+// context builds the data one file of a template is executed with.
+//
+// What does not depend on the file is worked out once per session: a folder
+// template renders every path segment and every file with it, and reading
+// the environment, the user and the host name over again for each would be
+// most of the work.
+func (e *engine) context(o RenderOptions, target string) map[string]any {
+	if e.static == nil {
+		e.static = e.staticContext(o)
+	}
+
 	name := o.Name
 	if name == "" && target != "" {
 		// The output file name without its extension is the most useful
@@ -537,16 +570,25 @@ func context(o RenderOptions, target string) map[string]any {
 		project = name
 	}
 
+	data := make(map[string]any, len(e.static)+4)
+	for key, value := range e.static {
+		data[key] = value
+	}
+	data["Name"] = name
+	data["Project"] = project
+	data["Dir"] = dir
+	data["Path"] = target
+	return data
+}
+
+// staticContext is the part of the data that is the same for every file.
+func (e *engine) staticContext(o RenderOptions) map[string]any {
 	store, _ := Dir()
 	home, _ := os.UserHomeDir()
 	hostname, _ := os.Hostname()
 
 	now := time.Now()
 	return map[string]any{
-		"Name":     name,
-		"Project":  project,
-		"Dir":      dir,
-		"Path":     target,
 		"Template": o.Template.Name,
 		"Source":   templateSource(o.Template),
 		"Store":    store,
@@ -555,25 +597,12 @@ func context(o RenderOptions, target string) map[string]any {
 		"Hostname": hostname,
 		"OS":       runtime.GOOS,
 		"Arch":     runtime.GOARCH,
-		"Env":      environment(),
+		"Env":      e.environment(),
 		"Now":      now,
 		"Date":     now.Format("2006-01-02"),
 		"Year":     now.Format("2006"),
 		"Values":   map[string]any(o.Values),
 	}
-}
-
-// environment is the process environment as a map, so a template can read
-// `{{ .Env.EDITOR }}` without shelling out.
-func environment() map[string]string {
-	env := map[string]string{}
-	for _, entry := range os.Environ() {
-		key, value, found := strings.Cut(entry, "=")
-		if found {
-			env[key] = value
-		}
-	}
-	return env
 }
 
 func currentUser() string {
@@ -643,6 +672,17 @@ func writeSymlink(target, link string) error {
 // means there what it means everywhere else.
 func RenderString(origin Origin, name, text string, data map[string]any) (string, error) {
 	rendered, err := execute(origin, name, text, data)
+	if err != nil {
+		return "", err
+	}
+	return string(rendered), nil
+}
+
+// RenderStringNoExec is RenderString for a line that is only being looked at,
+// by a check or a dry run: `output` and `env` in it render empty instead of
+// running anything or asking for trust.
+func RenderStringNoExec(origin Origin, name, text string, data map[string]any) (string, error) {
+	rendered, err := executeMode(origin, DefaultDelims, name, text, data, true)
 	if err != nil {
 		return "", err
 	}

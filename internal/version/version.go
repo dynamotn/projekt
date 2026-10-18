@@ -10,10 +10,16 @@
 //	fmt.Printf("Git Commit: %s\n", info.GitCommit)
 package version
 
-import "runtime"
+import (
+	"runtime"
+	"runtime/debug"
+)
+
+// devVersion is what a build nothing stamped reports.
+const devVersion = "v0.0.0-dev"
 
 var (
-	version      = "v1.1.0"
+	version      = ""
 	gitCommit    = ""
 	gitTreeState = ""
 	buildTime    = ""
@@ -28,9 +34,20 @@ type BuildInfo struct {
 	BuildTime    string
 }
 
-// GetVersionStr returns the version string
+// GetVersionStr returns the version string.
+//
+// A release build stamps it with ldflags. A `go install module@version`
+// build does not, but the Go toolchain records the module version, so that
+// is used next; a plain `go build` from a checkout gets a development
+// version rather than a stale constant nobody updates.
 func GetVersionStr() string {
-	return version
+	if version != "" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return devVersion
 }
 
 // GetBuildInfo returns the build information

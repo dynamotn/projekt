@@ -152,7 +152,7 @@ func destination(o CreateOptions) (string, string, error) {
 // isPath reports whether a target names a location rather than a project.
 func isPath(target string) bool {
 	return strings.ContainsRune(target, filepath.Separator) ||
-		strings.HasPrefix(target, "~") ||
+		target == "~" || strings.HasPrefix(target, "~/") ||
 		target == "." || target == ".."
 }
 
@@ -224,7 +224,9 @@ func Create(o CreateOptions) (Result, error) {
 		return Result{}, err
 	}
 
-	if !o.Force && !o.DryRun {
+	// A dry run refuses the same folders a real run would: a preview that
+	// says "would create" where the real thing stops is not a preview.
+	if !o.Force {
 		if err := checkEmpty(plan.Path); err != nil {
 			return Result{}, err
 		}
@@ -237,6 +239,14 @@ func Create(o CreateOptions) (Result, error) {
 	log := o.Log
 	if log == nil {
 		log = io.Discard
+	}
+	// Said before anything is written: the recipe may have chosen the
+	// workspace, and where a project lands is not something to find out
+	// afterwards.
+	if !o.DryRun {
+		if _, err := fmt.Fprintf(log, "Creating %s in %s\n", plan.Name, plan.Path); err != nil {
+			return Result{}, err
+		}
 	}
 
 	var files []string

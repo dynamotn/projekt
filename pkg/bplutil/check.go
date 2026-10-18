@@ -129,6 +129,9 @@ func recipeNames() ([]string, error) {
 
 // recipePath returns the file a recipe is read from.
 func recipePath(name string) (string, error) {
+	if name != filepath.Base(name) || name == "." || name == ".." {
+		return "", fmt.Errorf("invalid boilerplate name %q", name)
+	}
 	dir, err := Dir()
 	if err != nil {
 		return "", err
@@ -266,7 +269,7 @@ func (c *checker) checkAfter(recipe Recipe) {
 			c.warnf("after[%d] is empty", i)
 			continue
 		}
-		if _, err := tplutil.RenderString(TrustOrigin(recipe), fmt.Sprintf("%s:after[%d]", recipe.Name, i), command, checkContext); err != nil {
+		if _, err := tplutil.RenderStringNoExec(TrustOrigin(recipe), fmt.Sprintf("%s:after[%d]", recipe.Name, i), command, checkContext); err != nil {
 			c.errorf("%v", err)
 		}
 	}

@@ -21,6 +21,10 @@ func NewInitCmd(out io.Writer) *cobra.Command {
 		// don't ship a template for.
 		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 		ValidArgs: templates.Shells(),
+		// The script is embedded and reads nothing, so a configuration that
+		// does not parse must not take `pj` away: it is the one way left to
+		// reach the file and fix it.
+		PersistentPreRunE: func(*cobra.Command, []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return templates.GenCommands(args[0], out)
 		},

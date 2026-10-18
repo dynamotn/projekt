@@ -144,7 +144,7 @@ Besides `.Values`, a template is given:
 | `.Store`    | Template folder the store is read from                          |
 | `.User`     | Current user name, with `.Home` besides it                      |
 | `.Hostname` | Name of this machine, with `.OS` and `.Arch` besides it         |
-| `.Env`      | The environment, as `.Env.EDITOR`                               |
+| `.Env`      | The environment, as `.Env.EDITOR` — empty for a cloned store you have not [trusted](#trusting-what-a-store-runs) |
 | `.Now`      | Current time, with `.Date` (`2006-01-02`) and `.Year` besides it |
 
 A value that was never set does not fail the render: it comes out as
@@ -451,6 +451,7 @@ On top of the [sprig](https://masterminds.github.io/sprig/) set:
 | `include "path"` | the contents of a file of the template, unrendered |
 | `includeTemplate "name" .` | a shared template of `.templates`, rendered into a string |
 | `output "cmd" "arg"` | the standard output of a command — [trusted](#trusting-what-a-store-runs) templates only, when the store is a clone |
+| `env "NAME"` / `expandenv "$NAME"` | a variable of the environment — [trusted](#trusting-what-a-store-runs) templates only, when the store is a clone, like `output` |
 | `lookPath "git"` | where an executable is, or empty when it is not installed |
 | `stat "go.mod"` | what is at a path, or nothing — `{{ if stat "go.mod" }}` |
 | `joinPath "a" "b"` | `a/b` |
@@ -458,7 +459,11 @@ On top of the [sprig](https://masterminds.github.io/sprig/) set:
 | `promptString` / `promptInt` / `promptBool` / `promptChoice` | ask, as above |
 
 `include` reads relative to the template and refuses to leave it, so a template
-cannot be made to read a file somewhere else on the disk.
+cannot be made to read a file somewhere else on the disk. A symbolic link in
+the store that points outside it is refused the same way, wherever it is read
+from, and a link a template writes is never written *through*: a later file of
+the same template cannot land outside the destination. Sprig's `getHostByName`
+is not available, since nothing a template writes needs a DNS lookup.
 
 ## Checking a template
 

@@ -154,13 +154,13 @@ func askNumbered(matches []Match, o SelectOptions) (ParsedFolder, error) {
 	}
 
 	for i, match := range matches {
-		fmt.Fprintf(errOut, "%3d  %-24s %s\n", i+1, match.Folder.ShortName, match.Folder.Path)
+		_, _ = fmt.Fprintf(errOut, "%3d  %-24s %s\n", i+1, match.Folder.ShortName, match.Folder.Path)
 	}
-	fmt.Fprintf(errOut, "Which one? [1-%d] ", len(matches))
+	_, _ = fmt.Fprintf(errOut, "Which one? [1-%d] ", len(matches))
 
 	line, err := bufio.NewReader(in).ReadString('\n')
 	if err != nil && strings.TrimSpace(line) == "" {
-		fmt.Fprintln(errOut)
+		_, _ = fmt.Fprintln(errOut)
 		return ParsedFolder{}, fmt.Errorf("nothing chosen")
 	}
 

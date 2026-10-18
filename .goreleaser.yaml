@@ -17,6 +17,11 @@ builds:
       - amd64
       - arm
       - arm64
+    ignore:
+      - goos: darwin
+        goarch: "386"
+      - goos: darwin
+        goarch: arm
     ldflags:
       - -s -w
       - -X gitlab.com/dynamo-tools/projekt/internal/version.version={{.Version}}
@@ -36,6 +41,11 @@ builds:
       - amd64
       - arm
       - arm64
+    ignore:
+      - goos: darwin
+        goarch: "386"
+      - goos: darwin
+        goarch: arm
     ldflags:
       - -s -w
       - -X gitlab.com/dynamo-tools/projekt/internal/version.version={{.Version}}
@@ -55,6 +65,11 @@ builds:
       - amd64
       - arm
       - arm64
+    ignore:
+      - goos: darwin
+        goarch: "386"
+      - goos: darwin
+        goarch: arm
     ldflags:
       - -s -w
       - -X gitlab.com/dynamo-tools/projekt/internal/version.version={{.Version}}

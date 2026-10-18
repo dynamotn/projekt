@@ -69,7 +69,7 @@ func (p Prompter) Ask(vars []Var, given Values, base map[string]any) (Values, er
 				if eof {
 					return nil, fmt.Errorf("%s is required and there is nothing left to read", v.Name)
 				}
-				fmt.Fprintf(p.Out, "    %s is required.\n", v.Name)
+				_, _ = fmt.Fprintf(p.Out, "    %s is required.\n", v.Name)
 				continue
 			}
 
@@ -78,7 +78,7 @@ func (p Prompter) Ask(vars []Var, given Values, base map[string]any) (Values, er
 				if eof {
 					return nil, fmt.Errorf("%s: %w", v.Name, err)
 				}
-				fmt.Fprintf(p.Out, "    %v\n", err)
+				_, _ = fmt.Fprintf(p.Out, "    %v\n", err)
 				continue
 			}
 			if err := assign(values, strings.Split(v.Name, "."), parsed); err != nil {
@@ -112,7 +112,7 @@ func (p Prompter) ask(reader *bufio.Reader, v Var, fallback string) (string, err
 		// A last line without a newline is still an answer; an empty one means
 		// there is nothing more to read.
 		if strings.TrimSpace(line) == "" {
-			fmt.Fprintln(p.Out)
+			_, _ = fmt.Fprintln(p.Out)
 			return "", io.EOF
 		}
 	}

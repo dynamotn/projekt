@@ -161,7 +161,7 @@ function _write_changelog {
     if [[ -f "${CHANGELOG}" ]]; then
       # Drop the old title and the blank line after it, and the Unreleased
       # section now that it has a version; the rest is history.
-      sed -e '1{/^# Changelog$/d}' -e '1{/^$/d}' \
+      sed -e '1{/^# Changelog$/d}' -e '2{/^$/d}' \
         -e '/^## \[Unreleased\]/,/^## \[/{ /^## \[Unreleased\]/d; /^## \[/!d; }' \
         "${CHANGELOG}"
     fi

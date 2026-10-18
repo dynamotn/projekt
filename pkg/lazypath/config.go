@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strings"
 
 	"github.com/OpenPeeDeeP/xdg"
@@ -71,9 +70,13 @@ func unmarshalConfig() {
 	}
 	loaded = true
 
-	err := viper.Unmarshal(&c)
-	if err != nil {
-		cli.Error("Unable to decode into struct %v", err)
+	if err := viper.Unmarshal(&c); err != nil {
+		// A file that parses but does not decode must not be written back:
+		// what was decoded is a fragment, and saving it would replace the
+		// whole file with the fragment.
+		loadErr = fmt.Errorf("cannot decode %s: %w", ConfigFile(), err)
+		cli.Error("%v", loadErr)
+		c = Config{}
 	}
 
 	// What commands read is this file plus what it includes; what they write
@@ -81,9 +84,6 @@ func unmarshalConfig() {
 	// from copying an included folder into the local configuration.
 	effective = mergeIncludes(c, ConfigFile())
 
-	if err := effective.Validate(); err != nil {
-		cli.Warn("Config validation warning %v", err)
-	}
 }
 
 // Severity says how much a configuration problem matters.
@@ -148,7 +148,7 @@ func (c *Config) Diagnose() []Diagnostic {
 			continue
 		}
 
-		key := cleanPath(folder.Path)
+		key := Canonical(folder.Path)
 		if _, dup := paths[key]; dup {
 			errorf("folder %s is configured more than once", folder.Path)
 		}
@@ -168,7 +168,7 @@ func (c *Config) Diagnose() []Diagnostic {
 			if folder.Name != "" {
 				warnf("folder %s is a workspace, its name %q is ignored", folder.Path, folder.Name)
 			}
-			if _, err := regexp.Compile(folder.GetRegexMatch()); err != nil {
+			if _, err := folder.Regex(); err != nil {
 				errorf("folder %s has an invalid regex %q: %v", folder.Path, folder.GetRegexMatch(), err)
 			}
 		}
@@ -335,6 +335,9 @@ func InitConfig() {
 		CfgFile = filepath.Join(xdg.ConfigHome(), "projekt", "config.yaml")
 	}
 
+	// Only a PROJEKT_ variable may override a key: a bare FOLDERS or INCLUDE
+	// in the environment is somebody else's.
+	viper.SetEnvPrefix("PROJEKT")
 	viper.AutomaticEnv()
 
 	loadErr = nil
@@ -403,7 +406,7 @@ func (c *Config) diagnoseWorktrees(errorf, warnf func(string, ...any)) {
 		}
 		names[worktree.ShortName()] = struct{}{}
 
-		key := cleanPath(worktree.Path)
+		key := Canonical(worktree.Path)
 		if _, dup := paths[key]; dup {
 			errorf("worktree path %s is used more than once", worktree.Path)
 		}

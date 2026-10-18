@@ -47,3 +47,19 @@ func TestEditorCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestEditorCommand_Quotes(t *testing.T) {
+	tests := map[string][]string{
+		`"/Applications/Some Editor.app/bin/editor" -w`: {"/Applications/Some Editor.app/bin/editor", "-w"},
+		`emacsclient -a ""`:                             {"emacsclient", "-a", ""},
+		`'my editor' --flag='a b'`:                      {"my editor", "--flag=a b"},
+		`vim\ ish -u NONE`:                              {"vim ish", "-u", "NONE"},
+		`   code   --wait  `:                            {"code", "--wait"},
+	}
+	for value, want := range tests {
+		got := EditorCommand(func(string) string { return value })
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("EditorCommand(%q) = %q, want %q", value, got, want)
+		}
+	}
+}

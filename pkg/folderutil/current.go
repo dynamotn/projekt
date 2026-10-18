@@ -41,11 +41,9 @@ func CurrentFolder(out io.Writer, o CurrentOptions) error {
 	if err != nil {
 		return err
 	}
-	// Follow symlinks: a project reached through one is still that project,
-	// and the configuration holds the real path.
-	if resolved, err := filepath.EvalSymlinks(from); err == nil {
-		from = resolved
-	}
+	// Follow symlinks on both sides: a project reached through one is still
+	// that project, and the configuration may spell its path through one too.
+	from = lazypath.Canonical(from)
 
 	folders, err := ParseConfig(lazypath.GetConfig())
 	if err != nil {
@@ -55,7 +53,7 @@ func CurrentFolder(out io.Writer, o CurrentOptions) error {
 	var best ParsedFolder
 	var found bool
 	for _, folder := range folders {
-		if !contains(folder.Path, from) {
+		if !contains(lazypath.Canonical(folder.Path), from) {
 			continue
 		}
 		if !found || len(filepath.Clean(folder.Path)) > len(filepath.Clean(best.Path)) {

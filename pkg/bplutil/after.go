@@ -30,7 +30,7 @@ func RunAfter(out io.Writer, plan Plan, values tplutil.Values, o CreateOptions) 
 	base["Values"] = map[string]any(values)
 
 	for i, command := range plan.Recipe.After {
-		rendered, err := renderCommand(plan.Recipe, i, command, base)
+		rendered, err := renderCommand(plan.Recipe, i, command, base, o.DryRun)
 		if err != nil {
 			return err
 		}
@@ -57,8 +57,13 @@ func RunAfter(out io.Writer, plan Plan, values tplutil.Values, o CreateOptions) 
 }
 
 // renderCommand runs one command line through the template engine.
-func renderCommand(recipe Recipe, index int, command string, base map[string]any) (string, error) {
-	rendered, err := tplutil.RenderString(TrustOrigin(recipe), fmt.Sprintf("%s:after[%d]", recipe.Name, index), command, base)
+func renderCommand(recipe Recipe, index int, command string, base map[string]any, dryRun bool) (string, error) {
+	render := tplutil.RenderString
+	if dryRun {
+		// A dry run says what would run; nothing in the line itself may run.
+		render = tplutil.RenderStringNoExec
+	}
+	rendered, err := render(TrustOrigin(recipe), fmt.Sprintf("%s:after[%d]", recipe.Name, index), command, base)
 	if err != nil {
 		return "", err
 	}

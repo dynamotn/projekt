@@ -181,6 +181,7 @@ func List() ([]Recipe, error) {
 	}
 
 	recipes := make([]Recipe, 0, len(entries))
+	seen := make(map[string]string, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
 			continue
@@ -189,6 +190,12 @@ func List() ([]Recipe, error) {
 		if name == "" {
 			continue
 		}
+		if first, dup := seen[name]; dup {
+			// Get reads the .yaml one; listing both would offer a name twice.
+			cli.Warn("Skipping %s: %s already defines the boilerplate %s", entry.Name(), first, name)
+			continue
+		}
+		seen[name] = entry.Name()
 
 		recipe, err := load(filepath.Join(dir, entry.Name()), name)
 		if err != nil {

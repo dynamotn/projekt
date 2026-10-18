@@ -145,10 +145,10 @@ func askForValues(cmd *cobra.Command, o bplutil.CreateOptions) (tplutil.Values, 
 
 	prompt := cmd.ErrOrStderr()
 	if len(vars) == 0 {
-		fmt.Fprintf(prompt, "%s takes no values.\n", o.Recipe.Name)
+		_, _ = fmt.Fprintf(prompt, "%s takes no values.\n", o.Recipe.Name)
 		return o.Values, nil
 	}
-	fmt.Fprintf(prompt, "Values for %s:\n", o.Recipe.Name)
+	_, _ = fmt.Fprintf(prompt, "Values for %s:\n", o.Recipe.Name)
 
 	delims, err := tplutil.Delimiters(plan.Template)
 	if err != nil {
@@ -159,6 +159,6 @@ func askForValues(cmd *cobra.Command, o bplutil.CreateOptions) (tplutil.Values, 
 	if err != nil {
 		return nil, err
 	}
-	fmt.Fprintln(prompt)
+	_, _ = fmt.Fprintln(prompt)
 	return values, nil
 }

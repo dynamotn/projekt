@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -33,7 +32,7 @@ func DiscoverRepos(folder lazypath.Folder, servers []lazypath.GitServer) (*lazyp
 	}
 
 	folderPath := filepath.Clean(folder.Path)
-	re, err := regexp.Compile(folder.GetRegexMatch())
+	re, err := folder.Regex()
 	if err != nil {
 		return nil, fmt.Errorf("cannot compile regex for folder %s: %w", folder.Path, err)
 	}
@@ -138,7 +137,7 @@ func buildDiscoveredConfig(found []discovered) *lazypath.GitConfig {
 
 // repoRemoteURL reads one remote's URL out of a checked-out repository.
 func repoRemoteURL(repoPath string, remote string) (string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "remote", "get-url", remote)
+	cmd := exec.Command("git", "-C", repoPath, "remote", "get-url", "--", remote)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("cannot read the %s remote: %w", remote, err)

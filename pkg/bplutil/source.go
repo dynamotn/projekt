@@ -35,7 +35,7 @@ func createFromRepo(plan Plan, o CreateOptions, log io.Writer) ([]string, error)
 		if plan.Recipe.Source.Render {
 			verb = "render"
 		}
-		_, err := fmt.Fprintf(log, "[DRY RUN] Would clone %s and %s it into %s\n", primary, verb, plan.Path)
+		_, err := fmt.Fprintf(log, "[DRY RUN] Would clone %s and %s it into %s\n", cli.RedactURL(primary), verb, plan.Path)
 		return nil, err
 	}
 
@@ -43,7 +43,7 @@ func createFromRepo(plan Plan, o CreateOptions, log io.Writer) ([]string, error)
 	if err != nil {
 		return nil, fmt.Errorf("cannot make a temporary folder: %w", err)
 	}
-	defer os.RemoveAll(temp)
+	defer func() { _ = os.RemoveAll(temp) }()
 
 	// git clone wants to create the folder itself.
 	clone := filepath.Join(temp, "clone")
@@ -60,7 +60,7 @@ func createFromRepo(plan Plan, o CreateOptions, log io.Writer) ([]string, error)
 		return listFiles(plan.Path)
 	}
 
-	cli.Debug("Rendering the clone of %s", primary)
+	cli.Debug("Rendering the clone of %s", cli.RedactURL(primary))
 	return tplutil.Render(tplutil.RenderOptions{
 		Template: tplutil.Template{Name: plan.Recipe.Name, Path: clone, Kind: tplutil.KindDir},
 		Origin:   repoOrigin(plan.Recipe, primary, clone),

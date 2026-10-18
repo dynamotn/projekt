@@ -1,11 +1,11 @@
 BINARY_FOLDER  = $(CURDIR)/bin
 DOC_FOLDER     = $(CURDIR)/doc
 INSTALL_PATH  ?= $(HOME)/.local/bin
-TARGETS        = darwin/amd64 darwin/arm64 darwin/386 darwin/arm linux/amd64 linux/386 linux/arm linux/arm64
+TARGETS        = darwin/amd64 darwin/arm64 linux/amd64 linux/386 linux/arm linux/arm64
 
 # The version is of the format Major.Minor.Patch[-Prerelease][+BuildMetadata]
 GIT_COMMIT = $(shell git rev-parse HEAD)
-GIT_TAG    = $(shell git describe --tags --abbrev=0 --exact-match 2>/dev/null)
+GIT_TAG    = $(shell git describe --tags --always --dirty 2>/dev/null)
 GIT_DIRTY  = $(shell test -n "`git status --porcelain`" && echo "dirty" || echo "clean")
 BUILD_TIME = $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -36,7 +36,7 @@ test:
 
 .PHONY: lint
 lint:
-	gofmt -l .
+	@test -z "$$(gofmt -l .)" || { echo "These files are not gofmt'd:"; gofmt -l .; exit 1; }
 	go vet ./...
 
 .PHONY: clean

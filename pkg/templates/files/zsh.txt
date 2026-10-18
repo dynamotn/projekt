@@ -12,7 +12,7 @@ pj() {
   if (( $# == 0 )); then
     target=$(command projekt folder select --verbose=error) || return 1
   else
-    target=$(command projekt folder get --verbose=error "$1") || return 1
+    target=$(command projekt folder get --verbose=error -- "$1") || return 1
   fi
 
   if [[ ! -d $target ]]; then

@@ -11,7 +11,7 @@ import (
 func TestConfigValidate(t *testing.T) {
 	tmpDir := t.TempDir()
 	existingPath := filepath.Join(tmpDir, "exists")
-	os.Mkdir(existingPath, 0o755)
+	_ = os.Mkdir(existingPath, 0o755)
 
 	tests := []struct {
 		name    string

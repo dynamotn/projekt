@@ -6,12 +6,22 @@ import (
 )
 
 func TestGetVersionStr(t *testing.T) {
-	got := GetVersionStr()
-	if got == "" {
+	if got := GetVersionStr(); got == "" {
 		t.Error("GetVersionStr() returned empty string")
 	}
-	if got != version {
-		t.Errorf("GetVersionStr() = %v, want %v", got, version)
+
+	// Stamped by ldflags, the stamp wins.
+	original := version
+	version = "v9.9.9"
+	t.Cleanup(func() { version = original })
+	if got := GetVersionStr(); got != "v9.9.9" {
+		t.Errorf("GetVersionStr() = %v, want the stamped version", got)
+	}
+
+	// Nothing stamped: never empty, and never a stale constant.
+	version = ""
+	if got := GetVersionStr(); got == "" || got == "v1.1.0" {
+		t.Errorf("GetVersionStr() = %q, want a module or development version", got)
 	}
 }
 

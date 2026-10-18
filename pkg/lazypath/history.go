@@ -72,7 +72,7 @@ func ReadHistory() []Visit {
 		}
 		return nil
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var visits []Visit
 	scanner := bufio.NewScanner(file)
@@ -134,6 +134,11 @@ func RecordVisit(name, path string) error {
 	if name == "" || name == PreviousName {
 		return fmt.Errorf("cannot record a visit without a name")
 	}
+	if strings.ContainsAny(name+path, "\t\n\r") {
+		// The history is one line per visit with tabs between the fields; a
+		// name or a path with either in it has no line it can be written on.
+		return fmt.Errorf("cannot record a visit to %q: the name or the path holds a tab or a newline", name)
+	}
 
 	visits := ReadHistory()
 	now := time.Now().Truncate(time.Second)
@@ -180,7 +185,7 @@ func ClearHistory() error {
 // one.
 func writeHistory(visits []Visit) error {
 	path := HistoryFile()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("cannot create %s: %w", filepath.Dir(path), err)
 	}
 
@@ -188,18 +193,22 @@ func writeHistory(visits []Visit) error {
 	if err != nil {
 		return fmt.Errorf("cannot write the jump history: %w", err)
 	}
-	defer os.Remove(temp.Name())
+	defer func() { _ = os.Remove(temp.Name()) }()
 
 	writer := bufio.NewWriter(temp)
 	for _, visit := range visits {
 		if _, err := fmt.Fprintf(writer, "%d\t%d\t%s\t%s\n",
 			visit.At.Unix(), visit.Count, visit.Name, visit.Path); err != nil {
-			temp.Close()
+			_ = temp.Close()
 			return fmt.Errorf("cannot write the jump history: %w", err)
 		}
 	}
 	if err := writer.Flush(); err != nil {
-		temp.Close()
+		_ = temp.Close()
+		return fmt.Errorf("cannot write the jump history: %w", err)
+	}
+	if err := temp.Sync(); err != nil {
+		_ = temp.Close()
 		return fmt.Errorf("cannot write the jump history: %w", err)
 	}
 	if err := temp.Close(); err != nil {

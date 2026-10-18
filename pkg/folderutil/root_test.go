@@ -577,7 +577,7 @@ func TestRemoveFolderFromConfig(t *testing.T) {
 		Prefix:      "test",
 		IsWorkspace: false,
 	}
-	ImportFolderToConfig(folder)
+	_ = ImportFolderToConfig(folder)
 
 	tests := []struct {
 		name    string

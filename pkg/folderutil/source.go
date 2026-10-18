@@ -23,7 +23,9 @@ func GitURLs(host, group, name string) (primary, fallback string, err error) {
 // rather than the `server:group/name` shorthand.
 func IsGitURL(value string) bool {
 	value = strings.TrimSpace(value)
-	if value == "" {
+	if value == "" || strings.HasPrefix(value, "-") {
+		// Nothing git clones from starts with a dash; something that does is
+		// trying to be an option.
 		return false
 	}
 	if strings.Contains(value, "://") {
@@ -116,15 +118,17 @@ func clone(url, ref, target string, shallow bool) error {
 	if strings.TrimSpace(ref) != "" {
 		args = append(args, "--branch", ref)
 	}
-	args = append(args, url, target)
+	// The URL and the folder are values, never options: a recipe could spell
+	// one as --upload-pack=..., which git would run.
+	args = append(args, "--", url, target)
 
-	cli.Debug("Cloning %s into %s", url, target)
+	cli.Debug("Cloning %s into %s", cli.RedactURL(url), target)
 	if err := runGitIn(".", args...); err != nil {
 		// A clone that failed halfway leaves a folder nobody asked for.
 		if entries, readErr := os.ReadDir(target); readErr == nil && len(entries) == 0 {
 			_ = os.Remove(target)
 		}
-		return fmt.Errorf("cannot clone %s: %w", url, err)
+		return fmt.Errorf("cannot clone %s: %w", cli.RedactURL(url), err)
 	}
 	return nil
 }
@@ -137,7 +141,7 @@ func CloneWithFallback(primary, fallback, ref, target string) error {
 		return err
 	}
 
-	cli.Debug("Cloning %s failed, trying %s", primary, fallback)
+	cli.Debug("Cloning %s failed, trying %s", cli.RedactURL(primary), cli.RedactURL(fallback))
 	if fallbackErr := CloneInto(fallback, ref, target); fallbackErr != nil {
 		return fmt.Errorf("%w; and %v", err, fallbackErr)
 	}
@@ -168,12 +172,12 @@ func SetRemote(path, name, url string) error {
 	}
 
 	if _, exists := remotes[name]; exists {
-		if err := runGit(path, "remote", "set-url", name, url); err != nil {
+		if err := runGit(path, "remote", "set-url", "--", name, url); err != nil {
 			return fmt.Errorf("cannot repoint %s: %w", name, err)
 		}
 		return nil
 	}
-	if err := runGit(path, "remote", "add", name, url); err != nil {
+	if err := runGit(path, "remote", "add", "--", name, url); err != nil {
 		return fmt.Errorf("cannot add the remote %s: %w", name, err)
 	}
 	return nil

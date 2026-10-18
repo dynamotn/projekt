@@ -62,3 +62,26 @@ func TestCheckFolderExist_DifferentSpellings(t *testing.T) {
 		t.Error("CheckFolderExist(/tmp/other) = true, want false")
 	}
 }
+
+func TestCanonical_ResolvesLinksAndKeepsTheMissingTail(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "real")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("cannot create a symbolic link here: %v", err)
+	}
+
+	if !SamePath(link, real) {
+		t.Errorf("SamePath(%q, %q) = false, want the link to name the folder", link, real)
+	}
+	want := filepath.Join(Canonical(real), "not", "yet")
+	if got := Canonical(filepath.Join(link, "not", "yet")); got != want {
+		t.Errorf("Canonical() = %q, want %q: the existing prefix resolved, the rest kept", got, want)
+	}
+	if SamePath(real, filepath.Join(real, "other")) {
+		t.Error("SamePath() = true for two different folders")
+	}
+}

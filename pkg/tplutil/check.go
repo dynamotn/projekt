@@ -7,8 +7,6 @@ import (
 	"text/template"
 	"text/template/parse"
 
-	"github.com/Masterminds/sprig"
-
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
@@ -299,7 +297,7 @@ func (c *checker) defaults(manifest Manifest) Values {
 // parseOnly parses a piece of a template without running it, which is what a
 // check can do for a template whose values it does not have.
 func parseOnly(name, text string, delims [2]string) (*template.Template, error) {
-	t, err := template.New(name).Funcs(sprig.TxtFuncMap()).Funcs(parserFuncs()).
+	t, err := template.New(name).Funcs(sprigFuncs()).Funcs(parserFuncs()).
 		Delims(delims[0], delims[1]).Option("missingkey=zero").Parse(text)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %s: %w", name, err)
@@ -352,7 +350,7 @@ func templateCalls(t *template.Template) []string {
 			}
 		}
 	}
-	walk(t.Tree.Root)
+	walk(t.Root)
 	return names
 }
 

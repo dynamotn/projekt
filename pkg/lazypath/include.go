@@ -103,6 +103,12 @@ func includePaths(includes []string, configFile string) []string {
 			continue
 		}
 		if strings.HasPrefix(include, "~") {
+			if include != "~" && !strings.HasPrefix(include, "~/") {
+				// ~user is a shell thing; nothing here can expand it, and
+				// silently reading it against the current folder is worse.
+				cli.Warn("Cannot resolve included config %s: only ~ and ~/ are expanded", include)
+				continue
+			}
 			expanded, err := NormalizePath(include)
 			if err != nil {
 				cli.Warn("Cannot resolve included config %s: %v", include, err)

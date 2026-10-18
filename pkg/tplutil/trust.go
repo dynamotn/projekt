@@ -145,6 +145,35 @@ func Authorize(origin Origin, command string) error {
 	return nil
 }
 
+// isTrustedOrigin reports whether an origin may be acted on without asking:
+// it is yours, it was allowed in this process, or this version of it was
+// trusted before. It never asks.
+func isTrustedOrigin(origin Origin) bool {
+	key := origin.key()
+	if key == "" {
+		return false
+	}
+	trustMu.Lock()
+	defer trustMu.Unlock()
+	if approved[key] {
+		return true
+	}
+	if !origin.fromRemote() {
+		approved[key] = true
+		return true
+	}
+	sum, err := origin.fingerprint()
+	if err != nil {
+		return false
+	}
+	trusted, err := isTrusted(key, sum)
+	if err != nil || !trusted {
+		return false
+	}
+	approved[key] = true
+	return true
+}
+
 // Trust records the origin as trusted as it is now, whatever it holds.
 func Trust(origin Origin) error {
 	key := origin.key()
@@ -250,20 +279,20 @@ func (o Origin) fingerprint() (string, error) {
 // hashEntry adds one file to a fingerprint: its name, whether it runs, and
 // what it holds — or, for a link, where it points.
 func hashEntry(hash io.Writer, name, path string, mode fs.FileMode) error {
-	fmt.Fprintf(hash, "%s\x00%t\x00", name, mode&0o111 != 0)
+	_, _ = fmt.Fprintf(hash, "%s\x00%t\x00", name, mode&0o111 != 0)
 	if mode&fs.ModeSymlink != 0 {
 		target, err := os.Readlink(path)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(hash, "link:%s\x00", target)
+		_, _ = fmt.Fprintf(hash, "link:%s\x00", target)
 		return nil
 	}
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if _, err := io.Copy(hash, f); err != nil {
 		return err
 	}
@@ -339,9 +368,13 @@ func recordTrust(key, sum string) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(temp.Name())
+	defer func() { _ = os.Remove(temp.Name()) }()
 	if _, err := temp.Write(data); err != nil {
-		temp.Close()
+		_ = temp.Close()
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		_ = temp.Close()
 		return err
 	}
 	if err := temp.Close(); err != nil {

@@ -7,9 +7,6 @@ import (
 	"io/fs"
 	"sort"
 	"strings"
-	"text/template"
-
-	"github.com/Masterminds/sprig"
 )
 
 //go:embed files/*
@@ -38,15 +35,16 @@ func Shells() []string {
 	return shells
 }
 
+// GenCommands writes the integration script of a shell.
+//
+// The scripts are written as they are: nothing is interpolated into them,
+// since every path is resolved by `projekt` itself when the function runs,
+// and a shell script has no business being parsed as a Go template.
 func GenCommands(shell string, w io.Writer) error {
-	data, error := f.ReadFile("files/" + shell + ".txt")
-	if error != nil {
-		return error
+	data, err := f.ReadFile("files/" + shell + ".txt")
+	if err != nil {
+		return err
 	}
-
-	vars := map[string]interface{}{}
-
-	t := template.Must(template.New(shell).Funcs(sprig.FuncMap()).Parse(string(data)))
-	error = t.Execute(w, vars)
-	return error
+	_, err = w.Write(data)
+	return err
 }

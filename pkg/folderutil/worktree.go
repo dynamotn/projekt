@@ -180,15 +180,13 @@ func IsRepoRoot(path string) bool {
 	if err != nil {
 		return false
 	}
-	top, err := filepath.Abs(strings.TrimSpace(out))
-	if err != nil {
-		return false
-	}
 	here, err := filepath.Abs(path)
 	if err != nil {
 		return false
 	}
-	return top == here
+	// git reports the resolved path, where the caller may have spelled it
+	// through a link: on macOS /var is /private/var.
+	return lazypath.SamePath(strings.TrimSpace(out), here)
 }
 
 // RemoveWorktreeOptions drives `projekt worktree remove`.
@@ -226,7 +224,7 @@ func RemoveWorktree(out io.Writer, o RemoveWorktreeOptions) error {
 		if o.Force {
 			args = append(args, "--force")
 		}
-		args = append(args, worktree.Path)
+		args = append(args, "--", worktree.Path)
 
 		if err := runGit(project.Path, args...); err != nil {
 			return fmt.Errorf("cannot remove worktree %s: %w", worktree.Path, err)
@@ -336,7 +334,7 @@ func worktreeStatus(worktree lazypath.Worktree, hasProject bool, branches map[st
 		return worktreeMissing
 	}
 
-	branch, known := branches[filepath.Clean(worktree.Path)]
+	branch, known := branches[lazypath.Canonical(worktree.Path)]
 	switch {
 	case !known:
 		// The folder is there but git does not count it as a working tree of
@@ -350,6 +348,8 @@ func worktreeStatus(worktree lazypath.Worktree, hasProject bool, branches map[st
 }
 
 // gitWorktrees reads the working trees git knows about, as path -> branch.
+// The paths are canonical, so that a configured path reaches them however
+// it is spelled.
 func gitWorktrees(repoPath string) map[string]string {
 	cmd := exec.Command("git", "-C", repoPath, "worktree", "list", "--porcelain")
 
@@ -369,7 +369,7 @@ func gitWorktrees(repoPath string) map[string]string {
 		line := scanner.Text()
 		switch {
 		case strings.HasPrefix(line, "worktree "):
-			current = filepath.Clean(strings.TrimPrefix(line, "worktree "))
+			current = lazypath.Canonical(strings.TrimPrefix(line, "worktree "))
 			result[current] = ""
 		case strings.HasPrefix(line, "branch ") && current != "":
 			result[current] = strings.TrimPrefix(strings.TrimPrefix(line, "branch "), "refs/heads/")
@@ -435,10 +435,10 @@ func CoveringWorkspace(path string) (lazypath.Folder, bool) {
 		if !folder.IsWorkspace {
 			continue
 		}
-		if filepath.Clean(folder.Path) != parent {
+		if !lazypath.SamePath(folder.Path, parent) {
 			continue
 		}
-		re, err := regexp.Compile(folder.GetRegexMatch())
+		re, err := folder.Regex()
 		if err != nil {
 			cli.Debug("Cannot compile regex of workspace %s: %v", folder.Path, err)
 			continue

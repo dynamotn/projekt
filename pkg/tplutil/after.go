@@ -49,7 +49,7 @@ func RunAfter(o HookOptions) error {
 
 	for i, command := range manifest.After {
 		name := fmt.Sprintf("%s:after[%d]", o.Template.Name, i)
-		rendered, err := executeWith(TemplateOrigin(o.Template), delims, name, command, o.Context)
+		rendered, err := executeMode(TemplateOrigin(o.Template), delims, name, command, o.Context, o.DryRun)
 		if err != nil {
 			return err
 		}

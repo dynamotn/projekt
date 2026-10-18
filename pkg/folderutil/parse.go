@@ -3,7 +3,6 @@ package folderutil
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
@@ -47,7 +46,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 			result = appendToParsedFolder(result, shortNames, prefix+folder.ShortName(), folderPath, folderPath, tags)
 			continue
 		}
-		re, err := regexp.Compile(folder.GetRegexMatch())
+		re, err := folder.Regex()
 		if err != nil {
 			cli.Warn("Cannot compile regex for folder %s: %v", folder.Path, err)
 			continue

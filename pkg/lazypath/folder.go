@@ -2,8 +2,10 @@ package lazypath
 
 import (
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/samber/lo"
 
@@ -163,9 +165,10 @@ func cleanPath(path string) string {
 func CheckFolderExist(path string) (bool, int) {
 	unmarshalConfig()
 
-	normalizedPath := cleanPath(path)
+	// Compared resolved, so that /var/x and /private/var/x are one entry.
+	normalizedPath := Canonical(path)
 	_, index, ok := lo.FindIndexOf(c.Folders, func(folder Folder) bool {
-		return cleanPath(folder.Path) == normalizedPath
+		return Canonical(folder.Path) == normalizedPath
 	})
 
 	return ok, index
@@ -220,4 +223,28 @@ func RemoveFromConfig(path string) error {
 
 	cli.Info("Removed %s from config", path)
 	return nil
+}
+
+var (
+	regexMu    sync.Mutex
+	regexCache = map[string]*regexp.Regexp{}
+)
+
+// Regex returns the compiled expression a workspace matches its children
+// with. Every command resolving a name compiles it, and a jump or a tab
+// completion should not pay for that for every workspace every time, so a
+// compiled expression is kept per pattern.
+func (f *Folder) Regex() (*regexp.Regexp, error) {
+	pattern := f.GetRegexMatch()
+	regexMu.Lock()
+	defer regexMu.Unlock()
+	if re, ok := regexCache[pattern]; ok {
+		return re, nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	regexCache[pattern] = re
+	return re, nil
 }

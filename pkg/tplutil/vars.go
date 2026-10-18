@@ -2,15 +2,13 @@ package tplutil
 
 import (
 	"fmt"
+	yaml "go.yaml.in/yaml/v3"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"text/template"
 	"text/template/parse"
-
-	"github.com/Masterminds/sprig"
-	yaml "go.yaml.in/yaml/v3"
 )
 
 // VarsFile declares what a template asks for. It sits next to a file template
@@ -160,7 +158,7 @@ func varsPath(tpl Template) string {
 func LoadManifest(tpl Template) (Manifest, error) {
 	path := varsPath(tpl)
 
-	data, err := os.ReadFile(path)
+	data, err := confinedRead(storeRoot(tpl), path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Manifest{}, nil
@@ -286,13 +284,13 @@ func scanValues(tpl Template) (*varScan, error) {
 		// The scan only has to parse, but a template calling `promptString`
 		// does not parse at all unless the function is known, and one written
 		// with its own delimiters does not parse without them either.
-		t, err := template.New(name).Funcs(sprig.TxtFuncMap()).Funcs(parserFuncs()).
+		t, err := template.New(name).Funcs(sprigFuncs()).Funcs(parserFuncs()).
 			Delims(delims[0], delims[1]).Option("missingkey=zero").Parse(text)
 		if err != nil {
 			return nil, fmt.Errorf("cannot parse template %s: %w", name, err)
 		}
 		if t.Tree != nil {
-			scan.walk(t.Tree.Root, map[string]bool{})
+			scan.walk(t.Root, map[string]bool{})
 		}
 	}
 	return scan, nil
@@ -311,7 +309,7 @@ func templateSources(tpl Template) (map[string]string, error) {
 	}
 
 	if !tpl.IsDir() {
-		data, err := os.ReadFile(tpl.Path)
+		data, err := confinedRead(storeRoot(tpl), tpl.Path)
 		if err != nil {
 			return nil, fmt.Errorf("cannot read template %s: %w", tpl.Path, err)
 		}
@@ -350,7 +348,7 @@ func templateSources(tpl Template) (map[string]string, error) {
 		if entry.IsDir() {
 			return nil
 		}
-		data, err := os.ReadFile(path)
+		data, err := confinedRead(storeRoot(tpl), path)
 		if err != nil {
 			return fmt.Errorf("cannot read template file %s: %w", path, err)
 		}

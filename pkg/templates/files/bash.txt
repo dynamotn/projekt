@@ -9,11 +9,12 @@ function pj() {
   local target
   # `projekt folder get` exits non-zero when the short name is unknown, so the
   # error it already printed is the only message the user needs. With no
-  # argument there is nothing to resolve, so ask instead.
+  # argument there is nothing to resolve, so ask instead. The `--` keeps a name
+  # starting with a dash from being read as a flag.
   if [ $# -eq 0 ]; then
     target=$(command projekt folder select --verbose=error) || return 1
   else
-    target=$(command projekt folder get --verbose=error "$1") || return 1
+    target=$(command projekt folder get --verbose=error -- "$1") || return 1
   fi
 
   if [ ! -d "$target" ]; then
@@ -21,23 +22,26 @@ function pj() {
     return 1
   fi
 
-  cd "$target" || return 1
+  cd -- "$target" || return 1
 
   # The argument is not the name we landed on when it was "-", a loose match
   # or nothing at all, so the tab is named after the folder itself.
   local label
-  label=$(basename "$target")
+  label=$(basename -- "$target")
   [ -n "$ZELLIJ" ] && zellij action rename-tab "$label"
   [ -n "$TMUX" ] && tmux rename-window "$label"
   return 0
 }
 
 function _pj_completion() {
-  local projects
-  # --output tsv prints one short name per line, so completion does not have to
-  # strip table borders and cannot be broken by a name containing one.
-  projects=$(command projekt folder list --output tsv --no-headers --short-only --verbose=error 2>/dev/null)
-  mapfile -t COMPREPLY < <(compgen -W "$projects" -- "${COMP_WORDS[COMP_CWORD]}")
+  local cur=${COMP_WORDS[COMP_CWORD]} line
+  COMPREPLY=()
+  # The names are read one per line and matched here rather than through
+  # `compgen -W`, which would expand each of them as shell code: a workspace
+  # child is a folder somebody else may have named.
+  while IFS= read -r line; do
+    [[ $line == "$cur"* ]] && COMPREPLY+=("$(printf '%q' "$line")")
+  done < <(command projekt folder list --output tsv --no-headers --short-only --verbose=error 2>/dev/null)
 }
 
 complete -F _pj_completion pj

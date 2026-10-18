@@ -156,16 +156,16 @@ func TestIsLevelEnabled(t *testing.T) {
 			originalLogLevel := os.Getenv("LOG_LEVEL")
 			defer func() {
 				if originalLogLevel != "" {
-					os.Setenv("LOG_LEVEL", originalLogLevel)
+					_ = os.Setenv("LOG_LEVEL", originalLogLevel)
 				} else {
-					os.Unsetenv("LOG_LEVEL")
+					_ = os.Unsetenv("LOG_LEVEL")
 				}
 				// Reset logger for next test
 				logger = nil
 			}()
 
 			// Set test value
-			os.Setenv("LOG_LEVEL", tt.currentLevel)
+			_ = os.Setenv("LOG_LEVEL", tt.currentLevel)
 
 			// Reset global env to pick up new value
 			env = &EnvSettings{
@@ -227,15 +227,15 @@ func TestInitLogging(t *testing.T) {
 			originalLogger := logger
 			defer func() {
 				if originalLogLevel != "" {
-					os.Setenv("LOG_LEVEL", originalLogLevel)
+					_ = os.Setenv("LOG_LEVEL", originalLogLevel)
 				} else {
-					os.Unsetenv("LOG_LEVEL")
+					_ = os.Unsetenv("LOG_LEVEL")
 				}
 				logger = originalLogger
 			}()
 
 			// Set test value
-			os.Setenv("LOG_LEVEL", tt.logLevel)
+			_ = os.Setenv("LOG_LEVEL", tt.logLevel)
 			env = &EnvSettings{
 				LogLevel: tt.logLevel,
 			}
@@ -297,15 +297,15 @@ func TestLogFunctions(t *testing.T) {
 			originalLogger := logger
 			defer func() {
 				if originalLogLevel != "" {
-					os.Setenv("LOG_LEVEL", originalLogLevel)
+					_ = os.Setenv("LOG_LEVEL", originalLogLevel)
 				} else {
-					os.Unsetenv("LOG_LEVEL")
+					_ = os.Unsetenv("LOG_LEVEL")
 				}
 				logger = originalLogger
 			}()
 
 			// Set test value
-			os.Setenv("LOG_LEVEL", tt.logLevel)
+			_ = os.Setenv("LOG_LEVEL", tt.logLevel)
 			env = &EnvSettings{
 				LogLevel: tt.logLevel,
 			}
@@ -394,15 +394,15 @@ func TestLogFunctionsWithDisabledLevel(t *testing.T) {
 			originalLogger := logger
 			defer func() {
 				if originalLogLevel != "" {
-					os.Setenv("LOG_LEVEL", originalLogLevel)
+					_ = os.Setenv("LOG_LEVEL", originalLogLevel)
 				} else {
-					os.Unsetenv("LOG_LEVEL")
+					_ = os.Unsetenv("LOG_LEVEL")
 				}
 				logger = originalLogger
 			}()
 
 			// Set test value
-			os.Setenv("LOG_LEVEL", tt.currentLevel)
+			_ = os.Setenv("LOG_LEVEL", tt.currentLevel)
 			env = &EnvSettings{
 				LogLevel: tt.currentLevel,
 			}
@@ -427,16 +427,16 @@ func TestFatal_Coverage(t *testing.T) {
 	originalLogger := logger
 	defer func() {
 		if originalLogLevel != "" {
-			os.Setenv("LOG_LEVEL", originalLogLevel)
+			_ = os.Setenv("LOG_LEVEL", originalLogLevel)
 		} else {
-			os.Unsetenv("LOG_LEVEL")
+			_ = os.Unsetenv("LOG_LEVEL")
 		}
 		logger = originalLogger
 	}()
 
 	// Test that Fatal initializes logger when nil and level is enabled
 	// We set level to FATAL so isLevelEnabled returns true
-	os.Setenv("LOG_LEVEL", FATAL)
+	_ = os.Setenv("LOG_LEVEL", FATAL)
 	env = &EnvSettings{
 		LogLevel: FATAL,
 	}

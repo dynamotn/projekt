@@ -187,7 +187,7 @@ func TestRemoveFromConfig(t *testing.T) {
 		Path:   "/tmp/to-remove",
 		Prefix: "remove",
 	}
-	folder.AddToConfig()
+	_ = folder.AddToConfig()
 
 	tests := []struct {
 		name    string
@@ -342,7 +342,7 @@ func TestRemoveFromConfig_MultipleRemoves(t *testing.T) {
 	}
 
 	for _, f := range folders {
-		f.AddToConfig()
+		_ = f.AddToConfig()
 	}
 
 	// Remove middle folder

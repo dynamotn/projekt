@@ -37,7 +37,7 @@ you'll type it a hundred times a day.)*
 
 ## ⚡️ Quick start
 
-**1. Install** — from source, with Go ≥ 1.24. Binaries land in
+**1. Install** — from source, with Go ≥ 1.26. Binaries land in
 `$HOME/.local/bin`; override with `INSTALL_PATH`. Release binaries exist for
 Linux and macOS, amd64 and arm64.
 
@@ -249,8 +249,8 @@ YAML type), `--values file.yaml` (deep-merged, `--set` wins), or
 `.vars.yaml`, or else from the `.Values` keys in the template itself. Templates
 also get `.Name` (from `--name`, the manifest's `name:`, or the destination),
 `.Project`, `.Dir`, `.Path`, `.Template`, `.Source`, `.Store`,
-`.User`, `.Home`, `.Hostname`, `.OS`, `.Arch`, `.Env`, `.Now`, `.Date` and
-`.Year`. An unset value does not fail the render, so
+`.User`, `.Home`, `.Hostname`, `.OS`, `.Arch`, `.Env` (empty for a cloned store
+until you trust it), `.Now`, `.Date` and `.Year`. An unset value does not fail the render, so
 `{{ .Values.license | default "MIT" }}` makes one optional. Nothing is
 overwritten without `--force`, and a path segment rendering to `..`, to an
 unset value or to anything containing a separator is refused.

@@ -326,6 +326,9 @@ func applyOne(o ApplyOptions, root string, changes []Change, next RenderRecord) 
 		case ChangeUnchanged:
 			continue
 		case ChangeAdded, ChangeUpdated:
+			if err := confinedTarget(root, target); err != nil {
+				return err
+			}
 			if err := writeFile(target, change.After, true, change.Attrs); err != nil {
 				return err
 			}
@@ -341,6 +344,9 @@ func applyOne(o ApplyOptions, root string, changes []Change, next RenderRecord) 
 					return err
 				}
 				continue
+			}
+			if err := confinedTarget(root, target); err != nil {
+				return err
 			}
 			if err := writeFile(target, change.After, true, change.Attrs); err != nil {
 				return err

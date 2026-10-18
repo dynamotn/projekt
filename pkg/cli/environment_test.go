@@ -98,27 +98,27 @@ func TestEnvSettings_LogLevel_FromEnvironment(t *testing.T) {
 			originalProjektLogLevel := os.Getenv("PROJEKT_LOG_LEVEL")
 			defer func() {
 				if originalLogLevel != "" {
-					os.Setenv("LOG_LEVEL", originalLogLevel)
+					_ = os.Setenv("LOG_LEVEL", originalLogLevel)
 				} else {
-					os.Unsetenv("LOG_LEVEL")
+					_ = os.Unsetenv("LOG_LEVEL")
 				}
 				if originalProjektLogLevel != "" {
-					os.Setenv("PROJEKT_LOG_LEVEL", originalProjektLogLevel)
+					_ = os.Setenv("PROJEKT_LOG_LEVEL", originalProjektLogLevel)
 				} else {
-					os.Unsetenv("PROJEKT_LOG_LEVEL")
+					_ = os.Unsetenv("PROJEKT_LOG_LEVEL")
 				}
 			}()
 
 			// Set test values
 			if tt.logLevelEnv != "" {
-				os.Setenv("LOG_LEVEL", tt.logLevelEnv)
+				_ = os.Setenv("LOG_LEVEL", tt.logLevelEnv)
 			} else {
-				os.Unsetenv("LOG_LEVEL")
+				_ = os.Unsetenv("LOG_LEVEL")
 			}
 			if tt.projektLogLevelEnv != "" {
-				os.Setenv("PROJEKT_LOG_LEVEL", tt.projektLogLevelEnv)
+				_ = os.Setenv("PROJEKT_LOG_LEVEL", tt.projektLogLevelEnv)
 			} else {
-				os.Unsetenv("PROJEKT_LOG_LEVEL")
+				_ = os.Unsetenv("PROJEKT_LOG_LEVEL")
 			}
 
 			// Simulate init() logic

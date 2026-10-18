@@ -150,7 +150,7 @@ func writeManifest(path string, content []byte, force bool) error {
 // template with a header naming it.
 func ShowTemplate(out io.Writer, tpl Template) error {
 	if !tpl.IsDir() {
-		data, err := os.ReadFile(tpl.Path)
+		data, err := confinedRead(storeRoot(tpl), tpl.Path)
 		if err != nil {
 			return fmt.Errorf("cannot read template %s: %w", tpl.Path, err)
 		}
@@ -169,7 +169,7 @@ func ShowTemplate(out io.Writer, tpl Template) error {
 		if err != nil {
 			return err
 		}
-		data, err := os.ReadFile(path)
+		data, err := confinedRead(storeRoot(tpl), path)
 		if err != nil {
 			return fmt.Errorf("cannot read template file %s: %w", path, err)
 		}

@@ -17,9 +17,9 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	os.Setenv("XDG_STATE_HOME", state)
+	_ = os.Setenv("XDG_STATE_HOME", state)
 	code := m.Run()
-	os.RemoveAll(state)
+	_ = os.RemoveAll(state)
 	os.Exit(code)
 }
 
