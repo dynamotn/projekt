@@ -20,6 +20,7 @@ last commit was.
 
   projekt folder status              # everything
   projekt folder status --dirty      # only what wants attention
+  projekt folder status --notes      # with the first line of each note
   projekt folder status -t work
   projekt folder status -o json | jq -r '.[] | select(.behind > 0) | .name'
 
@@ -51,6 +52,7 @@ func NewFolderStatusCmd(out io.Writer) *cobra.Command {
 	f := cmd.Flags()
 	f.BoolVarP(&o.DirtyOnly, "dirty", "d", false, "Show only the folders with something to attend to")
 	f.BoolVarP(&o.NamesOnly, "names-only", "n", false, "Show only the names")
+	f.BoolVar(&o.Notes, "notes", false, "Add the first line of each project's note (see folder note)")
 	f.IntVar(&o.Forks, "forks", folderutil.DefaultSyncForks, "How many folders to read at once")
 	f.BoolVar(&o.NoHeaders, "no-headers", false, "Don't print headers")
 	f.BoolVar(&o.NoColor, "no-color", false, "Don't use color")

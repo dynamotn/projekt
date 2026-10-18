@@ -90,6 +90,7 @@ func buildListView(o *ListOption) (cli.ListView, error) {
 			{Header: "PRIORITY", Key: "priority"},
 			{Header: "IS WORKSPACE", Key: "isWorkspace"},
 			{Header: "TAGS", Key: "tags"},
+			{Header: "DESCRIPTION", Key: "description"},
 		}}
 		for _, folder := range lazypath.GetConfig().Folders {
 			if !lazypath.HasTags(folder.Tags, o.Tags) {
@@ -98,7 +99,7 @@ func buildListView(o *ListOption) (cli.ListView, error) {
 			view.AppendRow(
 				folder.Path, folder.Name, folder.Prefix,
 				folder.GetRegexMatch(), folder.Priority, folder.IsWorkspace,
-				folder.GetTags(),
+				folder.GetTags(), folder.Description,
 			)
 		}
 		return view, nil
@@ -123,9 +124,11 @@ func buildListView(o *ListOption) (cli.ListView, error) {
 		{Header: "PATH", Key: "path"},
 		{Header: "WORKSPACE PATH", Key: "workspace"},
 		{Header: "TAGS", Key: "tags"},
+		// Last, so that a script cutting the first columns is not disturbed.
+		{Header: "DESCRIPTION", Key: "description"},
 	}}
 	for _, folder := range folders {
-		view.AppendRow(folder.ShortName, folder.Path, folder.Workspace, folder.Tags)
+		view.AppendRow(folder.ShortName, folder.Path, folder.Workspace, folder.Tags, folder.Description)
 	}
 	return view, nil
 }

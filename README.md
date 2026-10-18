@@ -102,6 +102,7 @@ folders:
 | `regex` | Workspace only — which children count. Defaults to `^[^.].+` |
 | `priority` | Tie-breaker when two folders resolve to the same short name |
 | `tags` | Labels to filter on. A workspace passes its tags to its children |
+| `description` | One line saying what the project is. Shown by `folder list`, beside the name in completion and in the `pj` picker. A workspace passes it to its children |
 
 Top-level `include:` merges other config files (read only), and a
 `worktrees:` section holds what `projekt worktree` creates
@@ -405,7 +406,8 @@ projekt folder status -o json | jq -r '.[] | select(.behind > 0) | .name'
 ```
 
 Columns: `BRANCH` (or `detached`), `CHANGED` (untracked included), `AHEAD` /
-`BEHIND` of upstream, `STASH`, `LAST COMMIT`. A missing folder says `missing`,
+`BEHIND` of upstream, `STASH`, `LAST COMMIT`, and with `--notes` the first line
+of each project's note. A missing folder says `missing`,
 a non-repository says `not a repo`, and `--dirty` keeps both.
 
 `folder exec` answers the question you cannot jump to: *which of them*.
@@ -446,8 +448,20 @@ projekt folder tag myapp go cli          # add tags
 projekt folder tag myapp -r old          # take one away
 projekt folder tag                       # what is in use, and how much
 
+projekt folder describe myapp "The billing API"   # what it is, in a line
+projekt folder note -a "migration half done"      # what you left, in the project
+projekt folder note myapp                         # read it back
+projekt folder status --notes                     # the first line of every note
+
 projekt worktree prune              # forget the working trees that are gone
 ```
+
+A **description** lives in the configuration and says what a project *is*; it
+is offered beside the name when you press tab after `pj`, and drawn next to the
+candidates `pj` asks you to choose from. A **note** lives in the project, at
+`.projekt/notes.md`, and says what *state* it is in — it moves, archives and is
+backed up with the project. `--add` appends a dated bullet, `--edit` opens the
+file, and with no project named the current one is meant.
 
 `folder current` names the **deepest** match, so standing in a working tree
 names the working tree rather than the project it hangs off, and it exits
@@ -479,6 +493,8 @@ moved or tagged on its own — projekt says so rather than doing nothing.
 | [`folder current`](doc/projekt_folder_current.md) | Which project is this folder in? Exits non-zero when none |
 | [`folder move`](doc/projekt_folder_move.md) | Move a project and keep its prefix, tags and priority |
 | [`folder tag`](doc/projekt_folder_tag.md) | Add or remove tags; list what is in use |
+| [`folder describe`](doc/projekt_folder_describe.md) | Set or print the one-line description of a project |
+| [`folder note`](doc/projekt_folder_note.md) | Read, extend or edit the note kept in a project |
 | [`folder select`](doc/projekt_folder_select.md) | Choose from a list — what `pj` with no argument calls |
 | [`folder recent`](doc/projekt_folder_recent.md) | The projects you jumped to, most recent first |
 | [`folder open`](doc/projekt_folder_open.md) | Open a project in `$VISUAL`, `$EDITOR` or vi |

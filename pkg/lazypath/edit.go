@@ -96,6 +96,30 @@ func SetFolderTags(path string, tags []string) error {
 	return nil
 }
 
+// SetFolderDescription replaces the description of a configuration entry.
+// An empty description removes the key.
+func SetFolderDescription(path string, description string) error {
+	if loadErr != nil {
+		return loadErr
+	}
+	unmarshalConfig()
+
+	_, index, ok := FindOwnFolder(path)
+	if !ok {
+		return fmt.Errorf("%s is not a folder in %s", path, ConfigFile())
+	}
+
+	c.Folders[index].Description = strings.TrimSpace(description)
+
+	if err := saveConfig("folders"); err != nil {
+		cli.Error("Failed to write config %v", err)
+		return err
+	}
+	refreshEffective()
+
+	return nil
+}
+
 // fullShortName is the name a folder is reached by, prefix included, which is
 // what a working tree records as its project.
 func fullShortName(folder Folder) string {

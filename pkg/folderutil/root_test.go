@@ -270,7 +270,7 @@ func setTwoFolderConfig(t *testing.T) {
 
 	lazypath.SetTestConfig(lazypath.Config{
 		Folders: []lazypath.Folder{
-			{Path: "/home/user/alpha", Prefix: "work", IsWorkspace: false, Tags: []string{"go", "work"}},
+			{Path: "/home/user/alpha", Prefix: "work", IsWorkspace: false, Tags: []string{"go", "work"}, Description: "The first one"},
 			{Path: "/home/user/beta", IsWorkspace: false, Priority: 7},
 		},
 	})
@@ -293,8 +293,8 @@ func TestListFolders_JSON(t *testing.T) {
 	// beta sorts first: it has the higher priority. An untagged folder carries
 	// an empty array rather than null.
 	want := []map[string]any{
-		{"shortName": "beta", "path": "/home/user/beta", "workspace": "/home/user/beta", "tags": []any{}},
-		{"shortName": "work-alpha", "path": "/home/user/alpha", "workspace": "/home/user/alpha", "tags": []any{"go", "work"}},
+		{"shortName": "beta", "path": "/home/user/beta", "workspace": "/home/user/beta", "tags": []any{}, "description": ""},
+		{"shortName": "work-alpha", "path": "/home/user/alpha", "workspace": "/home/user/alpha", "tags": []any{"go", "work"}, "description": "The first one"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ListFolders(json) =\n%#v\nwant\n%#v", got, want)
@@ -393,9 +393,9 @@ func TestListFolders_TSV(t *testing.T) {
 			name:   "full listing with headers",
 			option: &ListOption{Output: OutputTSV},
 			wantLines: []string{
-				"SHORT NAME\tPATH\tWORKSPACE PATH\tTAGS",
-				"beta\t/home/user/beta\t/home/user/beta\t",
-				"work-alpha\t/home/user/alpha\t/home/user/alpha\tgo,work",
+				"SHORT NAME\tPATH\tWORKSPACE PATH\tTAGS\tDESCRIPTION",
+				"beta\t/home/user/beta\t/home/user/beta\t\t",
+				"work-alpha\t/home/user/alpha\t/home/user/alpha\tgo,work\tThe first one",
 			},
 		},
 		{

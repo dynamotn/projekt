@@ -58,13 +58,17 @@ type GitConfig struct {
 }
 
 type Folder struct {
-	Path        string     `yaml:"path" mapstructure:"path"`
-	Name        string     `yaml:"name,omitempty" mapstructure:"name"`
-	Prefix      string     `yaml:"prefix" mapstructure:"prefix"`
-	IsWorkspace bool       `yaml:"is_workspace" mapstructure:"is_workspace"`
-	RegexMatch  string     `yaml:"regex" mapstructure:"regex"`
-	Priority    uint16     `yaml:"priority" mapstructure:"priority"`
-	Tags        []string   `yaml:"tags,omitempty" mapstructure:"tags"`
+	Path        string   `yaml:"path" mapstructure:"path"`
+	Name        string   `yaml:"name,omitempty" mapstructure:"name"`
+	Prefix      string   `yaml:"prefix" mapstructure:"prefix"`
+	IsWorkspace bool     `yaml:"is_workspace" mapstructure:"is_workspace"`
+	RegexMatch  string   `yaml:"regex" mapstructure:"regex"`
+	Priority    uint16   `yaml:"priority" mapstructure:"priority"`
+	Tags        []string `yaml:"tags,omitempty" mapstructure:"tags"`
+	// Description says what the project is, in a line. A workspace passes
+	// its description to its children, like its tags, since they have no
+	// entry of their own to carry one.
+	Description string     `yaml:"description,omitempty" mapstructure:"description"`
 	Git         *GitConfig `yaml:"git,omitempty" mapstructure:"git,omitempty"`
 }
 

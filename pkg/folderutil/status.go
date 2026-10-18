@@ -25,6 +25,8 @@ type StatusOptions struct {
 	// commits not pushed, commits not merged, or a stash.
 	DirtyOnly bool
 	NamesOnly bool
+	// Notes adds the first line of each project's note.
+	Notes bool
 	cli.ListOutputOption
 }
 
@@ -44,6 +46,8 @@ type FolderStatus struct {
 	Stashes int
 	// Last is how long ago the last commit was, in git's own words.
 	Last string
+	// Note is the first line of the project's note, when asked for.
+	Note string `json:",omitempty"`
 }
 
 // The states a folder can be in when there is nothing to report about it.
@@ -96,6 +100,11 @@ func StatusFolders(out io.Writer, o *StatusOptions) error {
 	folders = FilterByTags(folders, o.Tags)
 
 	statuses := readStatuses(folders, o.Forks)
+	if o.Notes {
+		for i := range statuses {
+			statuses[i].Note = NoteHeadline(statuses[i].Path)
+		}
+	}
 	if o.DirtyOnly {
 		kept := statuses[:0]
 		for _, status := range statuses {
@@ -125,6 +134,9 @@ func StatusFolders(out io.Writer, o *StatusOptions) error {
 		{Header: "STASH", Key: "stashes"},
 		{Header: "LAST COMMIT", Key: "last"},
 	}}
+	if o.Notes {
+		view.Columns = append(view.Columns, cli.ListColumn{Header: "NOTE", Key: "note"})
+	}
 	if o.NamesOnly {
 		view.Columns = view.Columns[:1]
 	}
@@ -134,8 +146,12 @@ func StatusFolders(out io.Writer, o *StatusOptions) error {
 			view.AppendRow(status.Name)
 			continue
 		}
-		view.AppendRow(status.Name, status.Branch, status.State,
-			status.Changed, status.Ahead, status.Behind, status.Stashes, status.Last)
+		cells := []any{status.Name, status.Branch, status.State,
+			status.Changed, status.Ahead, status.Behind, status.Stashes, status.Last}
+		if o.Notes {
+			cells = append(cells, status.Note)
+		}
+		view.AppendRow(cells...)
 	}
 
 	return cli.EncodeList(out, view, o.ListOutputOption)

@@ -37,9 +37,28 @@ func CurrentFolder(out io.Writer, o CurrentOptions) error {
 		}
 		from = cwd
 	}
-	from, err := lazypath.NormalizePath(from)
+	best, err := CurrentProject(from)
 	if err != nil {
 		return err
+	}
+
+	if o.Quiet {
+		return nil
+	}
+	if o.PrintPath {
+		_, err := fmt.Fprintln(out, best.Path)
+		return err
+	}
+	_, err = fmt.Fprintln(out, best.ShortName)
+	return err
+}
+
+// CurrentProject returns the project a path is in: the deepest one that
+// contains it.
+func CurrentProject(from string) (ParsedFolder, error) {
+	from, err := lazypath.NormalizePath(from)
+	if err != nil {
+		return ParsedFolder{}, err
 	}
 	// Follow symlinks on both sides: a project reached through one is still
 	// that project, and the configuration may spell its path through one too.
@@ -47,7 +66,7 @@ func CurrentFolder(out io.Writer, o CurrentOptions) error {
 
 	folders, err := ParseConfig(lazypath.GetConfig())
 	if err != nil {
-		return err
+		return ParsedFolder{}, err
 	}
 
 	var best ParsedFolder
@@ -61,18 +80,9 @@ func CurrentFolder(out io.Writer, o CurrentOptions) error {
 		}
 	}
 	if !found {
-		return fmt.Errorf("%w: %s", ErrNotInAProject, from)
+		return ParsedFolder{}, fmt.Errorf("%w: %s", ErrNotInAProject, from)
 	}
-
-	if o.Quiet {
-		return nil
-	}
-	if o.PrintPath {
-		_, err := fmt.Fprintln(out, best.Path)
-		return err
-	}
-	_, err = fmt.Fprintln(out, best.ShortName)
-	return err
+	return best, nil
 }
 
 // contains reports whether a path is the folder or lives under it.

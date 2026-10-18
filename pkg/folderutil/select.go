@@ -108,14 +108,19 @@ func pickerCommand(with string) []string {
 
 // askPicker pipes the candidates through an interactive filter.
 func askPicker(picker []string, matches []Match, o SelectOptions) (ParsedFolder, error) {
-	// One short name per line, and nothing else: they are unique by
-	// construction, so the filter needs no columns, and no flags of its own
-	// have to be guessed at. Anything that reads lines and writes one back
-	// works — fzf, sk, or a script of your own.
+	// One short name per line, followed by the description after a tab when
+	// the project has one: the names are unique by construction, so the
+	// filter needs no flags of its own, and anything that reads lines and
+	// writes one back works — fzf, sk, or a script of your own. The answer is
+	// read back up to the tab, so the description is for the eye only.
 	byName := make(map[string]ParsedFolder, len(matches))
 	var input bytes.Buffer
 	for _, match := range matches {
 		byName[match.Folder.ShortName] = match.Folder
+		if match.Folder.Description != "" {
+			fmt.Fprintf(&input, "%s\t%s\n", match.Folder.ShortName, match.Folder.Description)
+			continue
+		}
 		fmt.Fprintln(&input, match.Folder.ShortName)
 	}
 
@@ -134,7 +139,8 @@ func askPicker(picker []string, matches []Match, o SelectOptions) (ParsedFolder,
 		return ParsedFolder{}, fmt.Errorf("nothing chosen")
 	}
 
-	folder, ok := byName[strings.TrimSpace(chosen.String())]
+	answer, _, _ := strings.Cut(strings.TrimSpace(chosen.String()), "\t")
+	folder, ok := byName[answer]
 	if !ok {
 		return ParsedFolder{}, fmt.Errorf("nothing chosen")
 	}
@@ -154,7 +160,11 @@ func askNumbered(matches []Match, o SelectOptions) (ParsedFolder, error) {
 	}
 
 	for i, match := range matches {
-		_, _ = fmt.Fprintf(errOut, "%3d  %-24s %s\n", i+1, match.Folder.ShortName, match.Folder.Path)
+		detail := match.Folder.Path
+		if match.Folder.Description != "" {
+			detail = match.Folder.Description
+		}
+		_, _ = fmt.Fprintf(errOut, "%3d  %-24s %s\n", i+1, match.Folder.ShortName, detail)
 	}
 	_, _ = fmt.Fprintf(errOut, "Which one? [1-%d] ", len(matches))
 

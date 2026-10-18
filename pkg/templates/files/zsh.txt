@@ -34,13 +34,30 @@ _pj() {
   # A project is the only argument, so there is nothing to offer after it.
   (( CURRENT > 2 )) && return 1
 
-  local -a projects
-  # --output tsv prints one short name per line, so completion does not have to
-  # strip table borders and cannot be broken by a name containing one.
-  projects=(${(f)"$(command projekt folder list --output tsv --no-headers --short-only --verbose=error 2>/dev/null)"})
-  (( ${#projects} )) || return 1
+  local -a lines described plain
+  local line name description
+  # --output tsv prints one project per line, so completion does not have to
+  # strip table borders and cannot be broken by a name containing one. The
+  # columns are the short name, the path, the workspace, the tags and the
+  # description; a project with a description is offered with it beside it.
+  lines=(${(f)"$(command projekt folder list --output tsv --no-headers --verbose=error 2>/dev/null)"})
+  (( ${#lines} )) || return 1
 
-  compadd -a projects
+  for line in $lines; do
+    name=${line%%$'\t'*}
+    description=${${(ps:\t:)line}[5]}
+    if [[ -n $description ]]; then
+      # A colon separates the candidate from its description for _describe,
+      # so one inside the name has to be escaped.
+      described+=("${name//:/\\:}:${description}")
+    else
+      plain+=("$name")
+    fi
+  done
+
+  (( ${#described} )) && _describe -t projects 'project' described
+  (( ${#plain} )) && compadd -a plain
+  return 0
 }
 
 if (( $+functions[compdef] )); then

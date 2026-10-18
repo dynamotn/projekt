@@ -47,13 +47,14 @@ function __pj_needs_command
   return 1
 end
 
-function __pj_projects --description "Project short names, with their path as the description"
+function __pj_projects --description "Project short names, with their description or path"
   # --output tsv prints one project per line, so completion does not have to
   # strip table borders and cannot be broken by a name containing one. The
-  # first two columns are the short name and the path, which is what fish
-  # wants: a candidate and its description, separated by a tab.
+  # columns are the short name, the path, the workspace, the tags and the
+  # description; fish wants a candidate and a description separated by a tab,
+  # so the description is shown when there is one and the path otherwise.
   command projekt folder list --output tsv --no-headers --verbose=error 2>/dev/null \
-    | cut -f1,2
+    | awk -F'\t' 'BEGIN { OFS = "\t" } { print $1, ($5 != "" ? $5 : $2) }'
 end
 
 # The candidates are read when you press tab, not when this file is sourced, so

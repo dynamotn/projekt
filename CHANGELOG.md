@@ -10,6 +10,15 @@
   no upstream or commits of its own is fetched, reported as skipped with the
   reason, and left alone; nothing is merged or rebased. `--dry-run`, `--forks`
   and `--tags` apply as they do to cloning
+- **folder**: say what a project is with `description:` in the configuration,
+  or `folder describe myapp "The billing API"`. It is a column of `folder
+  list`, is offered beside the name when you press tab after `pj` in zsh and
+  fish, and is drawn next to the candidates `pj` asks you to choose from. A
+  workspace passes its description to its children, like its tags
+- **folder**: keep a note with a project — `folder note -a "migration half
+  done"` appends a dated line to `.projekt/notes.md` in the current project,
+  `folder note [name]` reads it back, `--edit` opens it, and `folder status
+  --notes` shows the first line of every note
 
 ### Changed
 

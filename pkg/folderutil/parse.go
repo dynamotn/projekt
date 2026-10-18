@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
@@ -18,6 +19,9 @@ type ParsedFolder struct {
 	// workspace inherits the workspace's tags, because it has no configuration
 	// entry of its own to carry them.
 	Tags []string
+	// Description is the line the configuration says about the project. It
+	// is inherited the way Tags are.
+	Description string
 }
 
 // ParseConfig parses the configuration and returns a list of parsed folders.
@@ -41,9 +45,10 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 		folderPath := filepath.Clean(folder.Path)
 
 		tags := folder.GetTags()
+		description := strings.TrimSpace(folder.Description)
 
 		if !folder.IsWorkspace {
-			result = appendToParsedFolder(result, shortNames, prefix+folder.ShortName(), folderPath, folderPath, tags)
+			result = appendToParsedFolder(result, shortNames, prefix+folder.ShortName(), folderPath, folderPath, tags, description)
 			continue
 		}
 		re, err := folder.Regex()
@@ -67,7 +72,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 				continue
 			}
 			cli.Debug("Match: %s", entry.Name())
-			result = appendToParsedFolder(result, shortNames, prefix+entry.Name(), filepath.Join(folderPath, entry.Name()), folderPath, tags)
+			result = appendToParsedFolder(result, shortNames, prefix+entry.Name(), filepath.Join(folderPath, entry.Name()), folderPath, tags, description)
 		}
 	}
 
@@ -106,7 +111,7 @@ func appendWorktrees(list []ParsedFolder, shortNames map[string]struct{}, worktr
 		// It carries the project's tags: it is the same project, on another
 		// branch, so `--tags work` has to reach it too.
 		list = appendToParsedFolder(list, shortNames, worktree.ShortName(),
-			filepath.Clean(worktree.Path), project.Path, project.Tags)
+			filepath.Clean(worktree.Path), project.Path, project.Tags, project.Description)
 	}
 
 	return list
@@ -146,7 +151,7 @@ func shortNameSet(list []ParsedFolder) map[string]struct{} {
 }
 
 // appendToParsedFolder adds a folder unless its short name is already taken.
-func appendToParsedFolder(list []ParsedFolder, shortNames map[string]struct{}, shortName string, path string, workspace string, tags []string) []ParsedFolder {
+func appendToParsedFolder(list []ParsedFolder, shortNames map[string]struct{}, shortName string, path string, workspace string, tags []string, description string) []ParsedFolder {
 	// Check for duplicate short names
 	if _, exists := shortNames[shortName]; exists {
 		cli.Debug("Not Valid: " + path + " with existed short name " + shortName)
@@ -155,9 +160,10 @@ func appendToParsedFolder(list []ParsedFolder, shortNames map[string]struct{}, s
 	shortNames[shortName] = struct{}{}
 
 	return append(list, ParsedFolder{
-		ShortName: shortName,
-		Path:      path,
-		Workspace: workspace,
-		Tags:      tags,
+		ShortName:   shortName,
+		Path:        path,
+		Workspace:   workspace,
+		Tags:        tags,
+		Description: description,
 	})
 }
