@@ -1,21 +1,27 @@
 package cli
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestCommand_ResolvesToAnAbsolutePath(t *testing.T) {
-	dir := t.TempDir()
-	tool := filepath.Join(dir, "sometool")
+// fakeGit puts a stand-in git in a folder of its own and returns its path.
+func fakeGit(t *testing.T, dir string) string {
+	t.Helper()
+	tool := filepath.Join(dir, "git")
 	if err := os.WriteFile(tool, []byte("#!/bin/sh\necho ok\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	return tool
+}
+
+func TestCommand_ResolvesToAnAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	tool := fakeGit(t, dir)
 	t.Setenv("PATH", dir)
 
-	cmd := Command("sometool", "arg")
+	cmd := Command("git", "arg")
 	if cmd.Err != nil {
 		t.Fatalf("Command().Err = %v", cmd.Err)
 	}
@@ -34,7 +40,7 @@ func TestCommand_ResolvesToAnAbsolutePath(t *testing.T) {
 func TestCommand_MissingToolFailsWhenRun(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	cmd := Command("no-such-tool-anywhere")
+	cmd := Command("git")
 	if cmd.Err == nil {
 		t.Fatal("Command().Err = nil, want the lookup error")
 	}
@@ -45,17 +51,31 @@ func TestCommand_MissingToolFailsWhenRun(t *testing.T) {
 
 func TestCommand_RefusesARelativeLookup(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "planted"), []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	fakeGit(t, dir)
 	t.Chdir(dir)
 	t.Setenv("PATH", ".")
 
-	cmd := Command("planted")
+	cmd := Command("git")
 	if cmd.Err == nil {
 		t.Fatal("a tool found through a relative PATH entry must not run")
 	}
-	if err := cmd.Run(); !errors.Is(err, cmd.Err) && err == nil {
-		t.Errorf("Run() error = %v, want the lookup error", err)
+	if err := cmd.Run(); err == nil {
+		t.Error("Run() error = nil, want the lookup error")
+	}
+}
+
+func TestCommand_RefusesAnUnknownTool(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "sometool"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	cmd := Command("sometool")
+	if cmd.Err == nil {
+		t.Fatal("only projekt's own tools may be started through Command")
+	}
+	if err := cmd.Run(); err == nil {
+		t.Error("Run() error = nil, want it to fail")
 	}
 }
