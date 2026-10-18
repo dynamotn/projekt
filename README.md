@@ -212,6 +212,24 @@ mixes several, the majority wins and the rest are reported and skipped.
 projekt folder add ~/work/myorg -W -p myorg --discover
 ```
 
+**Or ask the server.** On a new machine nothing is on disk yet, so
+`--from-remote` asks the git server what a group holds and writes the same
+section; `folder sync` then clones the lot. A private group needs a token —
+`GITLAB_TOKEN` or `GITHUB_TOKEN`, or a `glab`/`gh` you are logged in with — and
+it is used for the request and kept nowhere.
+
+```bash
+projekt folder add ~/work/myorg -W -p myorg --from-remote --host gitlab --group myorg/team
+projekt folder add ~/work/myorg -W -p myorg --from-remote --host gitlab --group myorg --recursive
+projekt folder add ~/oss -W -p oss --from-remote --host github --group jane --exclude '^scratch'
+projekt folder sync
+```
+
+Archived repositories are left out unless `--archived`; `--include` and
+`--exclude` are regular expressions on the name; `--recursive` takes a GitLab
+group's subgroups too, each repository checked out beside the others under
+its own name.
+
 Full details in [doc/git-integration.md](doc/git-integration.md).
 
 ## 🌳 Working trees

@@ -25,6 +25,13 @@
   attaches them by tag. `folder hooks <name>` shows what would run and why,
   `PROJEKT_NO_HOOKS=1` turns them off. Re-run `projekt init` for your shell
   to pick this up
+- **folder**: `folder add --from-remote --host <server> --group <group>`
+  asks a GitLab group or a GitHub organisation which repositories it has and
+  writes them into the workspace's `git` section, so a new machine is
+  `folder add --from-remote` and `folder sync` away from a full checkout.
+  `--recursive` takes GitLab subgroups, `--archived` keeps archived
+  repositories, `--include`/`--exclude` filter by name. A token comes from
+  `GITLAB_TOKEN`/`GITHUB_TOKEN` or a logged-in `glab`/`gh`, and is kept nowhere
 - **t**: `t apply` merges a template's change into a file that was edited by
   hand, when the two do not touch the same lines, and reports it as `merged`;
   only an overlap is still a `conflict`, and nothing is written with conflict

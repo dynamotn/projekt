@@ -48,6 +48,32 @@ folders:
 
 ## Commands
 
+### Fill the git section from the server
+
+```bash
+projekt folder add ~/work/myorg -W -p myorg --from-remote --host gitlab --group myorg/team
+projekt folder add ~/oss -W -p oss --from-remote --host github --group jane
+```
+
+`--from-remote` lists the repositories of a GitLab group or a GitHub
+organisation (or user) through the server's API and writes them into the
+folder's `git` section, where `--discover` would have read them off disk. It
+is the first step on a machine with nothing cloned yet; `folder sync` is the
+second.
+
+| Flag | What it does |
+| --- | --- |
+| `--host` | the `gitServers[].name` to ask; its `https` URL is where the API is, so a self-hosted server works |
+| `--group` | the group (nested groups with `/`) or the organisation |
+| `--recursive` | GitLab: the subgroups' repositories too, each checked out under its own name beside the others |
+| `--archived` | keep the archived ones, which are left out by default |
+| `--include`, `--exclude` | regular expressions on the repository name |
+
+A token is taken from `GITLAB_TOKEN`/`GL_TOKEN` or `GITHUB_TOKEN`/`GH_TOKEN`,
+or failing that from `glab config get token` / `gh auth token` when the tool
+is on PATH. It is sent with the request and never written anywhere. Without
+one, a public group still answers.
+
 ### Check Repository Status
 
 Check which repositories are missing or have issues:
