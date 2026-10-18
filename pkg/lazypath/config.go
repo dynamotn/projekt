@@ -51,6 +51,9 @@ type Config struct {
 	// Worktrees are extra working trees of a project, reachable by name like
 	// any other project folder.
 	Worktrees []Worktree `yaml:"worktrees,omitempty" mapstructure:"worktrees"`
+	// Hooks attach enter and leave lines to projects by tag, on top of what a
+	// folder entry declares for itself.
+	Hooks []HookRule `yaml:"hooks,omitempty" mapstructure:"hooks"`
 }
 
 type GitServer struct {

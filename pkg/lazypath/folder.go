@@ -57,6 +57,29 @@ type GitConfig struct {
 	Repos []GitRepo `yaml:"repos" mapstructure:"repos"`
 }
 
+// Hooks are shell lines the `pj` function evaluates when you jump into a
+// project and when you jump out of it. They run in your shell, which is the
+// point: `nvm use`, a `KUBECONFIG`, a virtualenv.
+type Hooks struct {
+	Enter []string `yaml:"enter,omitempty" mapstructure:"enter"`
+	Leave []string `yaml:"leave,omitempty" mapstructure:"leave"`
+}
+
+// IsEmpty reports whether there is nothing to run either way.
+func (h *Hooks) IsEmpty() bool {
+	return h == nil || (len(h.Enter) == 0 && len(h.Leave) == 0)
+}
+
+// HookRule attaches hooks to every project carrying all of its tags.
+type HookRule struct {
+	Tags  []string `yaml:"tags" mapstructure:"tags"`
+	Enter []string `yaml:"enter,omitempty" mapstructure:"enter"`
+	Leave []string `yaml:"leave,omitempty" mapstructure:"leave"`
+	// Source is the included file the rule was read from, or "" for this
+	// machine's own file. Not written: it says where it came from.
+	Source string `yaml:"-" mapstructure:"-"`
+}
+
 type Folder struct {
 	Path        string   `yaml:"path" mapstructure:"path"`
 	Name        string   `yaml:"name,omitempty" mapstructure:"name"`
@@ -68,8 +91,15 @@ type Folder struct {
 	// Description says what the project is, in a line. A workspace passes
 	// its description to its children, like its tags, since they have no
 	// entry of their own to carry one.
-	Description string     `yaml:"description,omitempty" mapstructure:"description"`
-	Git         *GitConfig `yaml:"git,omitempty" mapstructure:"git,omitempty"`
+	Description string `yaml:"description,omitempty" mapstructure:"description"`
+	// Hooks run when jumping in and out. A workspace's hooks apply to its
+	// children, like its tags.
+	Hooks *Hooks     `yaml:"hooks,omitempty" mapstructure:"hooks,omitempty"`
+	Git   *GitConfig `yaml:"git,omitempty" mapstructure:"git,omitempty"`
+	// Source is the included file the entry was read from, or "" for this
+	// machine's own file. Not written: it says where it came from, and only
+	// hooks care — a line from somebody else's file runs once it is trusted.
+	Source string `yaml:"-" mapstructure:"-"`
 }
 
 // GetTags returns the folder's tags, cleaned up. A workspace passes its tags on

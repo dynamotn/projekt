@@ -19,6 +19,12 @@
   done"` appends a dated line to `.projekt/notes.md` in the current project,
   `folder note [name]` reads it back, `--edit` opens it, and `folder status
   --notes` shows the first line of every note
+- **pj**: a project can declare `hooks:` — `enter:` and `leave:` lines that
+  `pj` evaluates in your shell on the way in and out, so `nvm use`, a
+  `KUBECONFIG` or a virtualenv follow the jump. A top-level `hooks:` list
+  attaches them by tag. `folder hooks <name>` shows what would run and why,
+  `PROJEKT_NO_HOOKS=1` turns them off. Re-run `projekt init` for your shell
+  to pick this up
 
 ### Changed
 
@@ -82,6 +88,10 @@
 
 ### Security
 
+- **pj**: a hook declared in an included configuration file that sits in a
+  repository is handed to your shell only once that version of the file is
+  trusted — `pj` asks on a terminal, refuses and says so elsewhere — and
+  `projekt config trust <file>` allows it beforehand. Your own file is yours
 - **t**, **b**: a symbolic link in a template store that points outside it is
   refused wherever the store is read — rendering, `include`, `t show`, the
   manifest, data and ignore files, shared partials — so a cloned store cannot

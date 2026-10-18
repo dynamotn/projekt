@@ -26,6 +26,7 @@ Manage your project folder
 * [projekt folder describe](projekt_folder_describe.md)	 - Set or print the one-line description of a project
 * [projekt folder exec](projekt_folder_exec.md)	 - Run a command in every project folder
 * [projekt folder get](projekt_folder_get.md)	 - Get project folder by short name
+* [projekt folder hooks](projekt_folder_hooks.md)	 - Print the shell lines a jump runs, or list a project's hooks
 * [projekt folder list](projekt_folder_list.md)	 - List all your project folders
 * [projekt folder move](projekt_folder_move.md)	 - Move a project and keep its configuration
 * [projekt folder note](projekt_folder_note.md)	 - Read, extend or edit the note kept with a project

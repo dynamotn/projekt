@@ -19,8 +19,14 @@ function pj --description "Jump to a project"
     echo "Project folder does not exist: $target" >&2
     return 1
   end
+  set -l from $PWD
   cd -- $target
   or return 1
+
+  # The hooks of the project left and the one entered, sourced here because
+  # that is the only place a `set -gx` or a `nvm use` can take effect. A hook
+  # that is refused is reported on stderr and the jump stands.
+  command projekt folder hooks --from $from --to $target --verbose=error | source
 
   # The argument is not the name we landed on when it was "-", a loose match
   # or nothing at all, so the tab is named after the folder itself.

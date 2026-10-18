@@ -82,9 +82,18 @@ func mergeOne(into Config, path string, seen map[string]struct{}, depth int) Con
 		return into
 	}
 
+	// Stamped with the file they came from: a hook line in somebody else's
+	// file is run only once that version of the file is trusted.
+	for i := range included.Folders {
+		included.Folders[i].Source = path
+	}
+	for i := range included.Hooks {
+		included.Hooks[i].Source = path
+	}
 	into.Folders = append(into.Folders, included.Folders...)
 	into.GitServers = append(into.GitServers, included.GitServers...)
 	into.Worktrees = append(into.Worktrees, included.Worktrees...)
+	into.Hooks = append(into.Hooks, included.Hooks...)
 
 	for _, nested := range includePaths(included.Include, path) {
 		into = mergeOne(into, nested, seen, depth-1)

@@ -18,6 +18,7 @@ func NewConfigCmd(out io.Writer) *cobra.Command {
 	cmd.AddCommand(
 		NewConfigCheckCmd(out),
 		NewConfigEditCmd(out),
+		NewConfigTrustCmd(out),
 	)
 
 	cli.SetColorAndStyles(cmd)

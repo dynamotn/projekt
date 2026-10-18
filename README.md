@@ -103,6 +103,7 @@ folders:
 | `priority` | Tie-breaker when two folders resolve to the same short name |
 | `tags` | Labels to filter on. A workspace passes its tags to its children |
 | `description` | One line saying what the project is. Shown by `folder list`, beside the name in completion and in the `pj` picker. A workspace passes it to its children |
+| `hooks` | `enter:` and `leave:` lines for your shell to run when `pj` takes you in and out ([hooks](#-hooks-on-the-way-in-and-out)) |
 
 Top-level `include:` merges other config files (read only), and a
 `worktrees:` section holds what `projekt worktree` creates
@@ -481,6 +482,39 @@ their name, since moving a project renames it.
 A project found inside a workspace has no entry of its own, so it cannot be
 moved or tagged on its own — projekt says so rather than doing nothing.
 
+## 🪝 Hooks on the way in and out
+
+Jumping is the one moment projekt knows the directory changed, and the shell
+is the one place an `export`, a `nvm use` or a `kubectl config use-context`
+can take effect. So a project can declare lines for your shell to evaluate
+when you jump into it and when you jump out:
+
+```yaml
+folders:
+  - path: /home/me/work/api
+    tags: [k8s]
+    hooks:
+      enter: ["export KUBECONFIG=$HOME/.kube/api", "nvm use --silent"]
+      leave: ["unset KUBECONFIG"]
+hooks:                      # by tag, on top of what the entry says
+  - tags: [k8s]
+    enter: ["kubectl config use-context dev"]
+```
+
+The `pj` function runs the **leave** hooks of the project you are leaving,
+then the **enter** hooks of the one you are entering — folder entry first,
+tag rules after — and nothing at all when you stay inside one project. A
+workspace's hooks apply to its children and a project's to its working trees,
+like tags. `projekt folder hooks api` shows what would run and why, and
+`PROJEKT_NO_HOOKS=1` turns them all off for a script.
+
+Your own configuration file is yours. One it `include`s from a repository — a
+team's shared file, a dotfiles checkout — can change under you, so its hooks
+are handed to your shell only once you have looked at **that version** of the
+file: `pj` asks on a terminal, refuses and says so anywhere else, and
+`projekt config trust <file>` allows it beforehand. A later change to the file
+asks again.
+
 ## 📚 Commands
 
 ### 📁 `projekt` — project folders
@@ -495,6 +529,7 @@ moved or tagged on its own — projekt says so rather than doing nothing.
 | [`folder tag`](doc/projekt_folder_tag.md) | Add or remove tags; list what is in use |
 | [`folder describe`](doc/projekt_folder_describe.md) | Set or print the one-line description of a project |
 | [`folder note`](doc/projekt_folder_note.md) | Read, extend or edit the note kept in a project |
+| [`folder hooks`](doc/projekt_folder_hooks.md) | Print the shell lines a jump runs — what `pj` evaluates — or list a project's hooks |
 | [`folder select`](doc/projekt_folder_select.md) | Choose from a list — what `pj` with no argument calls |
 | [`folder recent`](doc/projekt_folder_recent.md) | The projects you jumped to, most recent first |
 | [`folder open`](doc/projekt_folder_open.md) | Open a project in `$VISUAL`, `$EDITOR` or vi |
@@ -510,6 +545,7 @@ moved or tagged on its own — projekt says so rather than doing nothing.
 | [`worktree remove`](doc/projekt_worktree_remove.md) | Put one away; the branch is left alone |
 | [`config check`](doc/projekt_config_check.md) | Validate the config file; exits non-zero, for CI |
 | [`config edit`](doc/projekt_config_edit.md) | Open the config in `$EDITOR`, re-validate on exit |
+| [`config trust`](doc/projekt_config_trust.md) | Let the hooks of an included configuration file run, as it is now |
 | [`init`](doc/projekt_init.md) | Emit the shell integration for bash, zsh or fish |
 | [`doctor`](doc/projekt_doctor.md) | Check this machine is set up; exits non-zero, for a script |
 | [`version`](doc/projekt_version.md) | Version, commit, tree state and build time |
