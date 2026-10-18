@@ -38,6 +38,9 @@ type SyncOptions struct {
 	// Tags syncs only the folders carrying every one of these tags. Empty syncs
 	// everything.
 	Tags []string
+	// Pull also fetches the repositories that are already on disk, worktrees
+	// included, and fast-forwards each clean branch onto its upstream.
+	Pull bool
 }
 
 // syncJob is one repository to clone, resolved before the concurrent phase so
@@ -53,6 +56,8 @@ type syncJob struct {
 	// batch says the job runs beside others, with nobody able to answer a
 	// question git would ask on the terminal.
 	batch bool
+	// pull says an existing clone is fetched and fast-forwarded too.
+	pull bool
 }
 
 // SyncGitRepos synchronizes all Git repositories in the configuration.
@@ -78,6 +83,9 @@ func SyncGitRepos(opts SyncOptions) error {
 			cli.Error("Failed to sync folder %s: %v", folder.Path, err)
 			errs = append(errs, err)
 			continue
+		}
+		for i := range folderJobs {
+			folderJobs[i].pull = opts.Pull
 		}
 		jobs = append(jobs, folderJobs...)
 	}
@@ -205,33 +213,44 @@ func runSyncJobsWith(jobs []syncJob, opts SyncOptions, run func(syncJob, bool) e
 // missing, then its extra remotes and worktrees in place. Several goroutines
 // run it at once, so it must touch nothing outside its own job.
 func syncRepo(job syncJob, dryRun bool) error {
-	if err := cloneIfMissing(job, dryRun); err != nil {
+	existed, err := cloneIfMissing(job, dryRun)
+	if err != nil {
 		return err
 	}
 
 	// Remotes and worktrees are reconciled on every run, not only right after
 	// cloning: adding one to the configuration of a repository that is already
 	// on disk is the ordinary way to get it.
-	return errors.Join(
+	errs := []error{
 		ensureRemotes(job, dryRun),
 		ensureWorktrees(job, dryRun),
-	)
+	}
+
+	// A fresh clone is up to date by definition; only what was already here
+	// can have fallen behind.
+	if job.pull && existed {
+		errs = append(errs, pullTrees(job, dryRun))
+	}
+
+	return errors.Join(errs...)
 }
 
-func cloneIfMissing(job syncJob, dryRun bool) error {
+// cloneIfMissing clones the repository when it is not on disk, and reports
+// whether it was already there.
+func cloneIfMissing(job syncJob, dryRun bool) (existed bool, err error) {
 	if _, err := os.Stat(job.repoPath); err != nil && !os.IsNotExist(err) {
 		// Not there is one thing; unreadable is another, and reporting it as
 		// "already exists" would send the user looking in the wrong place.
-		return fmt.Errorf("cannot access %s: %w", job.repoPath, err)
+		return false, fmt.Errorf("cannot access %s: %w", job.repoPath, err)
 	} else if err == nil {
 		// Repository exists, check if it's valid
 		if dryRun {
 			cli.Info("[DRY RUN] Would check: %s", job.repoPath)
-			return nil
+			return true, nil
 		}
 
 		cli.Debug("Repository %s already exists at %s", job.repo.Name, job.repoPath)
-		return nil
+		return true, nil
 	}
 
 	// Repository doesn't exist, clone it
@@ -242,7 +261,7 @@ func cloneIfMissing(job syncJob, dryRun bool) error {
 		} else {
 			cli.Info("[DRY RUN] Would clone: %s -> %s", cli.RedactURL(primaryURL), job.repoPath)
 		}
-		return nil
+		return false, nil
 	}
 
 	cli.Info("Cloning %s to %s", job.repo.Name, job.repoPath)
@@ -250,11 +269,11 @@ func cloneIfMissing(job syncJob, dryRun bool) error {
 		cli.Error("Failed to clone %s: %v", job.repo.Name, err)
 		// Keep going with the other repos, but remember the failure so the
 		// command exits non-zero.
-		return fmt.Errorf("clone %s: %w", job.repo.Name, err)
+		return false, fmt.Errorf("clone %s: %w", job.repo.Name, err)
 	}
 	cli.Info("Successfully cloned %s", job.repo.Name)
 
-	return nil
+	return false, nil
 }
 
 // ensureRemotes adds the configured remotes that are missing and repoints the

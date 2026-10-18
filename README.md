@@ -188,10 +188,17 @@ folders:
 projekt folder check          # [OK] / [MISSING] / [NOT GIT] / [REMOTE MISMATCH] / …
 projekt folder sync --dry-run # what would be cloned and set up
 projekt folder sync           # clone the missing ones, 4 at a time (--forks)
+projekt folder sync --pull    # and bring the ones already here up to date
 ```
 
 An existing worktree is left alone — it may have work in progress — and an
 existing branch is checked out rather than recreated.
+
+`--pull` fetches every clone that was already on disk, worktrees included, and
+fast-forwards each branch onto its upstream — **only** when the tree is clean,
+on a branch, with an upstream, and strictly behind it. Anything else is fetched,
+reported as skipped with the reason, and left exactly where it was; nothing is
+ever merged or rebased on your behalf.
 
 **Don't type that list.** If the repos are already on disk, `--discover` writes
 the `git` section for you: each child holding a `.git` is read, its `origin`
@@ -480,7 +487,7 @@ moved or tagged on its own — projekt says so rather than doing nothing.
 | [`folder archive`](doc/projekt_folder_archive.md) | Move a finished project away and drop it from the config |
 | [`folder check`](doc/projekt_folder_check.md) | Verify configured Git repos, remotes and worktrees on disk |
 | [`folder status`](doc/projekt_folder_status.md) | Branch, changes, ahead/behind, stashes, across every folder |
-| [`folder sync`](doc/projekt_folder_sync.md) | Clone missing repositories in parallel, with `--dry-run` |
+| [`folder sync`](doc/projekt_folder_sync.md) | Clone missing repositories in parallel; `--pull` fast-forwards the rest |
 | [`folder exec`](doc/projekt_folder_exec.md) | Run one command in every project folder, several at a time |
 | [`worktree add`](doc/projekt_worktree_add.md) | Check out a branch beside your work, reachable as `pj p@name` |
 | [`worktree list`](doc/projekt_worktree_list.md) | List the working trees, and what git makes of them |

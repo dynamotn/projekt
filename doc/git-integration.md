@@ -195,6 +195,9 @@ For SSH setup, see: [GitHub SSH Documentation](https://docs.github.com/en/authen
 - Repositories are cloned using SSH URLs
 - Git server names must match between `gitServers` and folder `git.host`
 - Empty `repos` array is valid (for future repositories)
-- The `sync` command only clones missing repositories, it doesn't update existing ones
-- Use `git pull` or your preferred Git workflow for updating existing repositories
+- `sync` clones what is missing and leaves existing clones alone; `sync --pull`
+  also fetches them and fast-forwards each clean branch onto its upstream
+- `--pull` never merges or rebases: a tree with uncommitted changes, a detached
+  HEAD, no upstream or commits of its own is fetched, reported as skipped and
+  left where it was. Configured working trees are pulled the same way
 - If a Git server is not found in configuration, an error will be displayed

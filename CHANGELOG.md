@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **folder**: `folder sync --pull` fetches the repositories that are already
+  on disk, configured working trees included, and fast-forwards each clean
+  branch onto its upstream. A tree with uncommitted changes, a detached HEAD,
+  no upstream or commits of its own is fetched, reported as skipped with the
+  reason, and left alone; nothing is merged or rebased. `--dry-run`, `--forks`
+  and `--tags` apply as they do to cloning
+
 ### Changed
 
 - **t**: a dry run, `t check` and `b check` no longer run anything: `output`
