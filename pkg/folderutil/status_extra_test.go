@@ -135,11 +135,13 @@ func TestStatusFolders_Requests(t *testing.T) {
 	}
 
 	// Without the tool, the column says so rather than failing the listing.
-	// Git has to stay reachable, or there is no status to add a column to.
+	// Git has to stay reachable, or there is no status to add a column to, so
+	// the original PATH comes back — and with it any real gh, which would
+	// answer instead.
+	t.Setenv("PATH", original)
 	if _, err := exec.LookPath("gh"); err == nil {
 		t.Skip("a real gh is on PATH")
 	}
-	t.Setenv("PATH", original)
 	rows = statusOf(t, &StatusOptions{Requests: true})
 	if rows["clone"]["requests"] != requestsNoTool {
 		t.Errorf("requests = %v, want %q without gh", rows["clone"]["requests"], requestsNoTool)

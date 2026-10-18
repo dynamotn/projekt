@@ -44,7 +44,10 @@ func pushable(t *testing.T, project string) {
 	t.Helper()
 
 	origin := project + ".git"
-	if err := runGit(filepath.Dir(project), "init", "--bare", origin); err != nil {
+	// The branch is named, as initRepo names it: a machine without
+	// init.defaultBranch would point the bare HEAD at master, and a clone of it
+	// would check out a branch that does not exist.
+	if err := runGit(filepath.Dir(project), "init", "--bare", "--initial-branch=main", origin); err != nil {
 		t.Fatalf("init --bare: %v", err)
 	}
 	mustGit(t, project, "remote", "add", "origin", origin)
