@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -334,7 +333,7 @@ func parseAheadBehind(value string) (ahead, behind int) {
 
 // gitOutput runs a git command and returns what it wrote.
 func gitOutput(repoPath string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", repoPath}, args...)...)
+	cmd := cli.Command("git", append([]string{"-C", repoPath}, args...)...)
 
 	var output bytes.Buffer
 	cmd.Stdout = &output

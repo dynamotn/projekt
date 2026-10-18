@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -121,7 +120,7 @@ func moveFolder(from, to string) error {
 	cli.Debug("Renaming %s failed, copying instead", from)
 	// cp -a keeps the permissions, the timestamps and the symlinks, which a
 	// hand-written copy gets wrong in a different way every time.
-	cmd := exec.Command("cp", "-a", from+string(os.PathSeparator)+".", to)
+	cmd := cli.Command("cp", "-a", from+string(os.PathSeparator)+".", to)
 	if err := os.MkdirAll(to, 0o755); err != nil {
 		return fmt.Errorf("cannot create %s: %w", to, err)
 	}
@@ -172,7 +171,7 @@ func unfinished(path string) string {
 
 // archiveGit runs a git command and returns what it wrote.
 func archiveGit(path string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", path}, args...)...)
+	cmd := cli.Command("git", append([]string{"-C", path}, args...)...)
 
 	var output bytes.Buffer
 	cmd.Stdout = &output

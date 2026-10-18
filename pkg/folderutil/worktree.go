@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -351,7 +350,7 @@ func worktreeStatus(worktree lazypath.Worktree, hasProject bool, branches map[st
 // The paths are canonical, so that a configured path reaches them however
 // it is spelled.
 func gitWorktrees(repoPath string) map[string]string {
-	cmd := exec.Command("git", "-C", repoPath, "worktree", "list", "--porcelain")
+	cmd := cli.Command("git", "-C", repoPath, "worktree", "list", "--porcelain")
 
 	var output bytes.Buffer
 	cmd.Stdout = &output

@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -215,7 +214,7 @@ func (o Origin) fromRemote() bool {
 		if !info.IsDir() {
 			dir = filepath.Dir(path)
 		}
-		out, err := exec.Command("git", "-C", dir, "remote").Output()
+		out, err := cli.Command("git", "-C", dir, "remote").Output()
 		if err == nil && strings.TrimSpace(string(out)) != "" {
 			return true
 		}

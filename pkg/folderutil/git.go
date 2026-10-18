@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -552,7 +551,7 @@ func worktreeTargetPath(folder lazypath.Folder, worktree lazypath.GitWorktree) s
 // jobs would interleave it on the shared streams, and the error carries what
 // went wrong anyway.
 func runGit(repoPath string, args ...string) error {
-	cmd := exec.Command("git", append([]string{"-C", repoPath}, args...)...)
+	cmd := cli.Command("git", append([]string{"-C", repoPath}, args...)...)
 
 	var output bytes.Buffer
 	cmd.Stdout = &output
@@ -570,7 +569,7 @@ func runGit(repoPath string, args ...string) error {
 
 // gitRemotes reads the remotes configured on a repository, by name.
 func gitRemotes(repoPath string) (map[string]string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "remote", "-v")
+	cmd := cli.Command("git", "-C", repoPath, "remote", "-v")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list remotes: %w", err)
@@ -637,7 +636,7 @@ func getURLType(url string) string {
 }
 
 func cloneRepo(gitURL, targetPath string, batch bool) error {
-	cmd := exec.Command("git", "clone", "--", gitURL, targetPath)
+	cmd := cli.Command("git", "clone", "--", gitURL, targetPath)
 	if batch {
 		// Four clones at once cannot share one terminal: a password or a
 		// host-key question from one of them, with its text hidden in the
@@ -665,7 +664,7 @@ func cloneRepo(gitURL, targetPath string, batch bool) error {
 }
 
 func checkGitRemote(repoPath string, server *lazypath.GitServer, gitConfig *lazypath.GitConfig, repo lazypath.GitRepo) error {
-	cmd := exec.Command("git", "-C", repoPath, "remote", "get-url", "origin")
+	cmd := cli.Command("git", "-C", repoPath, "remote", "get-url", "origin")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to get remote URL: %w", err)

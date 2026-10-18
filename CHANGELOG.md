@@ -107,6 +107,10 @@
 
 ### Security
 
+- **folder**, **t**, **doctor**: `git` and `cp` are resolved to an absolute
+  path on `PATH` before they run, in one place, and one that resolves through
+  a relative `PATH` entry is refused rather than run from the folder being
+  worked on
 - **pj**: a hook declared in an included configuration file that sits in a
   repository is handed to your shell only once that version of the file is
   trusted — `pj` asks on a terminal, refuses and says so elsewhere — and

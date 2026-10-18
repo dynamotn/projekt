@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/bplutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 	"gitlab.com/dynamo-tools/projekt/pkg/templates"
 	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
@@ -63,7 +64,7 @@ func checkGit() Check {
 		return Check{"git", StatusFail, "not on PATH; cloning, sync and working trees need it"}
 	}
 
-	version, err := exec.Command("git", "--version").Output()
+	version, err := cli.Command("git", "--version").Output()
 	if err != nil {
 		return Check{"git", StatusWarn, fmt.Sprintf("%s does not run: %v", path, err)}
 	}

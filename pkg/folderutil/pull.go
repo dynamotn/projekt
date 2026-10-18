@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
@@ -90,7 +89,7 @@ func pullBlocker(path string) string {
 // fetch brings every remote up to date, pruning what is gone. In a batch no
 // question can be answered, so git is told not to ask one.
 func fetch(path string, batch bool) error {
-	cmd := exec.Command("git", "-C", path, "fetch", "--all", "--prune", "--quiet")
+	cmd := cli.Command("git", "-C", path, "fetch", "--all", "--prune", "--quiet")
 	if batch {
 		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -oBatchMode=yes")
 	}

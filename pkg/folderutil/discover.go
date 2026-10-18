@@ -3,7 +3,6 @@ package folderutil
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -137,7 +136,7 @@ func buildDiscoveredConfig(found []discovered) *lazypath.GitConfig {
 
 // repoRemoteURL reads one remote's URL out of a checked-out repository.
 func repoRemoteURL(repoPath string, remote string) (string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "remote", "get-url", "--", remote)
+	cmd := cli.Command("git", "-C", repoPath, "remote", "get-url", "--", remote)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("cannot read the %s remote: %w", remote, err)
