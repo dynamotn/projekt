@@ -429,7 +429,19 @@ projekt folder status -o json | jq -r '.[] | select(.behind > 0) | .name'
 
 Columns: `BRANCH` (or `detached`), `CHANGED` (untracked included), `AHEAD` /
 `BEHIND` of upstream, `STASH`, `LAST COMMIT`, and with `--notes` the first line
-of each project's note. A missing folder says `missing`,
+of each project's note. Three more answer the Monday morning questions:
+
+```bash
+projekt folder status --since 7d    # what did I touch this week — a commit or a jump
+projekt folder status --branches    # DEFAULT, BEHIND DEFAULT, BRANCH AGE
+projekt folder status --requests    # OPEN MR/PR, through glab or gh
+```
+
+`--branches` compares the checked-out branch with the one origin calls its
+default: how many of its commits the branch has not got, and how long ago the
+two parted. `--requests` is the one column that goes to the network — it asks
+`glab` or `gh`, whichever the origin calls for — so it is off unless asked for,
+reads `n/a` without the tool, and `?` when the tool could not answer. A missing folder says `missing`,
 a non-repository says `not a repo`, and `--dirty` keeps both.
 
 `folder exec` answers the question you cannot jump to: *which of them*.

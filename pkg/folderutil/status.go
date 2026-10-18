@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
@@ -27,6 +28,15 @@ type StatusOptions struct {
 	NamesOnly bool
 	// Notes adds the first line of each project's note.
 	Notes bool
+	// Since keeps only the folders with a commit, or a jump, this recent.
+	// Zero keeps everything.
+	Since time.Duration
+	// Branches adds how the checked-out branch stands against the default
+	// one: commits it has not got, and how long ago it parted.
+	Branches bool
+	// Requests adds the open merge or pull requests of the branch, counted
+	// through glab or gh. Off by default: it is a network call per folder.
+	Requests bool
 	cli.ListOutputOption
 }
 
@@ -48,6 +58,18 @@ type FolderStatus struct {
 	Last string
 	// Note is the first line of the project's note, when asked for.
 	Note string `json:",omitempty"`
+	// DefaultBranch is the branch origin calls its main line, and
+	// BehindDefault how many of its commits the checked-out branch has not
+	// got; BranchAge is how long ago the two parted. Read with --branches.
+	DefaultBranch string
+	BehindDefault int
+	BranchAge     string
+	// Requests is how many merge or pull requests the branch has open, as
+	// the server's tool reports it, or why it could not be counted. Read
+	// with --requests.
+	Requests string
+	// committedAt is when the last commit was, for --since.
+	committedAt time.Time
 }
 
 // The states a folder can be in when there is nothing to report about it.
@@ -99,11 +121,22 @@ func StatusFolders(out io.Writer, o *StatusOptions) error {
 	}
 	folders = FilterByTags(folders, o.Tags)
 
-	statuses := readStatuses(folders, o.Forks)
+	statuses := readStatuses(folders, o)
 	if o.Notes {
 		for i := range statuses {
 			statuses[i].Note = NoteHeadline(statuses[i].Path)
 		}
+	}
+	if o.Since > 0 {
+		cutoff := time.Now().Add(-o.Since)
+		jumps := jumpTimes()
+		kept := statuses[:0]
+		for _, status := range statuses {
+			if status.touchedSince(cutoff, jumps) {
+				kept = append(kept, status)
+			}
+		}
+		statuses = kept
 	}
 	if o.DirtyOnly {
 		kept := statuses[:0]
@@ -134,6 +167,15 @@ func StatusFolders(out io.Writer, o *StatusOptions) error {
 		{Header: "STASH", Key: "stashes"},
 		{Header: "LAST COMMIT", Key: "last"},
 	}}
+	if o.Branches {
+		view.Columns = append(view.Columns,
+			cli.ListColumn{Header: "DEFAULT", Key: "defaultBranch"},
+			cli.ListColumn{Header: "BEHIND DEFAULT", Key: "behindDefault"},
+			cli.ListColumn{Header: "BRANCH AGE", Key: "branchAge"})
+	}
+	if o.Requests {
+		view.Columns = append(view.Columns, cli.ListColumn{Header: "OPEN MR/PR", Key: "requests"})
+	}
 	if o.Notes {
 		view.Columns = append(view.Columns, cli.ListColumn{Header: "NOTE", Key: "note"})
 	}
@@ -148,6 +190,12 @@ func StatusFolders(out io.Writer, o *StatusOptions) error {
 		}
 		cells := []any{status.Name, status.Branch, status.State,
 			status.Changed, status.Ahead, status.Behind, status.Stashes, status.Last}
+		if o.Branches {
+			cells = append(cells, status.DefaultBranch, status.BehindDefault, status.BranchAge)
+		}
+		if o.Requests {
+			cells = append(cells, status.Requests)
+		}
 		if o.Notes {
 			cells = append(cells, status.Note)
 		}
@@ -158,12 +206,13 @@ func StatusFolders(out io.Writer, o *StatusOptions) error {
 }
 
 // readStatuses reads every folder, several at a time, and keeps the order.
-func readStatuses(folders []ParsedFolder, forks int) []FolderStatus {
+func readStatuses(folders []ParsedFolder, o *StatusOptions) []FolderStatus {
 	statuses := make([]FolderStatus, len(folders))
 	if len(folders) == 0 {
 		return statuses
 	}
-	semaphore := make(chan struct{}, statusForks(forks, len(folders)))
+	semaphore := make(chan struct{}, statusForks(o.Forks, len(folders)))
+	servers := lazypath.GetConfig().GitServers
 
 	var wg sync.WaitGroup
 	for i, folder := range folders {
@@ -175,7 +224,19 @@ func readStatuses(folders []ParsedFolder, forks int) []FolderStatus {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			statuses[i] = readStatus(folder)
+			status := readStatus(folder)
+			if status.State == statusOK {
+				if o.Since > 0 {
+					status.committedAt = readCommittedAt(folder.Path)
+				}
+				if o.Branches {
+					readBranchStanding(&status)
+				}
+				if o.Requests {
+					readOpenRequests(&status, servers)
+				}
+			}
+			statuses[i] = status
 		}(i, folder)
 	}
 	wg.Wait()

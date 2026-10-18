@@ -25,6 +25,12 @@
   attaches them by tag. `folder hooks <name>` shows what would run and why,
   `PROJEKT_NO_HOOKS=1` turns them off. Re-run `projekt init` for your shell
   to pick this up
+- **folder**: `folder status --since 7d` keeps the folders with a commit or a
+  jump that recent; `--branches` adds the default branch, how many of its
+  commits the checked-out branch has not got and how long ago the two parted;
+  `--requests` adds the open merge or pull requests of the branch, counted
+  through `glab` or `gh` — the one column that goes to the network, so it is
+  off unless asked for and reads `n/a` without the tool
 - **folder**: `folder add --from-remote --host <server> --group <group>`
   asks a GitLab group or a GitHub organisation which repositories it has and
   writes them into the workspace's `git` section, so a new machine is

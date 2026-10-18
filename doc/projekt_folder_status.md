@@ -14,8 +14,18 @@ last commit was.
   projekt folder status              # everything
   projekt folder status --dirty      # only what wants attention
   projekt folder status --notes      # with the first line of each note
+  projekt folder status --since 7d   # what I touched this week
+  projekt folder status --branches   # how far each branch is from main
+  projekt folder status --requests   # open MRs/PRs, through glab or gh
   projekt folder status -t work
   projekt folder status -o json | jq -r '.[] | select(.behind > 0) | .name'
+
+--since keeps the folders with a commit, or a jump, that recent: 12h, 7d, 2w,
+3mo. --branches adds the default branch, how many of its commits the
+checked-out branch has not got, and how long ago the two parted. --requests
+asks glab or gh — whichever the origin calls for — how many merge or pull
+requests the branch has open; it is the one column that goes to the network,
+so it is off unless asked for, and reads n/a without the tool.
 
 Unlike 'projekt folder check', which verifies the repositories your config
 declares, this looks at every folder it can reach — including the ones inside a
@@ -28,6 +38,7 @@ projekt folder status [flags]
 ### Options
 
 ```
+      --branches        Add the default branch, how far behind it the branch is, and how old the branch is
   -d, --dirty           Show only the folders with something to attend to
       --forks int       How many folders to read at once (default 4)
   -h, --help            help for status
@@ -36,6 +47,8 @@ projekt folder status [flags]
       --no-headers      Don't print headers
       --notes           Add the first line of each project's note (see folder note)
   -o, --output string   Output format, one of: table, json, tsv (default "table")
+      --requests        Add the open merge or pull requests of the branch, counted through glab or gh
+      --since string    Keep only the folders with a commit or a jump this recent: 12h, 7d, 2w, 3mo
   -t, --tags strings    Only report on folders carrying all of these tags
 ```
 
