@@ -101,7 +101,12 @@ func (e *engine) output(name string, args ...string) (string, error) {
 // trusted, because a token in the shell is as much worth protecting as what a
 // command could do with it.
 func (e *engine) envFunc(name string) (string, error) {
-	if err := e.authorizeEnv(fmt.Sprintf("env %q", name)); err != nil {
+	if e.noExec {
+		// A dry run prints what it renders; a value of the environment in it
+		// would be the leak the trust question exists to prevent.
+		return "", nil
+	}
+	if err := Authorize(e.origin, fmt.Sprintf("env %q", name)); err != nil {
 		return "", err
 	}
 	return os.Getenv(name), nil
@@ -109,19 +114,13 @@ func (e *engine) envFunc(name string) (string, error) {
 
 // expandenv is sprig's `expandenv`, behind the same trust as `env`.
 func (e *engine) expandenv(text string) (string, error) {
-	if err := e.authorizeEnv(fmt.Sprintf("expandenv %q", text)); err != nil {
+	if e.noExec {
+		return os.Expand(text, func(string) string { return "" }), nil
+	}
+	if err := Authorize(e.origin, fmt.Sprintf("expandenv %q", text)); err != nil {
 		return "", err
 	}
 	return os.ExpandEnv(text), nil
-}
-
-// authorizeEnv says whether a function may read the environment. Nothing is
-// read while only looking, and nothing is asked then either.
-func (e *engine) authorizeEnv(what string) error {
-	if e.noExec {
-		return nil
-	}
-	return Authorize(e.origin, what)
 }
 
 // environment is the environment a template sees as `.Env`: all of it for

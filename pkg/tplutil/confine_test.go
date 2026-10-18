@@ -248,3 +248,37 @@ func TestSprig_HasNoHostLookup(t *testing.T) {
 		t.Fatal("Render() error = nil, want getHostByName unknown")
 	}
 }
+
+func TestInclude_RefusesALinkedFolderPointingOutside(t *testing.T) {
+	store := useStore(t)
+	outside := filepath.Dir(secretOutside(t))
+	writeTemplate(t, filepath.Join(store, "incdir", "README.md.tmpl"), `{{ include "keys/secret.txt" }}`)
+	mustSymlink(t, outside, filepath.Join(store, "incdir", "keys"))
+
+	tpl, err := Get("incdir")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	_, err = Render(RenderOptions{Template: tpl, Dest: filepath.Join(t.TempDir(), "proj"), Name: "proj"})
+	if err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("Render() error = %v, want a file under a linked folder refused", err)
+	}
+}
+
+func TestEnv_DryRunRendersNoValue(t *testing.T) {
+	store := useStore(t)
+	t.Setenv("PROJEKT_TEST_TOKEN", "s3cret")
+	writeTemplate(t, filepath.Join(store, "envdry.tmpl"), `[{{ env "PROJEKT_TEST_TOKEN" }}|{{ expandenv "x$PROJEKT_TEST_TOKEN" }}|{{ .Env.PROJEKT_TEST_TOKEN }}]`)
+
+	tpl, err := Get("envdry")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	var out bytes.Buffer
+	if _, err := Render(RenderOptions{Template: tpl, Dest: filepath.Join(t.TempDir(), "x"), DryRun: true, Out: &out}); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if out.String() != "[|x|]" {
+		t.Errorf("dry run rendered %q, want no value of the environment", out.String())
+	}
+}

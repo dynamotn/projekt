@@ -2,7 +2,6 @@ package tplutil
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,14 +46,12 @@ func confinedRead(root, path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// confinedSource reports whether a file of a template may be read.
+// confinedSource reports whether a file of a template may be read: the whole
+// path is resolved, so a link anywhere on it, a folder as much as the file,
+// must stay inside the root.
 func confinedSource(root, path string) error {
-	info, err := os.Lstat(path)
-	if err != nil {
+	if _, err := os.Lstat(path); err != nil {
 		return err
-	}
-	if info.Mode()&fs.ModeSymlink == 0 {
-		return nil
 	}
 	if root == "" || !within(lazypath.Canonical(root), lazypath.Canonical(path)) {
 		return fmt.Errorf("%s is a symbolic link pointing outside the template; a template writes a link with the %s prefix instead", path, AttrSymlink)
