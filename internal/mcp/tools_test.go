@@ -320,6 +320,9 @@ func TestNoteAdd_OneLineAndANameRequired(t *testing.T) {
 	if len(lines) != before+1 || strings.Count(strings.Join(lines, "\n"), "\n- 2020-01-01") != 0 {
 		t.Fatalf("forged lines: %q", lines)
 	}
+	// From inside the project an empty name would resolve to it, so only the
+	// tool's own check keeps the note unchanged.
+	t.Chdir(api)
 	for _, args := range []string{`{"name":"","text":"x"}`, `{"name":"  ","text":"x"}`, `{"name":"api","text":" \n"}`} {
 		if text, isErr := callText(t, s, "note_add", args); !isErr {
 			t.Fatalf("%s accepted: %q", args, text)
@@ -331,7 +334,7 @@ func TestNoteAdd_OneLineAndANameRequired(t *testing.T) {
 }
 
 func TestDescribeSet(t *testing.T) {
-	cfg, _ := twoProjects(t)
+	cfg, api := twoProjects(t)
 	path := useConfig(t, cfg)
 	s := NewServer(true)
 	if text, isErr := callText(t, s, "describe_set", `{"name":"api","description":"The API"}`); isErr || !strings.Contains(text, "described") {
@@ -340,10 +343,16 @@ func TestDescribeSet(t *testing.T) {
 	if b, _ := os.ReadFile(path); !strings.Contains(string(b), "The API") {
 		t.Fatalf("config: %s", b)
 	}
-	for _, args := range []string{`{"name":"","description":"x"}`, `{"name":"api","description":" "}`} {
+	// From inside the project an empty name would resolve to it.
+	t.Chdir(api)
+	want, _ := os.ReadFile(path)
+	for _, args := range []string{`{"name":"","description":"x"}`, `{"name":"  ","description":"x"}`, `{"name":"api","description":" "}`} {
 		if _, isErr := callText(t, s, "describe_set", args); !isErr {
 			t.Fatalf("%s accepted", args)
 		}
+	}
+	if got, _ := os.ReadFile(path); string(got) != string(want) {
+		t.Fatalf("config changed by refused calls:\n%s", got)
 	}
 }
 
@@ -372,7 +381,14 @@ func TestWorktreeAdd(t *testing.T) {
 	if show, _ := callText(t, s, "project_show", `{"name":"api"}`); !strings.Contains(show, got["path"]) {
 		t.Fatalf("project_show does not list the working tree: %s", show)
 	}
-	if _, isErr := callText(t, s, "worktree_add", `{"project":" ","branch":"x"}`); !isErr {
-		t.Fatal("a blank project must be refused")
+	// From inside the project an empty name would resolve to it.
+	t.Chdir(api)
+	for _, args := range []string{`{"project":"","branch":"other"}`, `{"project":" ","branch":"other"}`, `{"project":"api","branch":" "}`} {
+		if _, isErr := callText(t, s, "worktree_add", args); !isErr {
+			t.Fatalf("%s accepted", args)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(api, folderutil.WorktreeFolder, "other")); err == nil {
+		t.Fatal("a working tree was created by a refused call")
 	}
 }
