@@ -63,7 +63,7 @@ func NewTemplateSyncCmd(out io.Writer) *cobra.Command {
 		Short:   "Update the template store from its remote",
 		Long:    syncLongHelp,
 		Args:    cobra.NoArgs,
-		Aliases: []string{"pull", "update"},
+		Aliases: []string{"pull"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return tplutil.SyncStore(out, dryRun)
 		},

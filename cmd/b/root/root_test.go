@@ -2,8 +2,14 @@ package root
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
+
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 func TestNewProjektBoilerplateCmd(t *testing.T) {
@@ -155,6 +161,52 @@ func TestNewRootCmd_Flags(t *testing.T) {
 	for _, name := range []string{"boilerplate-dir", "template-dir", "config"} {
 		if cmd.PersistentFlags().Lookup(name) == nil {
 			t.Errorf("NewRootCmd() missing --%s flag", name)
+		}
+	}
+}
+
+func TestNewRootCmd_ConfigGate(t *testing.T) {
+	const unreadable, undecodable = "folders: [unclosed\n", "folders: [1]\n"
+	tests := []struct {
+		args    string
+		config  string
+		wantErr bool
+	}{
+		// None of these needs the configuration.
+		{"version", unreadable, false},
+		{"completion bash", unreadable, false},
+		{"help", unreadable, false},
+		{"new", unreadable, true},
+		// YAML that does not decode only shows once the configuration is
+		// used: the gate has to use it first.
+		{"new", undecodable, true},
+	}
+	for _, tt := range tests {
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte(tt.config), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		lazypath.CfgFile = path
+		viper.Reset()
+		lazypath.ResetTestConfig()
+		lazypath.InitConfig()
+		t.Cleanup(func() {
+			lazypath.CfgFile = ""
+			viper.Reset()
+			lazypath.ResetTestConfig()
+		})
+
+		cmd := NewRootCmd(&bytes.Buffer{})
+		// Cobra adds these on Execute; Find needs them now.
+		cmd.InitDefaultHelpCmd()
+		cmd.InitDefaultCompletionCmd()
+
+		found, _, err := cmd.Find(strings.Fields(tt.args))
+		if err != nil {
+			t.Fatalf("Find(%s) error = %v", tt.args, err)
+		}
+		if err := cmd.PersistentPreRunE(found, nil); (err != nil) != tt.wantErr {
+			t.Errorf("gate on %s with %q = %v, wantErr %v", tt.args, tt.config, err, tt.wantErr)
 		}
 	}
 }

@@ -3,6 +3,7 @@ package root
 import (
 	"io"
 	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -19,8 +20,13 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 		Short:        "A smart command to work with your project folder",
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if !needsConfig(cmd, "template") {
+				return nil
+			}
 			// Stop before running anything on a config we could not read,
-			// instead of silently behaving as if it were empty.
+			// instead of silently behaving as if it were empty. Decoding is
+			// lazy, so do it now, or its error would get past this check.
+			lazypath.GetConfig()
 			return lazypath.LoadError()
 		},
 	}
@@ -42,6 +48,23 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 	cli.SetColorAndStyles(rootCmd)
 
 	return rootCmd
+}
+
+// needsConfig says whether cmd works on the configuration. The commands cobra
+// adds, version, and those named in exempt never do, so a broken config must
+// not stop them.
+func needsConfig(cmd *cobra.Command, exempt ...string) bool {
+	for ; cmd.HasParent(); cmd = cmd.Parent() {
+		if cmd.Parent().HasParent() {
+			continue
+		}
+		switch cmd.Name() {
+		case "version", "completion", "help":
+			return false
+		}
+		return !slices.Contains(exempt, cmd.Name())
+	}
+	return true
 }
 
 func Execute() {

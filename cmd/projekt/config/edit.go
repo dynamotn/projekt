@@ -43,7 +43,7 @@ func runConfigEdit(out io.Writer, in io.Reader, errOut io.Writer) error {
 	editor := cli.EditorCommand(os.Getenv)
 	cli.Debug("Opening %s with %v", path, editor)
 
-	args := append(editor[1:], path)
+	args := append(append([]string{}, editor[1:]...), path)
 	cmd := exec.Command(editor[0], args...)
 	// An editor is interactive: it needs the real terminal, not a buffer.
 	cmd.Stdin = in
@@ -58,8 +58,7 @@ func runConfigEdit(out io.Writer, in io.Reader, errOut io.Writer) error {
 		return fmt.Errorf("config is no longer readable after editing: %w", err)
 	}
 
-	config := lazypath.GetConfig()
-	diags := config.Diagnose()
+	diags := diagnose(lazypath.GetConfig())
 
 	var errorCount int
 	for _, diag := range diags {

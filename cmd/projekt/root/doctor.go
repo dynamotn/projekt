@@ -70,8 +70,17 @@ func NewDoctorCmd(out io.Writer) *cobra.Command {
 	return cmd
 }
 
+// runChecks is doctor.Run, replaceable so a test can see whether it ran.
+var runChecks = doctor.Run
+
 func runDoctor(out io.Writer, strict bool, output string, noColor bool) error {
-	checks := doctor.Run()
+	// Refuse a bad --output before running every check only to throw them away.
+	if output != outputText {
+		if _, err := parseDoctorFormat(output); err != nil {
+			return err
+		}
+	}
+	checks := runChecks()
 
 	var failed, warned int
 	for _, check := range checks {
@@ -113,9 +122,9 @@ func reportChecks(out io.Writer, checks []doctor.Check, output string, noColor b
 		return nil
 	}
 
-	format, err := cli.ParseOutputFormat(output)
+	format, err := parseDoctorFormat(output)
 	if err != nil {
-		return fmt.Errorf("%w; or %q", err, outputText)
+		return err
 	}
 
 	// The checks come in the order they are worth reading, which a table must
@@ -130,4 +139,14 @@ func reportChecks(out io.Writer, checks []doctor.Check, output string, noColor b
 	}
 
 	return cli.EncodeList(out, view, cli.ListOutputOption{Output: format, NoColor: noColor})
+}
+
+// parseDoctorFormat reads a --output other than text, naming text among the
+// choices when it is wrong.
+func parseDoctorFormat(output string) (cli.OutputFormat, error) {
+	format, err := cli.ParseOutputFormat(output)
+	if err != nil {
+		return format, fmt.Errorf("%w; or %q", err, outputText)
+	}
+	return format, nil
 }

@@ -38,7 +38,8 @@ lot.
   projekt folder add ~/work/myorg -W -p myorg --from-remote --host gitlab --group myorg --recursive
   projekt folder add ~/oss -W -p oss --from-remote --host github --group jane --exclude '^scratch'
 
-A private group needs a token: GITLAB_TOKEN or GITHUB_TOKEN in the
+A private group needs a token: GITLAB_TOKEN (gitlab.com, or the GITLAB_HOST
+it names) or GITHUB_TOKEN (github.com; GH_ENTERPRISE_TOKEN elsewhere) in the
 environment, or a 'glab auth login' / 'gh auth login' already done. It is used
 for the request and kept nowhere.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -128,7 +129,7 @@ for the request and kept nowhere.`,
 
 	if err := cmd.RegisterFlagCompletionFunc("tags",
 		func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			return compListTags(toComplete)
+			return CompleteTags(toComplete)
 		}); err != nil {
 		cli.Warn("Cannot register completion for --tags: %v", err)
 	}

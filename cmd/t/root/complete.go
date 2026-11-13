@@ -52,6 +52,10 @@ func completeSetKeys(cmd *cobra.Command, args []string, toComplete string) ([]st
 // completionTemplates works out which templates a completion is about: the
 // ones named on the command line, or everything the project records.
 func completionTemplates(cmd *cobra.Command, args []string) ([]tplutil.Template, error) {
+	// `t new` has no --project: its second argument is the destination.
+	if cmd.Flags().Lookup("project") == nil && len(args) > 1 {
+		args = args[:1]
+	}
 	if len(args) > 0 {
 		templates := make([]tplutil.Template, 0, len(args))
 		for _, name := range args {

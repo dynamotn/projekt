@@ -1,6 +1,7 @@
 package root
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,5 +105,25 @@ func TestCompleteMoreTemplateNames_LeavesOutWhatIsNamedAndWhatCannotApply(t *tes
 	got, _ := completeMoreTemplateNames(&cobra.Command{}, []string{"app"}, "")
 	if len(got) != 1 || !strings.HasPrefix(got[0], "ci\t") {
 		t.Errorf("completeMoreTemplateNames() = %v, want the folder template that is not named yet", got)
+	}
+}
+
+func TestCompleteSetKeys_NewIgnoresTheDestination(t *testing.T) {
+	store := t.TempDir()
+	previous := tplutil.TemplateDir
+	tplutil.TemplateDir = store
+	t.Setenv("PROJEKT_TEMPLATE_DIR", "")
+	t.Cleanup(func() { tplutil.TemplateDir = previous })
+
+	writeTemplateFile(t, store+"/app/main.txt.tmpl", "{{ .Values.module }}\n")
+
+	// `t new app ./myapp --set <TAB>`: the second argument is where it goes,
+	// not another template.
+	got, directive := completeSetKeys(NewTemplateNewCmd(&bytes.Buffer{}), []string{"app", "./myapp"}, "")
+	if directive == cobra.ShellCompDirectiveError {
+		t.Fatalf("completeSetKeys() failed, treating the destination as a template")
+	}
+	if len(got) != 1 || !strings.HasPrefix(got[0], "module=") {
+		t.Errorf("completeSetKeys() = %v, want the template's own key", got)
 	}
 }

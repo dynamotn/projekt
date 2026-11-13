@@ -42,6 +42,8 @@ func NewFolderExecCmd(out io.Writer) *cobra.Command {
 	}
 
 	f := cmd.Flags()
+	// Flags after the command are the command's: `exec rg -q foo` is not --quiet.
+	f.SetInterspersed(false)
 	f.IntVar(&o.Forks, "forks", folderutil.DefaultSyncForks, "How many folders to work on at once")
 	f.BoolVarP(&o.Quiet, "quiet", "q", false, "Report only the folders where the command failed")
 	f.BoolVar(&o.NoOutput, "no-output", false, "Report the verdict per folder, not the command's output")

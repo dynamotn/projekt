@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	folder "gitlab.com/dynamo-tools/projekt/cmd/projekt/folder"
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
-	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 const listLongHelp = `List the working trees, and what git makes of them.
@@ -71,28 +71,11 @@ func NewWorktreeListCmd(out io.Writer) *cobra.Command {
 		cli.Warn("Cannot register completion for --output: %v", err)
 	}
 	if err := cmd.RegisterFlagCompletionFunc("tags",
-		func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-			return compListTags(), cobra.ShellCompDirectiveNoFileComp
+		func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			return folder.CompleteTags(toComplete)
 		}); err != nil {
 		cli.Warn("Cannot register completion for --tags: %v", err)
 	}
 
 	return cmd
-}
-
-// compListTags completes a --tags value with the tags already in the config.
-func compListTags() []string {
-	seen := map[string]struct{}{}
-
-	var result []string
-	for _, folder := range lazypath.GetConfig().Folders {
-		for _, tag := range folder.GetTags() {
-			if _, dup := seen[tag]; dup {
-				continue
-			}
-			seen[tag] = struct{}{}
-			result = append(result, tag)
-		}
-	}
-	return result
 }

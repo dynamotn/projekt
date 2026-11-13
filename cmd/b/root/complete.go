@@ -72,6 +72,12 @@ func completeSetKeys(cmd *cobra.Command, args []string, toComplete string) ([]st
 // completionRecipes works out which recipes a completion is about: the ones
 // named on the command line, or everything the project records.
 func completionRecipes(cmd *cobra.Command, args []string) ([]bplutil.Recipe, error) {
+	// `b new` has no --project: there is no project yet to ask, and its second
+	// argument is the project's name rather than another recipe.
+	hasProject := cmd.Flags().Lookup("project") != nil
+	if !hasProject && len(args) > 1 {
+		args = args[:1]
+	}
 	if len(args) > 0 {
 		recipes := make([]bplutil.Recipe, 0, len(args))
 		for _, name := range args {
@@ -84,10 +90,12 @@ func completionRecipes(cmd *cobra.Command, args []string) ([]bplutil.Recipe, err
 		return recipes, nil
 	}
 
+	if !hasProject {
+		return nil, nil
+	}
 	project, err := cmd.Flags().GetString("project")
 	if err != nil {
-		// `b new` has no --project: there is no project yet to ask.
-		return nil, nil
+		return nil, err
 	}
 	if project == "" {
 		project = "."

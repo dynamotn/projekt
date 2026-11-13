@@ -78,7 +78,7 @@ func runConfigCheck(out io.Writer, strict bool) error {
 		}
 	}
 
-	diags := append(config.Diagnose(), folderutil.DiagnoseWorktrees(config)...)
+	diags := diagnose(config)
 
 	var errorCount, warningCount int
 	for _, diag := range diags {
@@ -105,4 +105,10 @@ func runConfigCheck(out io.Writer, strict bool) error {
 	}
 
 	return nil
+}
+
+// diagnose is every problem in the configuration: what it says about itself,
+// and the worktrees whose project no longer resolves.
+func diagnose(config lazypath.Config) []lazypath.Diagnostic {
+	return append(config.Diagnose(), folderutil.DiagnoseWorktrees(config)...)
 }

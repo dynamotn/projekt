@@ -47,6 +47,8 @@
 
 ### Changed
 
+- **t**: `t update` runs `t apply`, as its help says, instead of pulling the
+  template store; `t sync` and `t pull` still pull it
 - **t**: a dry run, `t check` and `b check` no longer run anything: `output`
   and `env` in a template or an `after:` line render empty while only being
   looked at, instead of executing a command or asking for trust
@@ -63,6 +65,25 @@
 
 ### Fixed
 
+- **folder exec**: flags after the command belong to the command:
+  `folder exec rg -q foo` runs `rg -q foo` in every folder instead of taking
+  `-q` as `--quiet`, and `-t go` is no longer read as `--tags`. Put projekt's
+  own flags before the command
+- **folder current**: `folder current -q` outside a project prints nothing at
+  all and answers with the exit code alone, as its help promises
+- **t new**, **b new**: tab after `--set` on `t new app ./myapp` or
+  `b new app myapp` offers the template's keys again, instead of failing on
+  the destination as if it were another template
+- **projekt**, **b**: `version`, `completion <shell>`, `help` and every
+  `projekt template` command run even when the configuration cannot be read.
+  A configuration that is valid YAML but does not decode now stops the other
+  commands up front, like an unreadable one
+- **config edit**: after editing, `config edit` reports a working tree whose
+  project no longer exists, the same report `config check` gives
+- **doctor**: `projekt doctor -o <unknown>` refuses the format straight away
+  instead of running every check first
+- **worktree list**: tab after `--tags` offers the tags sorted, like every
+  other `--tags`
 - **folder**, **worktree**, **t**: paths are compared with their links
   resolved, so a project under a linked folder — `/var` on macOS is
   `/private/var` — is recognised by `folder current`, `worktree list` no

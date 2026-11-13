@@ -355,3 +355,39 @@ func TestNewFolderCmd_AllSubcommandsHaveHelp(t *testing.T) {
 		})
 	}
 }
+
+func TestNewFolderExecCmd_LeavesTheCommandsFlagsAlone(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := NewFolderExecCmd(&buf)
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	// No -- on purpose: what follows the command is the command's.
+	cmd.SetArgs([]string{"--dry-run", "rg", "-q", "foo", "-t", "go"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("exec error = %v", err)
+	}
+	if !cmd.Flags().Lookup("dry-run").Changed {
+		t.Error("--dry-run before the command was not taken as projekt's")
+	}
+	for _, name := range []string{"quiet", "tags"} {
+		if cmd.Flags().Lookup(name).Changed {
+			t.Errorf("the command's own flag was taken as projekt's --%s", name)
+		}
+	}
+}
+
+func TestNewFolderCurrentCmd_QuietPrintsNothing(t *testing.T) {
+	var out, errOut bytes.Buffer
+	cmd := NewFolderCurrentCmd(&out)
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"-q", t.TempDir()})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("current -q outside a project = nil, want the exit code to say so")
+	}
+	if out.Len() != 0 || errOut.Len() != 0 {
+		t.Errorf("current -q printed %q / %q, want nothing", out.String(), errOut.String())
+	}
+}

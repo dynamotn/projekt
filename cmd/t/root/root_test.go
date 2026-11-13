@@ -174,3 +174,17 @@ func TestNewRootCmd_TemplateDirFlag(t *testing.T) {
 		t.Error("NewRootCmd() missing --template-dir flag")
 	}
 }
+
+func TestNewRootCmd_UpdateMeansApply(t *testing.T) {
+	cmd := NewRootCmd(&bytes.Buffer{})
+
+	// Two commands claiming one alias leave it to cobra to pick, and it picked
+	// sync while apply's help promised update.
+	found, _, err := cmd.Find([]string{"update"})
+	if err != nil {
+		t.Fatalf("Find(update) error = %v", err)
+	}
+	if found.Name() != "apply" {
+		t.Errorf("t update runs %q, want apply", found.Name())
+	}
+}

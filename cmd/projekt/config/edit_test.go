@@ -57,6 +57,13 @@ func TestRunConfigEdit(t *testing.T) {
 			wantErr:    "1 error(s) after editing",
 			wantReport: "invalid regex",
 		},
+		{
+			// The same report as `config check`, worktrees included.
+			name:       "an edit that orphans a worktree is reported",
+			written:    "folders: []\nworktrees:\n  - project: ghost\n    name: x\n    branch: main\n    path: /tmp/ghost-x\n",
+			wantErr:    "1 error(s) after editing",
+			wantReport: "not a project",
+		},
 	}
 
 	for _, tt := range tests {

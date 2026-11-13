@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
 )
 
@@ -36,7 +37,7 @@ func NewFolderTagCmd(out io.Writer) *cobra.Command {
 			if len(args) == 0 {
 				return compListShortNames(toComplete)
 			}
-			return compListTags(toComplete)
+			return CompleteTags(toComplete)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
@@ -50,9 +51,9 @@ func NewFolderTagCmd(out io.Writer) *cobra.Command {
 
 	if err := cmd.RegisterFlagCompletionFunc("remove",
 		func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			return compListTags(toComplete)
+			return CompleteTags(toComplete)
 		}); err != nil {
-		return cmd
+		cli.Warn("Cannot register completion for --remove: %v", err)
 	}
 
 	return cmd

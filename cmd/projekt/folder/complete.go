@@ -26,9 +26,9 @@ func compListShortNames(_ string) ([]string, cobra.ShellCompDirective) {
 	return result, cobra.ShellCompDirectiveNoFileComp
 }
 
-// compListTags completes a --tags value with the tags already in the config, so
+// CompleteTags completes a --tags value with the tags already in the config, so
 // that a typo shows up as a missing suggestion rather than an empty listing.
-func compListTags(_ string) ([]string, cobra.ShellCompDirective) {
+func CompleteTags(_ string) ([]string, cobra.ShellCompDirective) {
 	seen := make(map[string]struct{})
 
 	var result []string
@@ -54,7 +54,7 @@ func registerTagsFlag(cmd *cobra.Command, target *[]string, action string) {
 
 	if err := cmd.RegisterFlagCompletionFunc("tags",
 		func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			return compListTags(toComplete)
+			return CompleteTags(toComplete)
 		}); err != nil {
 		cli.Warn("Cannot register completion for --tags: %v", err)
 	}

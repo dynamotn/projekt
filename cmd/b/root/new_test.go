@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"gitlab.com/dynamo-tools/projekt/pkg/bplutil"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
@@ -188,5 +190,19 @@ func TestShowAndPathCmd(t *testing.T) {
 	}
 	if strings.TrimSpace(out.String()) != filepath.Join(recipeDir, "app.yaml") {
 		t.Errorf("path = %q", out.String())
+	}
+}
+
+func TestCompleteSetKeys_NewIgnoresTheName(t *testing.T) {
+	stores(t, "source:\n  template: app\n")
+
+	// `b new app myapp --set <TAB>`: the second argument is the project, not
+	// another recipe.
+	got, directive := completeSetKeys(NewBoilerplateNewCmd(&bytes.Buffer{}), []string{"app", "myapp"}, "")
+	if directive == cobra.ShellCompDirectiveError {
+		t.Fatal("completeSetKeys() failed, treating the project name as a recipe")
+	}
+	if len(got) != 1 || !strings.HasPrefix(got[0], "module=") {
+		t.Errorf("completeSetKeys() = %v, want the recipe's template key", got)
 	}
 }

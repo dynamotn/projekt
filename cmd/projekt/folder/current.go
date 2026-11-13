@@ -38,7 +38,12 @@ func NewFolderCurrentCmd(out io.Writer) *cobra.Command {
 			if len(args) == 1 {
 				o.From = args[0]
 			}
-			return folderutil.CurrentFolder(out, o)
+			err := folderutil.CurrentFolder(out, o)
+			if err != nil && o.Quiet {
+				// The exit code is the whole answer, so cobra must not add one.
+				cmd.SilenceErrors, cmd.SilenceUsage = true, true
+			}
+			return err
 		},
 	}
 

@@ -78,3 +78,17 @@ func TestDoctorCmd_Flags(t *testing.T) {
 		t.Errorf("--output default = %q, want %q", got, outputText)
 	}
 }
+
+func TestRunDoctor_UnknownFormatRunsNothing(t *testing.T) {
+	ran := false
+	previous := runChecks
+	runChecks = func() []doctor.Check { ran = true; return nil }
+	t.Cleanup(func() { runChecks = previous })
+
+	if err := runDoctor(&bytes.Buffer{}, false, "yaml", true); err == nil {
+		t.Fatal("runDoctor() error = nil, want the unknown format refused")
+	}
+	if ran {
+		t.Error("runDoctor() ran every check before refusing the format")
+	}
+}

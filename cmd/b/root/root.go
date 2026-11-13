@@ -48,6 +48,11 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 	// `b` writes to the configuration when it registers a project, so it
 	// refuses to run on a config it could not read, like projekt itself.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if !needsConfig(cmd) {
+			return nil
+		}
+		// Decoding is lazy, so do it now, or its error would get past this.
+		lazypath.GetConfig()
 		return lazypath.LoadError()
 	}
 
@@ -60,6 +65,20 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 	)
 
 	return rootCmd
+}
+
+// needsConfig says whether cmd works on the configuration: version and the
+// commands cobra adds never do, so a broken config must not stop them.
+func needsConfig(cmd *cobra.Command) bool {
+	for ; cmd.HasParent(); cmd = cmd.Parent() {
+		if !cmd.Parent().HasParent() {
+			switch cmd.Name() {
+			case "version", "completion", "help":
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func Execute() {
