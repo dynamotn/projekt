@@ -4,6 +4,10 @@
 
 ### Added
 
+- **folder describe**: `--generate` drafts the description with the AI
+  command you name in `ai.command` (or `PROJEKT_AI`), shows it, and keeps it
+  on a yes or with `--yes`; `--show-prompt` prints what would be sent.
+  projekt sends no credential file and runs nothing the AI answers
 - **docs**: `doc/agent-materials.md` — which of `AGENTS.md`, a skill and a
   project note is for what, how to write a skill an agent uses, and how to
   keep one source for every agent with `t new agent-docs` and `t apply`

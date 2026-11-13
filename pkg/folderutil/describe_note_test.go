@@ -3,6 +3,7 @@ package folderutil
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -312,5 +313,94 @@ func TestDescribeFolder_RefusesControlCharacters(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(lazypath.CfgFile); strings.Contains(string(data), "description") {
 		t.Errorf("config = %q, want no description written", data)
+	}
+}
+
+func generateSetup(t *testing.T) (project string) {
+	t.Helper()
+	_, project = editable(t)
+	if err := os.WriteFile(filepath.Join(project, "README.md"), []byte("Invoices for payments teams"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return project
+}
+
+func generateOpts(out *bytes.Buffer, answer string) GenerateOptions {
+	return GenerateOptions{
+		Yes: true, In: strings.NewReader("y\n"), Out: out, Err: &bytes.Buffer{},
+		Ask: func(string, io.Writer) (string, error) { return answer, nil },
+	}
+}
+
+func configHas(t *testing.T, want string) bool {
+	t.Helper()
+	data, _ := os.ReadFile(lazypath.CfgFile)
+	return strings.Contains(string(data), want)
+}
+
+func TestGenerateDescription_PrintsAndKeepsWithYes(t *testing.T) {
+	generateSetup(t)
+	var out bytes.Buffer
+	if err := GenerateDescription("work-myapp", generateOpts(&out, "\"The billing API.\"\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !configHas(t, "description: The billing API\n") {
+		t.Errorf("config does not hold the description")
+	}
+}
+
+func TestGenerateDescription_NotATerminalOnlyPrints(t *testing.T) {
+	generateSetup(t)
+	var out bytes.Buffer
+	o := generateOpts(&out, "The billing API")
+	o.Yes = false
+	if err := GenerateDescription("work-myapp", o); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "The billing API") || configHas(t, "description") {
+		t.Errorf("out = %q, want the draft printed and nothing written", out.String())
+	}
+}
+
+func TestGenerateDescription_ShowPromptRunsNothing(t *testing.T) {
+	generateSetup(t)
+	var out bytes.Buffer
+	o := generateOpts(&out, "")
+	o.ShowPrompt = true
+	o.Ask = func(string, io.Writer) (string, error) { t.Fatal("Ask called"); return "", nil }
+	if err := GenerateDescription("work-myapp", o); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"work-myapp", "Invoices for payments teams"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("prompt lacks %q: %q", want, out.String())
+		}
+	}
+}
+
+func TestGenerateDescription_RefusesWhatIsNotOneLine(t *testing.T) {
+	generateSetup(t)
+	for _, answer := range []string{"two\nlines", strings.Repeat("x", 400), ""} {
+		var out bytes.Buffer
+		if err := GenerateDescription("work-myapp", generateOpts(&out, answer)); err == nil {
+			t.Errorf("answer %q was kept", answer)
+		}
+		if configHas(t, "description") {
+			t.Errorf("answer %q reached the configuration", answer)
+		}
+	}
+}
+
+func TestGenerateDescription_AnswerIsText(t *testing.T) {
+	project := generateSetup(t)
+	var out bytes.Buffer
+	if err := GenerateDescription("work-myapp", generateOpts(&out, "$(touch pwned)")); err != nil {
+		t.Fatal(err)
+	}
+	if !configHas(t, "$(touch pwned)") {
+		t.Error("the literal text was not kept")
+	}
+	if _, err := os.Stat(filepath.Join(project, "pwned")); err == nil {
+		t.Error("the answer was run")
 	}
 }

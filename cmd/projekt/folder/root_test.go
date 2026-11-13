@@ -3,6 +3,7 @@ package folder
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -421,5 +422,34 @@ func TestNewFolderShowCmd_UnknownFormat(t *testing.T) {
 	cmd.SilenceUsage, cmd.SilenceErrors = true, true
 	if err := cmd.Execute(); err == nil {
 		t.Error("want an error for -o yaml")
+	}
+}
+
+func TestNewFolderDescribeCmd_GenerateFlags(t *testing.T) {
+	t.Setenv("PROJEKT_AI", "")
+	project := t.TempDir() + "/api"
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lazypath.SetTestConfig(lazypath.Config{Folders: []lazypath.Folder{{Path: project}}})
+	defer lazypath.ResetTestConfig()
+
+	run := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		cmd := NewFolderDescribeCmd(&out)
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs(args)
+		err := cmd.Execute()
+		return out.String(), err
+	}
+	for _, args := range [][]string{{"api", "--generate", "x"}, {"api", "--generate", "--clear"}} {
+		if _, err := run(args...); err == nil {
+			t.Errorf("describe %v = nil, want an error", args)
+		}
+	}
+	out, err := run("api", "--generate", "--show-prompt")
+	if err != nil || !strings.Contains(out, "api") {
+		t.Errorf("--show-prompt = %q, %v, want the prompt", out, err)
 	}
 }

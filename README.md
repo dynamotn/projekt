@@ -599,6 +599,25 @@ An `AGENTS.md`, a skill and a project note each do a different job. The
 [guide](doc/agent-materials.md) says which is which, how to write a skill an
 agent uses, and how to keep one source for every agent with `t` and `t apply`.
 
+## 🤖 Drafting with your AI
+
+projekt holds no key and speaks to no vendor: it runs the AI command-line
+tool you name. Set `ai.command` in your configuration (for example
+`claude -p`) or `PROJEKT_AI`, and `ai.timeout` if two minutes is not right.
+
+```bash
+projekt folder describe billing --generate               # draft, show, ask
+projekt folder describe billing --generate --yes         # keep without asking
+projekt folder describe billing --generate --show-prompt # print what is sent
+```
+
+The prompt holds the short name, a list of the project's paths and the start
+of its README. It never holds a secret file, a git-ignored file, a big file
+or a link that leaves the project, and nothing is written without a yes. The
+answer is only text: projekt never runs it. The AI tool itself can still read
+whatever its own permissions allow, so a print-only invocation is the safe
+choice.
+
 ## 📚 Commands
 
 ### 📁 `projekt` — project folders
