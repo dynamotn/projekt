@@ -530,9 +530,10 @@ func TestRender_FolderFactsAreNeverExecuted(t *testing.T) {
 	}
 }
 
-func TestRender_FolderWithABrokenConfig(t *testing.T) {
+func loadConfigFile(t *testing.T, content string) {
+	t.Helper()
 	file := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(file, []byte("folders: [ this is not: valid: yaml\n"), 0o644); err != nil {
+	if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	previous := lazypath.CfgFile
@@ -543,13 +544,24 @@ func TestRender_FolderWithABrokenConfig(t *testing.T) {
 		viper.Reset()
 	})
 	lazypath.InitConfigReadOnly()
-	if lazypath.LoadError() == nil {
-		t.Fatal("LoadError() = nil, want the broken file reported")
-	}
-	dir := t.TempDir()
+}
 
-	if got := renderInfo(t, folderInfo, dir); got != "||||"+filepath.Base(dir) {
-		t.Errorf("output = %q, want an empty .Folder", got)
+func TestRender_FolderWithABrokenConfig(t *testing.T) {
+	for name, content := range map[string]string{
+		"malformed yaml":  "folders: [ this is not: valid: yaml\n",
+		"does not decode": "folders: 5\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			loadConfigFile(t, content)
+			dir := t.TempDir()
+
+			if got := renderInfo(t, folderInfo, dir); got != "||||"+filepath.Base(dir) {
+				t.Errorf("output = %q, want an empty .Folder", got)
+			}
+			if lazypath.LoadError() == nil {
+				t.Error("LoadError() = nil, want the broken file recorded")
+			}
+		})
 	}
 }
 

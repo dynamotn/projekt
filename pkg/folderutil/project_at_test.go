@@ -68,9 +68,10 @@ func TestProjectAt_Nowhere(t *testing.T) {
 	}
 }
 
-func TestProjectAt_BrokenConfig(t *testing.T) {
+func loadConfigFile(t *testing.T, content string) {
+	t.Helper()
 	file := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(file, []byte("folders: [ this is not: valid: yaml\n"), 0o644); err != nil {
+	if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	previous := lazypath.CfgFile
@@ -81,11 +82,27 @@ func TestProjectAt_BrokenConfig(t *testing.T) {
 		viper.Reset()
 	})
 	lazypath.InitConfigReadOnly()
+}
+
+func TestProjectAt_BrokenConfig(t *testing.T) {
+	loadConfigFile(t, "folders: [ this is not: valid: yaml\n")
 	if lazypath.LoadError() == nil {
 		t.Fatal("LoadError() = nil, want the broken file reported")
 	}
 
 	if got, ok := ProjectAt(t.TempDir()); ok {
 		t.Errorf("ProjectAt() = %+v, true, want false", got)
+	}
+}
+
+// A file that parses but does not decode is only noticed on first use.
+func TestProjectAt_ConfigThatDoesNotDecode(t *testing.T) {
+	loadConfigFile(t, "folders: 5\n")
+
+	if got, ok := ProjectAt(t.TempDir()); ok {
+		t.Errorf("ProjectAt() = %+v, true, want false", got)
+	}
+	if lazypath.LoadError() == nil {
+		t.Error("LoadError() = nil after the decode failed, want it recorded")
 	}
 }
