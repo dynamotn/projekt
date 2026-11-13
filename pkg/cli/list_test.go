@@ -68,6 +68,19 @@ func TestEncodeList_TSV(t *testing.T) {
 	}
 }
 
+func TestEncodeList_TSVKeepsACellOnItsLine(t *testing.T) {
+	view := ListView{Columns: []ListColumn{{Header: "NAME", Key: "name"}, {Header: "DESCRIPTION", Key: "description"}}}
+	view.AppendRow("api", "two\nlines\twith a tab")
+
+	var buf bytes.Buffer
+	if err := EncodeList(&buf, view, ListOutputOption{Output: OutputTSV, NoHeaders: true}); err != nil {
+		t.Fatalf("EncodeList() error = %v", err)
+	}
+	if want := "api\ttwo lines with a tab\n"; buf.String() != want {
+		t.Errorf("EncodeList() = %q, want %q", buf.String(), want)
+	}
+}
+
 func TestEncodeList_JSON(t *testing.T) {
 	var buf bytes.Buffer
 	if err := EncodeList(&buf, testView(), ListOutputOption{Output: OutputJSON}); err != nil {

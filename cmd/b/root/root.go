@@ -82,7 +82,11 @@ func needsConfig(cmd *cobra.Command) bool {
 }
 
 func Execute() {
-	cobra.OnInitialize(lazypath.InitConfig)
+	cobra.OnInitialize(func() {
+		// CfgFile is only ever set by --config, which must name a real file.
+		lazypath.CfgFileFromFlag = lazypath.CfgFile != ""
+		lazypath.InitConfig()
+	})
 
 	if err := NewRootCmd(os.Stdout).Execute(); err != nil {
 		cli.Debug("%v", err)

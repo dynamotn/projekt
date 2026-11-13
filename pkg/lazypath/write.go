@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -65,7 +66,8 @@ func saveConfig(sections ...string) error {
 		case value == nil:
 		case index >= 0:
 			root.Content[index].Value = section
-			root.Content[index+1] = mergeNode(root.Content[index+1], value)
+			typ, _ := fieldType(reflect.TypeOf(c), section)
+			root.Content[index+1] = mergeNode(root.Content[index+1], value, typ)
 		default:
 			root.Content = append(root.Content,
 				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: section},
@@ -128,8 +130,9 @@ func mappingValue(mapping *yaml.Node, key string) *yaml.Node {
 
 // mergeNode returns want, the value a command means to write, expressed as
 // changes to have, what the file holds, so that what did not change keeps its
-// comments and formatting.
-func mergeNode(have, want *yaml.Node) *yaml.Node {
+// comments and formatting. typ is the Go type want was encoded from, which
+// tells a key that was left out from a key the program has never heard of.
+func mergeNode(have, want *yaml.Node, typ reflect.Type) *yaml.Node {
 	if have == nil {
 		return pruneZero(want)
 	}
@@ -139,9 +142,9 @@ func mergeNode(have, want *yaml.Node) *yaml.Node {
 
 	switch want.Kind {
 	case yaml.MappingNode:
-		mergeMapping(have, want)
+		mergeMapping(have, want, typ)
 	case yaml.SequenceNode:
-		mergeSequence(have, want)
+		mergeSequence(have, want, typ)
 	case yaml.ScalarNode:
 		mergeScalar(have, want)
 	default:
@@ -150,7 +153,7 @@ func mergeNode(have, want *yaml.Node) *yaml.Node {
 	return have
 }
 
-func mergeMapping(have, want *yaml.Node) {
+func mergeMapping(have, want *yaml.Node, typ reflect.Type) {
 	var content []*yaml.Node
 	used := make(map[int]bool, len(have.Content)/2)
 
@@ -158,17 +161,20 @@ func mergeMapping(have, want *yaml.Node) {
 	for i := 0; i+1 < len(have.Content); i += 2 {
 		key, value := have.Content[i], have.Content[i+1]
 		j := mappingIndex(want, key.Value)
+		valueType, known := fieldType(typ, key.Value)
 		if j < 0 {
 			// Gone from what is written. An explicit `is_workspace: false`
-			// means what its absence means, and is left the way it was typed.
-			if isZero(value) {
+			// means what its absence means, and is left the way it was typed;
+			// a key no field reads (a newer release's, a merge key `<<`, one
+			// of the reader's own) was never ours to drop.
+			if !known || isZero(value) {
 				content = append(content, key, value)
 			}
 			continue
 		}
 		used[j] = true
 		key.Value = want.Content[j].Value
-		content = append(content, key, mergeNode(value, want.Content[j+1]))
+		content = append(content, key, mergeNode(value, want.Content[j+1], valueType))
 	}
 
 	// Then what is new, leaving out what would only spell a default.
@@ -186,7 +192,12 @@ func mergeMapping(have, want *yaml.Node) {
 // for — the same `path` or `name`, the same scalar, or failing that the one in
 // the same place, which is what a renamed or moved entry is — and merges the
 // two.
-func mergeSequence(have, want *yaml.Node) {
+func mergeSequence(have, want *yaml.Node, typ reflect.Type) {
+	var itemType reflect.Type
+	if typ = deref(typ); typ != nil && (typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array) {
+		itemType = typ.Elem()
+	}
+
 	matched := make([]*yaml.Node, len(want.Content))
 	taken := make([]bool, len(have.Content))
 
@@ -211,9 +222,44 @@ func mergeSequence(have, want *yaml.Node) {
 
 	content := make([]*yaml.Node, len(want.Content))
 	for i, item := range want.Content {
-		content[i] = mergeNode(matched[i], item)
+		content[i] = mergeNode(matched[i], item, itemType)
 	}
 	have.Content = content
+}
+
+// fieldType returns the type the value under key decodes into, and whether
+// a struct of type typ has a field for key at all. A map, or a type that is
+// not known, takes every key.
+func fieldType(typ reflect.Type, key string) (reflect.Type, bool) {
+	typ = deref(typ)
+	if typ == nil {
+		return nil, true
+	}
+	switch typ.Kind() {
+	case reflect.Map:
+		return typ.Elem(), true
+	case reflect.Struct:
+	default:
+		return nil, true
+	}
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		name, _, _ := strings.Cut(field.Tag.Get("yaml"), ",")
+		if name == "" {
+			name = strings.ToLower(field.Name)
+		}
+		if name != "-" && field.IsExported() && strings.EqualFold(name, key) {
+			return field.Type, true
+		}
+	}
+	return nil, false
+}
+
+func deref(typ reflect.Type) reflect.Type {
+	for typ != nil && typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return typ
 }
 
 // itemIdentity names the entry a sequence item describes, or returns "" when

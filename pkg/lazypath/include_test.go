@@ -107,6 +107,25 @@ func TestInclude_AddDoesNotCopyIncludedFolders(t *testing.T) {
 	}
 }
 
+func TestInclude_AddSkipsAFolderAnIncludeDeclares(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, "shared.yaml", "folders:\n  - path: /tmp/shared\n")
+	main := writeConfig(t, dir, "config.yaml", "include:\n  - shared.yaml\nfolders: []\n")
+	loadFrom(t, main)
+
+	if err := (&Folder{Path: "/tmp/shared"}).AddToConfig(); err != nil {
+		t.Fatalf("AddToConfig() error = %v", err)
+	}
+
+	data, err := os.ReadFile(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "/tmp/shared") {
+		t.Errorf("the local config declares an included folder a second time:\n%s", data)
+	}
+}
+
 func TestInclude_RelativeToTheFileThatNamesIt(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, "nested/deep.yaml", "folders:\n  - path: /tmp/deep\n")
@@ -147,6 +166,23 @@ func TestInclude_TheSameFileTwiceIsReadOnce(t *testing.T) {
 	config := GetConfig()
 	if len(config.Folders) != 1 {
 		t.Errorf("folders = %#v, want the shared file read once", config.Folders)
+	}
+}
+
+func TestInclude_TheSameFileThroughALinkIsReadOnce(t *testing.T) {
+	dir := t.TempDir()
+	shared := writeConfig(t, dir, "shared.yaml", "folders:\n  - path: /tmp/shared\n")
+	if err := os.Symlink(shared, filepath.Join(dir, "link.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	main := writeConfig(t, dir, "config.yaml", "include:\n  - shared.yaml\n  - link.yaml\n")
+	loadFrom(t, main)
+
+	if config := GetConfig(); len(config.Folders) != 1 {
+		t.Errorf("folders = %#v, want the linked file read once", config.Folders)
+	}
+	if files := IncludedFiles(); len(files) != 1 {
+		t.Errorf("IncludedFiles() = %v, want the linked file listed once", files)
 	}
 }
 

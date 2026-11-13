@@ -116,6 +116,30 @@ func TestSaveConfig_ChangedEntryKeepsItsComments(t *testing.T) {
 	}
 }
 
+func TestSaveConfig_KeepsKeysItDoesNotKnow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := `x-defaults: &defaults
+  priority: 3
+folders:
+  - path: /work/api
+    <<: *defaults
+    color: red
+    description: old
+`
+	got := savedConfig(t, path, content, func() error {
+		return SetFolderDescription("/work/api", "")
+	})
+
+	for _, want := range []string{"<<: *defaults", "color: red"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("file lost %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "description") {
+		t.Errorf("the cleared description is still there:\n%s", got)
+	}
+}
+
 func TestSaveConfig_EmptySectionIsRemoved(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := commentedConfig + "worktrees:\n  - project: api\n    name: next\n    branch: next\n    path: /work/api/.worktrees/next\n"

@@ -216,3 +216,27 @@ func TestTransition_IncludedFileNeedsTrust(t *testing.T) {
 		t.Errorf("after trust: Transition() = %q, %v", got, err)
 	}
 }
+
+func TestTrustSource_AnySpellingOfTheIncludedFile(t *testing.T) {
+	root, include := includedFromRepo(t)
+
+	previous := tplutil.AskTrust
+	tplutil.AskTrust = func(tplutil.Origin, string) (bool, error) { return false, nil }
+	t.Cleanup(func() { tplutil.AskTrust = previous })
+
+	link := filepath.Join(t.TempDir(), "team.yaml")
+	if err := os.Symlink(include, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := TrustSource(link); err != nil {
+		t.Fatalf("TrustSource(link) error = %v", err)
+	}
+	got, err := transition(t, "", filepath.Join(root, "svc"))
+	if err != nil || got != "echo from team\n" {
+		t.Errorf("after trusting a link: Transition() = %q, %v", got, err)
+	}
+
+	if err := TrustSource(filepath.Join(root, "config.yaml")); err == nil {
+		t.Error("TrustSource() of a file that is not included = nil, want an error")
+	}
+}

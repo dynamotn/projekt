@@ -71,6 +71,21 @@ func TestApply_ReplaysTheRecordedAnswers(t *testing.T) {
 	}
 }
 
+func TestApply_RemembersTheValuesGivenNow(t *testing.T) {
+	project, _ := recipeProject(t, nil)
+
+	if _, err := Apply(ApplyOptions{Project: project, Values: tplutil.Values{"who": "you"}, Log: &bytes.Buffer{}}); err != nil {
+		t.Fatalf("Apply(--set) error = %v", err)
+	}
+	// A plain apply afterwards keeps the new answer instead of reverting it.
+	if _, err := Apply(ApplyOptions{Project: project, Log: &bytes.Buffer{}}); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	if got := readFile(t, filepath.Join(project, "main.txt")); got != "hello you\n" {
+		t.Errorf("main.txt = %q, want the value given with --set kept", got)
+	}
+}
+
 func TestApply_DoesNotRunTheRecipeCommandsAgainByDefault(t *testing.T) {
 	project, _ := recipeProject(t, []string{"echo ran >> hook.txt"})
 	created := readFile(t, filepath.Join(project, "hook.txt"))

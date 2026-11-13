@@ -81,7 +81,7 @@ func Apply(o ApplyOptions) ([]Applied, error) {
 		}
 
 		// The recipe's recorded answers first, then anything given now.
-		remembered, _ := record.FindRecipe(recipe.Name)
+		remembered, found := record.FindRecipe(recipe.Name)
 		values := tplutil.MergeValues(remembered.Values, o.Values)
 
 		changes, err := tplutil.Apply(tplutil.ApplyOptions{
@@ -99,6 +99,15 @@ func Apply(o ApplyOptions) ([]Applied, error) {
 			return nil, err
 		}
 		applied = append(applied, Applied{Recipe: recipe, Changes: changes})
+
+		// What was given now is the answer from now on, or the next plain
+		// apply would render the old one back.
+		if found && !o.DryRun && len(o.Values) > 0 {
+			remembered.Values = values
+			if err := tplutil.RecordRecipe(project, remembered); err != nil {
+				return nil, err
+			}
+		}
 
 		if !o.Hooks || len(recipe.After) == 0 {
 			continue

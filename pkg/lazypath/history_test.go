@@ -36,6 +36,24 @@ func TestStateHome(t *testing.T) {
 	}
 }
 
+func TestStateHome_NeverRelative(t *testing.T) {
+	// A relative value would resolve against the folder a command runs in,
+	// which a repository could fill with its own state.
+	t.Setenv("XDG_STATE_HOME", ".local/state")
+	t.Setenv("HOME", "/home/someone")
+	if got := StateHome(); got != "/home/someone/.local/state" {
+		t.Errorf("StateHome() = %v, want the default under HOME", got)
+	}
+
+	t.Setenv("HOME", "")
+	if got := StateHome(); got != "" {
+		t.Errorf("StateHome() without a home = %v, want nothing", got)
+	}
+	if got := HistoryFile(); got != "" {
+		t.Errorf("HistoryFile() without a home = %v, want nothing", got)
+	}
+}
+
 func TestReadHistory_Missing(t *testing.T) {
 	useHistory(t)
 

@@ -65,6 +65,20 @@
 
 ### Fixed
 
+- **config**: writing the configuration — `folder add`, `folder tag`,
+  `folder describe`, prune, `b new` — keeps the keys projekt does not know: a
+  key of your own, one from a newer release, a YAML merge key `<<: *anchor`
+- **config**: `--config` naming a file that does not exist stops with
+  "config file not found" instead of creating an empty file and listing
+  nothing; the default file is still created on first use
+- **config**: a file included twice, once through a link and once by its real
+  path, is read once instead of listing its folders twice
+- **folder add**, **b new**: a folder an included file already declares is
+  left alone, so `doctor` no longer reports it as configured more than once
+- **b apply**: `b apply --set key=value` remembers the new value, so the next
+  plain `b apply` keeps it instead of rendering the old answer back
+- **folder**: `--output tsv` keeps each row on one line: a tab or line break
+  inside a cell, such as a multi-line description, becomes a space
 - **folder exec**: flags after the command belong to the command:
   `folder exec rg -q foo` runs `rg -q foo` in every folder instead of taking
   `-q` as `--quiet`, and `-t go` is no longer read as `--tags`. Put projekt's
@@ -150,6 +164,14 @@
 
 ### Security
 
+- **config trust**: `projekt config trust` accepts any spelling of an
+  included file — relative, through a link — and trusts the file its hooks
+  are checked against; a path the configuration does not include is refused.
+  An include reached through a linked path is asked about once more
+- **config**, **pj**: a relative `XDG_CONFIG_HOME` or `XDG_STATE_HOME` is
+  ignored, as the XDG specification says, and an unset `HOME` is an error, so
+  the configuration and the jump history can no longer land in the current
+  folder, where a repository could ship its own
 - **folder add --from-remote**: a token from the environment goes only to
   the host it is for, as with `gh` and `glab`: `GITHUB_TOKEN`/`GH_TOKEN` to
   github.com, `GH_ENTERPRISE_TOKEN` to any other GitHub server, `GITLAB_TOKEN`

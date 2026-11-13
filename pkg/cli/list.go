@@ -113,6 +113,9 @@ func displayValue(cell any) string {
 	return fmt.Sprint(cell)
 }
 
+// tsvCell keeps a cell on its line and in its column.
+var tsvCell = strings.NewReplacer("\t", " ", "\r\n", " ", "\n", " ", "\r", " ")
+
 // encodeListTSV writes one row per line, so that a shell script can read the
 // listing with `read` or `cut` instead of stripping table borders.
 func encodeListTSV(out io.Writer, v ListView, noHeaders bool) error {
@@ -129,7 +132,7 @@ func encodeListTSV(out io.Writer, v ListView, noHeaders bool) error {
 	for _, row := range v.Rows {
 		cells := make([]string, 0, len(row))
 		for _, cell := range row {
-			cells = append(cells, displayValue(cell))
+			cells = append(cells, tsvCell.Replace(displayValue(cell)))
 		}
 		b.WriteString(strings.Join(cells, "\t"))
 		b.WriteByte('\n')

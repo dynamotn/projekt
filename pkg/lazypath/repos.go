@@ -19,7 +19,7 @@ func AddRepoToFolder(folderPath, repoName, repoPath string) error {
 	}
 	unmarshalConfig()
 
-	ok, index := CheckFolderExist(folderPath)
+	_, index, ok := FindOwnFolder(folderPath)
 	if !ok {
 		return fmt.Errorf("%s is not a folder in %s", folderPath, ConfigFile())
 	}

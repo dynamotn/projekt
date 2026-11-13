@@ -195,13 +195,15 @@ func cleanPath(path string) string {
 	return filepath.Clean(trimmed)
 }
 
-// CheckFolderExist checks if a folder path exists in the configuration
+// CheckFolderExist checks if a folder path exists in the configuration, its
+// includes counted, and returns its index in GetConfig().Folders. An entry an
+// include declares is configured: adding it here too would declare it twice.
 func CheckFolderExist(path string) (bool, int) {
 	unmarshalConfig()
 
 	// Compared resolved, so that /var/x and /private/var/x are one entry.
 	normalizedPath := Canonical(path)
-	_, index, ok := lo.FindIndexOf(c.Folders, func(folder Folder) bool {
+	_, index, ok := lo.FindIndexOf(effective.Folders, func(folder Folder) bool {
 		return Canonical(folder.Path) == normalizedPath
 	})
 
@@ -240,7 +242,7 @@ func RemoveFromConfig(path string) error {
 	}
 	unmarshalConfig()
 
-	isExisted, index := CheckFolderExist(path)
+	_, index, isExisted := FindOwnFolder(path)
 
 	if !isExisted {
 		cli.Info("%s wasn't added as project!", path)

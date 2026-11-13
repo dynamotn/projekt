@@ -41,7 +41,7 @@ func HostnameOverride(configFile string) string {
 // file you are looking at comes first.
 func mergeIncludes(own Config, configFile string) Config {
 	merged := own
-	seen := map[string]struct{}{cleanPath(configFile): {}}
+	seen := map[string]struct{}{Canonical(configFile): {}}
 
 	for _, include := range includePaths(own.Include, configFile) {
 		merged = mergeOne(merged, include, seen, includeDepth)
@@ -61,7 +61,7 @@ func mergeOne(into Config, path string, seen map[string]struct{}, depth int) Con
 		cli.Warn("Not following %s: includes are nested too deeply", path)
 		return into
 	}
-	key := cleanPath(path)
+	key := Canonical(path)
 	if _, done := seen[key]; done {
 		// Already read, whether through a cycle or through two files that
 		// both include it. Reading it twice would double every folder in it.
@@ -144,7 +144,7 @@ func IncludedFiles() []string {
 	unmarshalConfig()
 
 	configFile := ConfigFile()
-	seen := map[string]struct{}{cleanPath(configFile): {}}
+	seen := map[string]struct{}{Canonical(configFile): {}}
 
 	var files []string
 	var walk func(includes []string, from string, depth int)
@@ -153,7 +153,7 @@ func IncludedFiles() []string {
 			return
 		}
 		for _, path := range includePaths(includes, from) {
-			key := cleanPath(path)
+			key := Canonical(path)
 			if _, done := seen[key]; done {
 				continue
 			}
@@ -175,7 +175,7 @@ func IncludedFiles() []string {
 
 	if override := HostnameOverride(configFile); override != "" {
 		if _, err := os.Stat(override); err == nil {
-			if _, done := seen[cleanPath(override)]; !done {
+			if _, done := seen[Canonical(override)]; !done {
 				files = append(files, override)
 			}
 		}

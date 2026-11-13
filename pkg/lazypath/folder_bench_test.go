@@ -5,7 +5,7 @@ import (
 )
 
 func BenchmarkCheckFolderExist(b *testing.B) {
-	c = Config{
+	SetTestConfig(Config{
 		Folders: []Folder{
 			{Path: "/tmp/test1"},
 			{Path: "/tmp/test2"},
@@ -13,7 +13,8 @@ func BenchmarkCheckFolderExist(b *testing.B) {
 			{Path: "/tmp/test4"},
 			{Path: "/tmp/test5"},
 		},
-	}
+	})
+	defer ResetTestConfig()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

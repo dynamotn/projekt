@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -166,7 +168,54 @@ func TestInitConfig_WithExistingFile(t *testing.T) {
 	}
 }
 
+func TestInitConfig_MissingFlagFileIsAnError(t *testing.T) {
+	configFile := filepath.Join(t.TempDir(), "typo.yaml")
+	originalCfgFile := CfgFile
+	CfgFile, CfgFileFromFlag = configFile, true
+	t.Cleanup(func() {
+		CfgFile, CfgFileFromFlag = originalCfgFile, false
+		ResetTestConfig()
+		viper.Reset()
+	})
+
+	InitConfig()
+
+	if err := LoadError(); err == nil || !strings.Contains(err.Error(), "config file not found") {
+		t.Errorf("LoadError() = %v, want config file not found", err)
+	}
+	if _, err := os.Stat(configFile); !os.IsNotExist(err) {
+		t.Errorf("InitConfig() created the --config file %s", configFile)
+	}
+}
+
+func TestInitConfig_IgnoresARelativeConfigHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "relative/config")
+	originalCfgFile := CfgFile
+	CfgFile = ""
+	t.Cleanup(func() {
+		CfgFile = originalCfgFile
+		ResetTestConfig()
+		viper.Reset()
+	})
+
+	InitConfig()
+
+	if want := filepath.Join(home, ".config", "projekt", "config.yaml"); CfgFile != want {
+		t.Errorf("CfgFile = %v, want %v", CfgFile, want)
+	}
+
+	CfgFile = ""
+	t.Setenv("HOME", "")
+	InitConfig()
+	if LoadError() == nil {
+		t.Error("InitConfig() without a home directory did not fail")
+	}
+}
+
 func TestInitConfig_NoConfigFile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	originalCfgFile := CfgFile
 	CfgFile = ""
 	defer func() {

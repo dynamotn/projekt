@@ -51,13 +51,14 @@ func TestGetRegexMatch(t *testing.T) {
 
 func TestCheckFolderExist(t *testing.T) {
 	// Reset config for testing
-	c = Config{
+	SetTestConfig(Config{
 		Folders: []Folder{
 			{Path: "/tmp/test1"},
 			{Path: "/tmp/test2/"},
 			{Path: "/home/user/projects"},
 		},
-	}
+	})
+	defer ResetTestConfig()
 
 	tests := []struct {
 		name      string
@@ -277,13 +278,14 @@ func TestAddToConfig_WithGitConfig(t *testing.T) {
 }
 
 func TestCheckFolderExist_EdgeCases(t *testing.T) {
-	c = Config{
+	SetTestConfig(Config{
 		Folders: []Folder{
 			{Path: "/"},
 			{Path: "/home/"},
 			{Path: ""},
 		},
-	}
+	})
+	defer ResetTestConfig()
 
 	tests := []struct {
 		name string

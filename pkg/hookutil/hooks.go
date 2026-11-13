@@ -178,20 +178,32 @@ func authorize(hook Hook) error {
 	return tplutil.Authorize(sourceOrigin(hook.Source), hook.Command)
 }
 
-// sourceOrigin is the trust origin of an included configuration file.
+// sourceOrigin is the trust origin of an included configuration file, keyed
+// by the file itself, however it was spelled.
 func sourceOrigin(source string) tplutil.Origin {
 	return tplutil.Origin{
 		Kind:  "configuration file",
 		Name:  source,
-		Key:   "config:" + source,
+		Key:   "config:" + lazypath.Canonical(source),
 		Paths: []string{source},
 		Hint:  "projekt config trust " + source,
 	}
 }
 
 // TrustSource records an included configuration file as trusted as it is now.
+// A file the configuration does not include is refused: trusting it would
+// let nothing run, and is most likely a typo.
 func TrustSource(source string) error {
-	return tplutil.Trust(sourceOrigin(source))
+	abs, err := filepath.Abs(source)
+	if err != nil {
+		return err
+	}
+	for _, included := range lazypath.IncludedFiles() {
+		if lazypath.SamePath(abs, included) {
+			return tplutil.Trust(sourceOrigin(included))
+		}
+	}
+	return fmt.Errorf("%s is not a file the configuration includes", source)
 }
 
 // Show prints the hooks of a project, with where each one comes from.

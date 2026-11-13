@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/OpenPeeDeeP/xdg"
 	"github.com/spf13/viper"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
@@ -16,6 +15,9 @@ import (
 
 var (
 	CfgFile string
+	// CfgFileFromFlag says CfgFile was given on the command line, so a file
+	// that is not there is a mistake to report rather than one to create.
+	CfgFileFromFlag bool
 	// c is this machine's configuration file: what gets written.
 	c Config
 	// effective is c plus everything it includes: what gets read.
@@ -327,15 +329,23 @@ func ResetTestConfig() {
 
 // InitConfig initializes the configuration from file or creates a new one
 func InitConfig() {
+	defaultFile := ""
+	if home, err := xdgHome("XDG_CONFIG_HOME", ".config"); err == nil {
+		defaultFile = filepath.Join(home, "projekt", "config.yaml")
+	}
+	// A --config that names nothing is a typo, and an empty file in its place
+	// would hide it.
+	create := !CfgFileFromFlag || CfgFile == defaultFile
+
 	if CfgFile != "" {
 		// Use config file from the flag.
 		viper.SetConfigFile(CfgFile)
-	} else {
+	} else if defaultFile != "" {
 		// Search config in the XDG config home.
-		viper.AddConfigPath(filepath.Join(xdg.ConfigHome(), "projekt"))
+		viper.AddConfigPath(filepath.Dir(defaultFile))
 		viper.SetConfigType("yaml")
 		viper.SetConfigName("config")
-		CfgFile = filepath.Join(xdg.ConfigHome(), "projekt", "config.yaml")
+		CfgFile = defaultFile
 	}
 
 	// Only a PROJEKT_ variable may override a key: a bare FOLDERS or INCLUDE
@@ -344,6 +354,11 @@ func InitConfig() {
 	viper.AutomaticEnv()
 
 	loadErr = nil
+
+	if CfgFile == "" {
+		loadErr = errors.New("cannot find the config file: no home directory, set HOME or pass --config")
+		return
+	}
 
 	err := viper.ReadInConfig()
 	if err == nil {
@@ -358,6 +373,10 @@ func InitConfig() {
 		return
 	}
 
+	if !create {
+		loadErr = fmt.Errorf("config file not found: %s", CfgFile)
+		return
+	}
 	if err := createEmptyConfig(CfgFile); err != nil {
 		loadErr = fmt.Errorf("failed to create config file %s: %w", CfgFile, err)
 	}

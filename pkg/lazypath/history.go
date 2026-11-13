@@ -2,6 +2,7 @@ package lazypath
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,20 +37,32 @@ type Visit struct {
 	At time.Time
 }
 
-// StateHome returns $XDG_STATE_HOME, or the default the spec gives for it.
+// StateHome returns $XDG_STATE_HOME, or the default the spec gives for it, or
+// "" when there is no home directory to put it in.
 //
 // The history belongs there rather than in the data or the cache directory: it
 // should survive a reboot, and losing it should cost nothing but the order of
 // a listing.
 func StateHome() string {
-	if state := strings.TrimSpace(os.Getenv("XDG_STATE_HOME")); state != "" {
-		return state
+	state, err := xdgHome("XDG_STATE_HOME", ".local", "state")
+	if err != nil {
+		cli.Debug("No state directory: %v", err)
+	}
+	return state
+}
+
+// xdgHome returns the base directory the variable env names, or the default
+// under the home directory. A relative value is ignored, as the XDG spec says:
+// it would resolve against the current folder, which a repository controls.
+func xdgHome(env string, fallback ...string) (string, error) {
+	if dir := strings.TrimSpace(os.Getenv(env)); filepath.IsAbs(dir) {
+		return dir, nil
 	}
 	home, err := os.UserHomeDir()
-	if err != nil {
-		return ".local/state"
+	if err != nil || !filepath.IsAbs(home) {
+		return "", errors.New("cannot find the home directory")
 	}
-	return filepath.Join(home, ".local", "state")
+	return filepath.Join(append([]string{home}, fallback...)...), nil
 }
 
 // HistoryFile returns the file the jump history is kept in.
@@ -57,7 +70,11 @@ func HistoryFile() string {
 	if HistoryFileOverride != "" {
 		return HistoryFileOverride
 	}
-	return filepath.Join(StateHome(), "projekt", "history.tsv")
+	state := StateHome()
+	if state == "" {
+		return ""
+	}
+	return filepath.Join(state, "projekt", "history.tsv")
 }
 
 // ReadHistory returns the visited projects, most recently visited first.
@@ -185,6 +202,9 @@ func ClearHistory() error {
 // one.
 func writeHistory(visits []Visit) error {
 	path := HistoryFile()
+	if path == "" {
+		return errors.New("cannot write the jump history: no home directory")
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("cannot create %s: %w", filepath.Dir(path), err)
 	}
