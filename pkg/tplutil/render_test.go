@@ -7,6 +7,10 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
+
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 func readFile(t *testing.T, path string) string {
@@ -466,5 +470,104 @@ func TestRender_DryRunRunsNoCommandForTheManifestName(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Error("a dry run ran the command in the manifest's name")
+	}
+}
+
+const folderInfo = `{{ .Folder.Name }}|{{ .Folder.Description }}|{{ join "," .Folder.Tags }}|{{ .Folder.Workspace }}|{{ .Project }}`
+
+// renderInfo renders a file template with body into dest/info and returns it.
+func renderInfo(t *testing.T, body, dest string) string {
+	t.Helper()
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "info.tmpl"), body)
+	tpl, err := Get("info")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if _, err := Render(RenderOptions{Template: tpl, Dest: dest}); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	return readFile(t, filepath.Join(dest, "info"))
+}
+
+func useFolders(t *testing.T, folders ...lazypath.Folder) {
+	t.Helper()
+	lazypath.SetTestConfig(lazypath.Config{Folders: folders})
+	t.Cleanup(lazypath.ResetTestConfig)
+}
+
+func TestRender_FolderFacts(t *testing.T) {
+	dir := t.TempDir()
+	useFolders(t, lazypath.Folder{Path: dir, Name: "api", Tags: []string{"go", "work"}, Description: "The API"})
+
+	got := renderInfo(t, folderInfo, dir)
+	if want := "api|The API|go,work||" + filepath.Base(dir); got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}
+
+func TestRender_FolderIsEmptyOutsideAProject(t *testing.T) {
+	useFolders(t)
+	dir := t.TempDir()
+
+	got := renderInfo(t, folderInfo, dir)
+	if want := "||||" + filepath.Base(dir); got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}
+
+func TestRender_FolderFactsAreNeverExecuted(t *testing.T) {
+	dir := t.TempDir()
+	description := `{{ output "touch" "pwned" }} {{ .Env.HOME }}`
+	useFolders(t, lazypath.Folder{Path: dir, Name: "api", Description: description})
+
+	got := renderInfo(t, "{{ .Folder.Description }}", dir)
+	if got != description {
+		t.Errorf("output = %q, want %q", got, description)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "pwned")); err == nil {
+		t.Error("the description was executed: pwned exists")
+	}
+}
+
+func TestRender_FolderWithABrokenConfig(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(file, []byte("folders: [ this is not: valid: yaml\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	previous := lazypath.CfgFile
+	lazypath.CfgFile = file
+	t.Cleanup(func() {
+		lazypath.CfgFile = previous
+		lazypath.ResetTestConfig()
+		viper.Reset()
+	})
+	lazypath.InitConfigReadOnly()
+	if lazypath.LoadError() == nil {
+		t.Fatal("LoadError() = nil, want the broken file reported")
+	}
+	dir := t.TempDir()
+
+	if got := renderInfo(t, folderInfo, dir); got != "||||"+filepath.Base(dir) {
+		t.Errorf("output = %q, want an empty .Folder", got)
+	}
+}
+
+func TestRender_FolderForANewWorkspaceChild(t *testing.T) {
+	ws := t.TempDir()
+	useFolders(t, lazypath.Folder{Path: ws, IsWorkspace: true, Prefix: "w", Description: "Work"})
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "site", "info.tmpl"), "{{ .Folder.Name }}|{{ .Folder.Workspace }}")
+	tpl, err := Get("site")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	dest := filepath.Join(ws, "newapp")
+
+	if _, err := Render(RenderOptions{Template: tpl, Dest: dest}); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if got, want := readFile(t, filepath.Join(dest, "info")), "w-newapp|"+ws; got != want {
+		t.Errorf("output = %q, want %q", got, want)
 	}
 }

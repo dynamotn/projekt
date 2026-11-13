@@ -270,11 +270,14 @@ func (c *checker) checkRender(manifest Manifest) {
 	}
 }
 
+// exampleFolder stands in for `.Folder` when a template is only being checked.
+var exampleFolder = map[string]any{"Name": "example", "Path": "/example", "Tags": []string{}, "Description": "", "Workspace": ""}
+
 // defaults builds the values a template would have if every question were
 // answered with its default, which is what a check should judge it on.
 func (c *checker) defaults(manifest Manifest) Values {
 	values := Values{}
-	base := map[string]any{"Name": "example", "User": "example", "Values": map[string]any{}}
+	base := map[string]any{"Name": "example", "User": "example", "Values": map[string]any{}, "Folder": exampleFolder}
 	prompter := Prompter{Delims: manifest.delims(), Origin: TemplateOrigin(c.tpl), noExec: true}
 
 	for _, v := range manifest.Vars {

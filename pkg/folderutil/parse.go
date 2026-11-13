@@ -35,10 +35,7 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 	shortNames := make(map[string]struct{})
 
 	for _, folder := range sortFoldersByPriority(c.Folders) {
-		prefix := ""
-		if folder.Prefix != "" {
-			prefix = folder.Prefix + "-"
-		}
+		prefix := folderPrefix(folder)
 
 		// Clean the configured path: it is what gets printed and cd'ed into,
 		// and its last element is the fallback short name.
@@ -115,6 +112,14 @@ func appendWorktrees(list []ParsedFolder, shortNames map[string]struct{}, worktr
 	}
 
 	return list
+}
+
+// folderPrefix is what goes in front of the names a folder entry lists.
+func folderPrefix(folder lazypath.Folder) string {
+	if folder.Prefix == "" {
+		return ""
+	}
+	return folder.Prefix + "-"
 }
 
 // sortFoldersByPriority returns the folders ordered by descending priority,

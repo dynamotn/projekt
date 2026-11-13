@@ -137,6 +137,7 @@ Besides `.Values`, a template is given:
 |-------------|----------------------------------------------------------------|
 | `.Name`     | Output name, from `--name`, the manifest's `name:` or the destination file name |
 | `.Project`  | Folder the files are written to, or `.Name` for a folder template |
+| `.Folder`   | What projekt knows about the project the files go into: `.Folder.Name`, `.Path`, `.Tags`, `.Description`, `.Workspace`; its fields are empty outside a configured project |
 | `.Dir`      | Absolute destination folder                                     |
 | `.Path`     | Absolute path of the file being rendered                        |
 | `.Template` | Name of the template                                            |

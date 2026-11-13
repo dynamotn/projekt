@@ -348,6 +348,7 @@ func ResetTestConfig() {
 	loaded = false
 	loadErr = nil
 	pinned = false
+	quiet = false
 }
 
 // InitConfig initializes the configuration from file or creates a new one

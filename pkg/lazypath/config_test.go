@@ -551,7 +551,6 @@ func readOnlyEnv(t *testing.T, file string) {
 	CfgFile = file
 	t.Cleanup(func() {
 		CfgFile = originalCfgFile
-		quiet = false
 		ResetTestConfig()
 		viper.Reset()
 	})

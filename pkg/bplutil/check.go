@@ -316,6 +316,9 @@ var checkContext = map[string]any{
 	"Project": "example",
 	"User":    "example",
 	"Values":  map[string]any{},
+	"Folder": map[string]any{
+		"Name": "example", "Path": "/example", "Tags": []string{}, "Description": "", "Workspace": "",
+	},
 }
 
 // readsUnder reports whether anything nested under a name is read.

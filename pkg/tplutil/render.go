@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
 )
 
 // RenderOptions drives one `t new` run.
@@ -603,8 +604,34 @@ func (e *engine) context(o RenderOptions, target string) map[string]any {
 	data["Name"] = name
 	data["Project"] = project
 	data["Dir"] = dir
+	data["Folder"] = e.folderFacts(dir)
 	data["Path"] = target
 	return data
+}
+
+// folderFacts is `.Folder`: what projekt knows about the project dir is in.
+// Outside one the keys are still there, empty, because a missing key of a map
+// would print as `<no value>`; `{{ if .Folder.Name }}` tells the cases apart.
+func (e *engine) folderFacts(dir string) map[string]any {
+	if facts, ok := e.folders[dir]; ok {
+		return facts
+	}
+	facts := map[string]any{"Name": "", "Path": "", "Tags": []string{}, "Description": "", "Workspace": ""}
+	if p, ok := folderutil.ProjectAt(dir); ok {
+		facts["Name"], facts["Path"], facts["Description"] = p.ShortName, p.Path, p.Description
+		if p.Tags != nil {
+			facts["Tags"] = p.Tags
+		}
+		// A plain project's own path is not a workspace.
+		if p.Workspace != p.Path {
+			facts["Workspace"] = p.Workspace
+		}
+	}
+	if e.folders == nil {
+		e.folders = map[string]map[string]any{}
+	}
+	e.folders[dir] = facts
+	return facts
 }
 
 // staticContext is the part of the data that is the same for every file.

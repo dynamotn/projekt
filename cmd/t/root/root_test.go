@@ -197,6 +197,9 @@ func TestNewRootCmd_UpdateMeansApply(t *testing.T) {
 
 func runT(t *testing.T, args ...string) error {
 	t.Helper()
+	// An earlier test that rendered a template read the configuration, which
+	// is then cached; the command under test must load its own.
+	lazypath.ResetTestConfig()
 	t.Cleanup(func() {
 		lazypath.CfgFile = ""
 		lazypath.ResetTestConfig()

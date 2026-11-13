@@ -4,6 +4,10 @@
 
 ### Added
 
+- **t**, **b**: templates get `.Folder` — the short name, path, tags,
+  description and workspace projekt has for the project they render into,
+  also for one being created under a workspace — so a template can say what
+  the project is. Its fields are empty outside a configured project
 - **mcp**: `projekt mcp --write` also offers `note_add`, `describe_set` and
   `worktree_add`; without the flag they are neither listed nor callable
 - **mcp**: `projekt mcp` serves what projekt knows to AI agents over MCP on

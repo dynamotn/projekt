@@ -49,6 +49,10 @@ type engine struct {
 	// env is the environment the template may see, worked out once.
 	env     map[string]string
 	envOnce bool
+	// folders remembers what projekt knows about each destination folder:
+	// looking it up parses the configuration, which a folder template must
+	// not do once per file.
+	folders map[string]map[string]any
 }
 
 // newEngine builds the engine one render runs with.
