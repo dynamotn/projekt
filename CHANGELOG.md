@@ -65,6 +65,10 @@
 
 ### Fixed
 
+- **folder list**, **folder status**, **worktree list**, **t list**,
+  **b list**, **doctor**: a table piped into another command or a file, or
+  printed with `NO_COLOR` set, has no color escapes; a terminal still gets
+  color unless `--no-color` says otherwise
 - **t add**: `t add <store>/x.tmpl --force` refuses instead of deleting the
   template, and a folder that holds the template store, such as `t add ~`, is
   refused instead of copied into itself

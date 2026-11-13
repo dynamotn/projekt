@@ -118,3 +118,15 @@ func TestEncodeList_UnknownFormat(t *testing.T) {
 		t.Error("EncodeList() with an unknown format error = nil, want an error")
 	}
 }
+
+func TestEncodeList_NoColorIntoAPipe(t *testing.T) {
+	// A buffer stands for a pipe or a file: escapes there are text to whoever
+	// reads it.
+	var buf bytes.Buffer
+	if err := EncodeList(&buf, testView(), ListOutputOption{}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "\x1b[") {
+		t.Errorf("EncodeList() wrote color escapes into a buffer:\n%q", buf.String())
+	}
+}
