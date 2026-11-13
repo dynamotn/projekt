@@ -1,0 +1,13 @@
+vars:
+  - name: build
+    prompt: Command that builds the project
+  - name: test
+    prompt: Command that runs the tests
+  - name: lint
+    prompt: Command that checks style and types
+  - name: conventions
+    prompt: Rules an agent must follow, comma separated
+    type: list
+  - name: off_limits
+    prompt: Paths an agent must not edit, comma separated
+    type: list

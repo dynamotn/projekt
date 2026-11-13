@@ -1,0 +1,32 @@
+# {{ .Folder.Name | default (base .Dir) }}
+{{- with .Folder.Description }}
+
+{{ . }}
+{{- end }}
+{{- if or .Values.build .Values.test .Values.lint }}
+
+## Commands
+{{ with .Values.build }}
+- Build: `{{ . }}`
+{{- end }}
+{{- with .Values.test }}
+- Test: `{{ . }}`
+{{- end }}
+{{- with .Values.lint }}
+- Lint: `{{ . }}`
+{{- end }}
+{{- end }}
+{{- with .Values.conventions }}
+
+## Conventions
+{{ range . }}
+- {{ . }}
+{{- end }}
+{{- end }}
+{{- with .Values.off_limits }}
+
+## Do not touch
+{{ range . }}
+- `{{ . }}`
+{{- end }}
+{{- end }}

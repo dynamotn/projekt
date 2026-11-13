@@ -1,0 +1,18 @@
+---
+name: {{ .Name }}
+description: {{ .Values.description | default (printf "Use when the user asks for %s; say here what that looks like." .Name) }}
+---
+
+# {{ .Name }}
+
+## When to use
+
+Say which requests call for this skill, and which look similar but do not.
+
+## Steps
+
+Number the actions in the order an agent takes them, one action per line.
+
+## Checks
+
+Say how the agent knows it is done: a command to run or a result to look at.

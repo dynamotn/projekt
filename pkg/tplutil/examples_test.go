@@ -83,6 +83,8 @@ func TestExampleValuesRender(t *testing.T) {
 		"monthly-budget":     "monthly-budget.yaml",
 		"threat-model":       "threat-model.yaml",
 		"incident-report":    "incident-report.yaml",
+		"agent-docs":         "agent-docs.yaml",
+		"agent-skill":        "agent-skill.yaml",
 	}
 
 	for name, valuesFile := range cases {
@@ -155,5 +157,108 @@ func TestExampleTemplatesAsk(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// renderExample renders one example template into dest.
+func renderExample(t *testing.T, name, dest, projectName string, force bool) ([]string, error) {
+	t.Helper()
+	previous := TemplateDir
+	TemplateDir = exampleStore
+	t.Setenv("PROJEKT_TEMPLATE_DIR", "")
+	t.Cleanup(func() { TemplateDir = previous })
+
+	tpl, err := Get(name)
+	if err != nil {
+		t.Fatalf("Get(%s) error = %v", name, err)
+	}
+	return Render(RenderOptions{Template: tpl, Dest: dest, Name: projectName, Force: force})
+}
+
+// TestExample_AgentDocsLinksEveryAgentToOneFile: CLAUDE.md and GEMINI.md are
+// links, so there is one file to keep up to date.
+func TestExample_AgentDocsLinksEveryAgentToOneFile(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "proj")
+	if _, err := renderExample(t, "agent-docs", dest, "", false); err != nil {
+		t.Fatalf("Render error = %v", err)
+	}
+
+	if info, err := os.Lstat(filepath.Join(dest, "AGENTS.md")); err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("AGENTS.md should be a regular file: %v, %v", info, err)
+	}
+	agents, _ := os.ReadFile(filepath.Join(dest, "AGENTS.md"))
+	for _, name := range []string{"CLAUDE.md", "GEMINI.md"} {
+		target, err := os.Readlink(filepath.Join(dest, name))
+		if err != nil || target != "AGENTS.md" {
+			t.Errorf("%s: Readlink = %q, %v; want a link to AGENTS.md", name, target, err)
+		}
+		if got, _ := os.ReadFile(filepath.Join(dest, name)); string(got) != string(agents) {
+			t.Errorf("%s reads %q, want the content of AGENTS.md", name, got)
+		}
+	}
+}
+
+// TestExample_AgentDocsRendersWithNothing: no values, outside any project, the
+// file is a title and nothing else.
+func TestExample_AgentDocsRendersWithNothing(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "proj")
+	if _, err := renderExample(t, "agent-docs", dest, "", false); err != nil {
+		t.Fatalf("Render error = %v", err)
+	}
+
+	got, _ := os.ReadFile(filepath.Join(dest, "AGENTS.md"))
+	if !strings.HasPrefix(string(got), "# proj\n") {
+		t.Errorf("AGENTS.md = %q, want it to start with the folder's name as a title", got)
+	}
+	for _, unwanted := range []string{"## Commands", "## Conventions", "## Do not touch", "<no value>"} {
+		if strings.Contains(string(got), unwanted) {
+			t.Errorf("AGENTS.md holds %q with no values:\n%s", unwanted, got)
+		}
+	}
+}
+
+// TestExample_AgentDocsRefusesAnExistingFile: a CLAUDE.md somebody wrote is
+// theirs; only Force replaces it.
+func TestExample_AgentDocsRefusesAnExistingFile(t *testing.T) {
+	dest := t.TempDir()
+	mine := filepath.Join(dest, "CLAUDE.md")
+	if err := os.WriteFile(mine, []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := renderExample(t, "agent-docs", dest, "", false)
+	if err == nil || !strings.Contains(err.Error(), "CLAUDE.md") {
+		t.Fatalf("Render error = %v, want one naming CLAUDE.md", err)
+	}
+	if got, _ := os.ReadFile(mine); string(got) != "mine" {
+		t.Errorf("CLAUDE.md = %q, want it untouched", got)
+	}
+	// Not asserted: whether AGENTS.md was written. The engine writes files in
+	// order, so it may already be there when CLAUDE.md is refused.
+
+	if _, err := renderExample(t, "agent-docs", dest, "", true); err != nil {
+		t.Fatalf("Render with Force error = %v", err)
+	}
+	if target, err := os.Readlink(mine); err != nil || target != "AGENTS.md" {
+		t.Errorf("CLAUDE.md after Force: Readlink = %q, %v; want a link to AGENTS.md", target, err)
+	}
+}
+
+// TestExample_AgentSkillFrontMatter: the description is what an agent matches
+// a request against, so it must be there.
+func TestExample_AgentSkillFrontMatter(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "release-notes")
+	if _, err := renderExample(t, "agent-skill", dest, "release-notes", false); err != nil {
+		t.Fatalf("Render error = %v", err)
+	}
+
+	got, _ := os.ReadFile(filepath.Join(dest, "SKILL.md"))
+	const head = "---\nname: release-notes\ndescription: "
+	if !strings.HasPrefix(string(got), head) {
+		t.Fatalf("SKILL.md = %q, want it to begin with %q", got, head)
+	}
+	line := strings.SplitN(strings.TrimPrefix(string(got), head), "\n", 2)[0]
+	if !strings.HasPrefix(line, "Use when") {
+		t.Errorf("description = %q, want a trigger starting with \"Use when\"", line)
 	}
 }

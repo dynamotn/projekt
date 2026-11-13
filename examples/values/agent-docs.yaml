@@ -1,0 +1,10 @@
+# t new agent-docs . -f examples/values/agent-docs.yaml
+build: go build ./...
+test: go test -race ./...
+lint: golangci-lint run
+conventions:
+  - Wrap errors with %w and a short verb phrase.
+  - Tests are table-driven and sit next to the code.
+off_limits:
+  - vendor/
+  - internal/gen/

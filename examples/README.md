@@ -30,6 +30,8 @@ t add examples/templates/adr.tmpl --name adr
 | `adr` | file | developer | `t new adr ./doc/adr/0001-pick-a-database.md --set title='Pick a database'` |
 | `pre-commit-config.yaml` | file | developer | `t new pre-commit-config.yaml ./.pre-commit-config.yaml --set languages='[go, terraform]'` |
 | `github-ci` | folder | devops | `t new github-ci . --name ci` |
+| `agent-docs` | folder | AI agents | `t new agent-docs . -f examples/values/agent-docs.yaml` |
+| `agent-skill` | folder | AI agents | `t new agent-skill ./skills/release-notes -n release-notes` |
 | `docker-compose.yml` | file | devops | `t new docker-compose.yml -f examples/values/docker-compose.yaml` |
 | `terraform-module` | folder | devops | `t new terraform-module ./modules/bucket --name bucket -f examples/values/terraform-module.yaml` |
 | `SECURITY.md` | file | devsecops | `t new SECURITY.md --set contact=security@acme.io` |
@@ -41,9 +43,9 @@ t add examples/templates/adr.tmpl --name adr
 | `monthly-budget` | file | finance | `t new monthly-budget ./2026-09.md -f examples/values/monthly-budget.yaml` |
 | `invoice` | file | finance | `t new invoice ./INV-2026-014.md -f examples/values/invoice.yaml` |
 
-Six of them — `adr`, `invoice`, `zettel`, `incident-report`, `go-cli` and
-`github-ci` — ship a `.vars.yaml`, so `-i` asks proper questions with defaults,
-choices and types:
+Eight of them — `adr`, `invoice`, `zettel`, `incident-report`, `go-cli`,
+`github-ci`, `agent-docs` and `agent-skill` — ship a `.vars.yaml`, so `-i` asks
+proper questions with defaults, choices and types:
 
 ```bash
 t --template-dir examples/templates new invoice ./INV-001.md -i

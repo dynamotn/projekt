@@ -4,6 +4,9 @@
 
 ### Added
 
+- **examples**: `agent-docs` writes one `AGENTS.md` for a project, with
+  `CLAUDE.md` and `GEMINI.md` as links to it, and `agent-skill` scaffolds a
+  skill; both read `.Folder`.
 - **t**, **b**: templates get `.Folder` — the short name, path, tags,
   description and workspace projekt has for the project they render into,
   also for one being created under a workspace — so a template can say what

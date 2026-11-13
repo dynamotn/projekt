@@ -1,0 +1,4 @@
+vars:
+  - name: description
+    prompt: When an agent should use this skill
+    default: "Use when the user asks for {{ .Name }}; say here what that looks like."

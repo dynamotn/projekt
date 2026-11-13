@@ -1,0 +1,2 @@
+# t new agent-skill ./skills/release-notes -n release-notes -f examples/values/agent-skill.yaml
+description: Use when the user asks for release notes, a changelog entry or a summary of what changed since the last tag.
