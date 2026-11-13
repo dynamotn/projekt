@@ -4,6 +4,10 @@
 
 ### Added
 
+- **mcp**: `projekt mcp` serves what projekt knows to AI agents over MCP on
+  stdio: `project_list`, `project_show`, `project_status`, `project_recent`
+  and `project_current`, all read-only. It never offers a tool that runs a
+  command, moves or removes a project, or changes trust
 - **folder**: `folder show [name]` prints everything projekt knows about one
   project — path, tags, description, the whole note, working trees, git
   state, hooks and the templates it was rendered from — as a listing or with

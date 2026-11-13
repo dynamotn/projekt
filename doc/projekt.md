@@ -17,6 +17,7 @@ A smart command to work with your project folder
 * [projekt doctor](projekt_doctor.md)	 - Check that this machine is set up to use projekt
 * [projekt folder](projekt_folder.md)	 - Manage your project folder
 * [projekt init](projekt_init.md)	 - Initialize to install other needed commands
+* [projekt mcp](projekt_mcp.md)	 - Serve what projekt knows to AI agents over MCP
 * [projekt template](projekt_template.md)	 - Create a template file from various sources
 * [projekt version](projekt_version.md)	 - Print the version number of Projekt tools
 * [projekt worktree](projekt_worktree.md)	 - Work on two branches of a project at once

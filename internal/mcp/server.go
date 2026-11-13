@@ -116,8 +116,12 @@ func (s *Server) dispatch(req request) (any, *rpcError) {
 	case "tools/list":
 		tools := make([]map[string]any, 0, len(s.Tools))
 		for _, t := range s.Tools {
+			schema := t.Schema
+			if schema == nil { // a client rejects a null schema
+				schema = map[string]any{"type": "object"}
+			}
 			tools = append(tools, map[string]any{
-				"name": t.Name, "description": t.Description, "inputSchema": t.Schema,
+				"name": t.Name, "description": t.Description, "inputSchema": schema,
 				"annotations": map[string]any{"readOnlyHint": t.ReadOnly},
 			})
 		}
@@ -146,7 +150,7 @@ func (s *Server) call(params json.RawMessage) (any, *rpcError) {
 		err = s.Before()
 	}
 	if err == nil {
-		text, err = s.Tools[i].Call(p.Arguments)
+		text, err = callTool(s.Tools[i], p.Arguments)
 	}
 	res := map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}}
 	if err != nil {
@@ -154,4 +158,14 @@ func (s *Server) call(params json.RawMessage) (any, *rpcError) {
 		res["isError"] = true
 	}
 	return res, nil
+}
+
+// callTool runs a tool; a panic in it must not take the server down.
+func callTool(t Tool, arguments json.RawMessage) (text string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			text, err = "", fmt.Errorf("tool %s panicked: %v", t.Name, r)
+		}
+	}()
+	return t.Call(arguments)
 }

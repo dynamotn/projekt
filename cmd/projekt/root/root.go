@@ -38,6 +38,7 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 	rootCmd.AddCommand(
 		NewInitCmd(out),
 		NewDoctorCmd(out),
+		NewMCPCmd(out),
 		folder.NewFolderCmd(out),
 		worktree.NewWorktreeCmd(out),
 		config.NewConfigCmd(out),

@@ -136,3 +136,24 @@ func TestServe_EOF(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestServe_APanickingToolDoesNotKillTheServer(t *testing.T) {
+	boom := Tool{Name: "boom", Call: func(json.RawMessage) (string, error) { panic("kaput") }}
+	m := roundTrip(t, &Server{Tools: []Tool{boom}}, call("boom", `{}`), `{"jsonrpc":"2.0","id":3,"method":"ping"}`)
+	res := m[0]["result"].(map[string]any)
+	text := res["content"].([]any)[0].(map[string]any)["text"].(string)
+	if res["isError"] != true || !strings.Contains(text, "kaput") {
+		t.Fatalf("result = %v", res)
+	}
+	if len(m) != 2 || m[1]["id"] != float64(3) {
+		t.Fatalf("ping not answered: %v", m)
+	}
+}
+
+func TestServe_NilSchemaIsAnEmptyObjectSchema(t *testing.T) {
+	m := roundTrip(t, &Server{Tools: []Tool{{Name: "x"}}}, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	tool := m[0]["result"].(map[string]any)["tools"].([]any)[0].(map[string]any)
+	if s, _ := tool["inputSchema"].(map[string]any); s["type"] != "object" {
+		t.Fatalf("inputSchema = %v", tool["inputSchema"])
+	}
+}

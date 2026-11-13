@@ -2,8 +2,10 @@ package root
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -170,5 +172,27 @@ func TestNewRootCmd_ConfigGate(t *testing.T) {
 				t.Errorf("gate on %v = %v, wantErr %v", tt.args, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestMCPCmd_AnswersInitialize(t *testing.T) {
+	brokenConfig(t, "folders: []\n")
+	var out bytes.Buffer
+	cmd := NewRootCmd(&out)
+	cmd.SetIn(strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}` + "\n"))
+	cmd.SetArgs([]string{"mcp"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(out.String(), "\n") != 1 {
+		t.Fatalf("want exactly one line, got %q", out.String())
+	}
+	var m struct {
+		Result struct {
+			ServerInfo struct{ Name string } `json:"serverInfo"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &m); err != nil || m.Result.ServerInfo.Name != "projekt" {
+		t.Fatalf("got %q (%v)", out.String(), err)
 	}
 }

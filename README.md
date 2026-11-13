@@ -551,6 +551,35 @@ file: `pj` asks on a terminal, refuses and says so anywhere else, and
 `projekt config trust <file>` allows it beforehand. A later change to the file
 asks again.
 
+## 🤖 For AI agents
+
+`projekt mcp` is a [Model Context Protocol](https://modelcontextprotocol.io)
+server on stdin and stdout, so an agent can ask what you would: where a
+project is, what it is, what state its repositories are in. Every tool is
+read-only, and none runs a command, moves or removes a project, or changes
+what is trusted.
+
+| Tool | What it answers |
+| ---- | --------------- |
+| `project_list` | The projects, by `tags` or part of a name (`query`) |
+| `project_show` | Everything about one project: path, tags, description, note, working trees, git state |
+| `project_status` | The git state of many projects, narrowed by `tags`, `dirty`, `since` or `branches` |
+| `project_recent` | The projects you jumped to last, most recent first |
+| `project_current` | Which project a path is inside |
+
+A note or a description is text people wrote, sometimes someone else; the
+server tells the agent to treat it as data and never as instructions.
+
+Register it as a stdio server with the command `projekt` and the argument
+`mcp`. For Claude Code:
+
+```bash
+claude mcp add projekt -- projekt mcp
+```
+
+With `dyai`, add it to the configuration's MCP servers and every agent gets
+it. See [`projekt mcp`](doc/projekt_mcp.md).
+
 ## 📚 Commands
 
 ### 📁 `projekt` — project folders
