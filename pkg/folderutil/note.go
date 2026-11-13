@@ -185,6 +185,11 @@ func NoteHeadline(projectPath string) string {
 	if err != nil {
 		return ""
 	}
+	return NoteHeadlineOf(content)
+}
+
+// NoteHeadlineOf is NoteHeadline for a note already read.
+func NoteHeadlineOf(content string) string {
 	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)
 		line = strings.TrimLeft(line, "#")

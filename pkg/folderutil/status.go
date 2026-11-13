@@ -223,7 +223,7 @@ func readStatuses(folders []ParsedFolder, o *StatusOptions) []FolderStatus {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			status := readStatus(folder)
+			status := StatusOf(folder)
 			if status.State == statusOK {
 				if o.Since > 0 {
 					status.committedAt = readCommittedAt(folder.Path)
@@ -253,8 +253,8 @@ func statusForks(forks, folderCount int) int {
 	return forks
 }
 
-// readStatus reads one folder.
-func readStatus(folder ParsedFolder) FolderStatus {
+// StatusOf reads one folder.
+func StatusOf(folder ParsedFolder) FolderStatus {
 	status := FolderStatus{Name: folder.ShortName, Path: folder.Path, State: statusOK}
 
 	if info, err := os.Stat(folder.Path); err != nil || !info.IsDir() {

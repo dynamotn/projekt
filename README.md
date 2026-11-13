@@ -487,6 +487,7 @@ projekt folder tag                       # what is in use, and how much
 projekt folder describe myapp "The billing API"   # what it is, in a line
 projekt folder note -a "migration half done"      # what you left, in the project
 projekt folder note myapp                         # read it back
+projekt folder show myapp                         # everything about one project
 projekt folder status --notes                     # the first line of every note
 
 projekt worktree prune              # forget the working trees that are gone
@@ -563,6 +564,7 @@ asks again.
 | [`folder move`](doc/projekt_folder_move.md) | Move a project and keep its prefix, tags and priority |
 | [`folder tag`](doc/projekt_folder_tag.md) | Add or remove tags; list what is in use |
 | [`folder describe`](doc/projekt_folder_describe.md) | Set or print the one-line description of a project |
+| [`folder show`](doc/projekt_folder_show.md) | Everything projekt knows about one project, as a listing or one JSON object |
 | [`folder note`](doc/projekt_folder_note.md) | Read, extend or edit the note kept in a project |
 | [`folder hooks`](doc/projekt_folder_hooks.md) | Print the shell lines a jump runs — what `pj` evaluates — or list a project's hooks |
 | [`folder select`](doc/projekt_folder_select.md) | Choose from a list — what `pj` with no argument calls |

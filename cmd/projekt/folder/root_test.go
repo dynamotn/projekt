@@ -2,8 +2,11 @@ package folder
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
+
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 func TestNewFolderCmd(t *testing.T) {
@@ -389,5 +392,34 @@ func TestNewFolderCurrentCmd_QuietPrintsNothing(t *testing.T) {
 	}
 	if out.Len() != 0 || errOut.Len() != 0 {
 		t.Errorf("current -q printed %q / %q, want nothing", out.String(), errOut.String())
+	}
+}
+
+func TestNewFolderShowCmd_JSON(t *testing.T) {
+	lazypath.SetTestConfig(lazypath.Config{Folders: []lazypath.Folder{{Path: t.TempDir() + "/api"}}})
+	defer lazypath.ResetTestConfig()
+
+	var buf bytes.Buffer
+	cmd := NewFolderCmd(&buf)
+	cmd.SetArgs([]string{"show", "api", "-o", "json", "--no-status"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("not one JSON object: %v\n%s", err, buf.String())
+	}
+	if got["name"] != "api" {
+		t.Errorf("name = %v, want api", got["name"])
+	}
+}
+
+func TestNewFolderShowCmd_UnknownFormat(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := NewFolderCmd(&buf)
+	cmd.SetArgs([]string{"show", "api", "-o", "yaml"})
+	cmd.SilenceUsage, cmd.SilenceErrors = true, true
+	if err := cmd.Execute(); err == nil {
+		t.Error("want an error for -o yaml")
 	}
 }

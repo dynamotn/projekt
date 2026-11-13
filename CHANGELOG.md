@@ -4,6 +4,10 @@
 
 ### Added
 
+- **folder**: `folder show [name]` prints everything projekt knows about one
+  project — path, tags, description, the whole note, working trees, git
+  state, hooks and the templates it was rendered from — as a listing or with
+  `-o json` as one object
 - **t**, **b**: every value reaches an `after:` line as
   `PROJEKT_VALUE_<NAME>`, and the template function `shquote` makes a value
   one shell word, so a line can use a value without the value becoming code
