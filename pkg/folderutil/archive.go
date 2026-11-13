@@ -2,11 +2,13 @@ package folderutil
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/OpenPeeDeeP/xdg"
 
@@ -112,9 +114,18 @@ func ArchiveFolder(out io.Writer, shortName string, o ArchiveOptions) error {
 
 // moveFolder moves a folder, falling back to a copy when it would cross a
 // filesystem, which a rename cannot do.
+//
+// Both callers make sure the target is not there yet, so a copy that fails
+// half-way can remove what it wrote.
 func moveFolder(from, to string) error {
-	if err := os.Rename(from, to); err == nil {
+	err := os.Rename(from, to)
+	if err == nil {
 		return nil
+	}
+	if !errors.Is(err, syscall.EXDEV) {
+		// Anything else — no permission, a busy folder — a copy would hit as
+		// well, or worse, half-way through removing the original.
+		return fmt.Errorf("cannot move %s to %s: %w", from, to, err)
 	}
 
 	cli.Debug("Renaming %s failed, copying instead", from)
@@ -128,6 +139,9 @@ func moveFolder(from, to string) error {
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 	if err := cmd.Run(); err != nil {
+		if cleanErr := os.RemoveAll(to); cleanErr != nil {
+			cli.Warn("Cannot remove the partial copy %s: %v", to, cleanErr)
+		}
 		return fmt.Errorf("cannot copy %s to %s: %w: %s", from, to, err, strings.TrimSpace(output.String()))
 	}
 	if err := os.RemoveAll(from); err != nil {
@@ -148,37 +162,23 @@ func unfinished(path string) string {
 	}
 
 	var reasons []string
-	if output, err := archiveGit(path, "status", "--porcelain"); err == nil && strings.TrimSpace(output) != "" {
+	if output, err := gitOutput(path, "status", "--porcelain"); err == nil && strings.TrimSpace(output) != "" {
 		reasons = append(reasons, "changes that are not committed")
 	}
-	if output, err := archiveGit(path, "log", "--oneline", "@{u}..HEAD"); err == nil && strings.TrimSpace(output) != "" {
+	if output, err := gitOutput(path, "log", "--oneline", "@{u}..HEAD"); err == nil && strings.TrimSpace(output) != "" {
 		reasons = append(reasons, "commits that are not pushed")
 	} else if err != nil {
 		// No upstream at all: every commit is unpushed, and a repository that
 		// was never pushed anywhere is exactly the one worth stopping for.
-		if output, headErr := archiveGit(path, "log", "--oneline", "-1"); headErr == nil && strings.TrimSpace(output) != "" {
-			if _, remoteErr := archiveGit(path, "rev-parse", "--abbrev-ref", "@{u}"); remoteErr != nil {
+		if output, headErr := gitOutput(path, "log", "--oneline", "-1"); headErr == nil && strings.TrimSpace(output) != "" {
+			if _, remoteErr := gitOutput(path, "rev-parse", "--abbrev-ref", "@{u}"); remoteErr != nil {
 				reasons = append(reasons, "no upstream, so nothing has been pushed")
 			}
 		}
 	}
-	if output, err := archiveGit(path, "stash", "list"); err == nil && strings.TrimSpace(output) != "" {
+	if output, err := gitOutput(path, "stash", "list"); err == nil && strings.TrimSpace(output) != "" {
 		reasons = append(reasons, "something on the stash")
 	}
 
 	return strings.Join(reasons, " and ")
-}
-
-// archiveGit runs a git command and returns what it wrote.
-func archiveGit(path string, args ...string) (string, error) {
-	cmd := cli.Command("git", append([]string{"-C", path}, args...)...)
-
-	var output bytes.Buffer
-	cmd.Stdout = &output
-	cmd.Stderr = io.Discard
-
-	if err := cmd.Run(); err != nil {
-		return "", err
-	}
-	return output.String(), nil
 }

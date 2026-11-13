@@ -161,3 +161,57 @@ func TestRemoteToken_Environment(t *testing.T) {
 		t.Errorf("remoteToken() = %q, want nothing without a tool on PATH", got)
 	}
 }
+
+func TestRemoteToken_StaysWithItsHost(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("GITHUB_TOKEN", "public")
+	t.Setenv("GH_ENTERPRISE_TOKEN", "corp")
+	t.Setenv("GITLAB_TOKEN", "lab")
+	t.Setenv("GITLAB_HOST", "https://lab.corp.example")
+
+	cases := []struct {
+		server lazypath.GitServer
+		want   string
+	}{
+		{lazypath.GitServer{Type: "github", HTTPS: "https://github.com"}, "public"},
+		{lazypath.GitServer{Type: "github", HTTPS: "https://git.corp.example"}, "corp"},
+		{lazypath.GitServer{Type: "gitlab", HTTPS: "https://gitlab.com"}, "lab"},
+		{lazypath.GitServer{Type: "gitlab", HTTPS: "https://lab.corp.example/"}, "lab"},
+		{lazypath.GitServer{Type: "gitlab", HTTPS: "https://other.example"}, ""},
+		{lazypath.GitServer{Type: "github", HTTPS: "http://github.com"}, ""},
+	}
+	for _, tc := range cases {
+		if got := remoteToken(tc.server); got != tc.want {
+			t.Errorf("remoteToken(%s %s) = %q, want %q", tc.server.Type, tc.server.HTTPS, got, tc.want)
+		}
+	}
+}
+
+func TestDiscoverRemoteRepos_GitLabStopsAPageLoop(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Next-Page", "1")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"path_with_namespace": "org/api"}})
+	}))
+	defer server.Close()
+
+	servers := []lazypath.GitServer{{Name: "lab", Type: "gitlab", HTTPS: server.URL}}
+	if _, err := DiscoverRemoteRepos(servers, RemoteDiscoverOptions{Host: "lab", Group: "org", Client: server.Client()}); err == nil {
+		t.Error("DiscoverRemoteRepos() error = nil, want a page loop refused")
+	}
+}
+
+func TestDiscoverRemoteRepos_SkipsNamesThatLeaveTheFolder(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"name": ".."}, {"name": "api"}})
+	}))
+	defer server.Close()
+
+	servers := []lazypath.GitServer{{Name: "corp", Type: "github", HTTPS: server.URL}}
+	got, err := DiscoverRemoteRepos(servers, RemoteDiscoverOptions{Host: "corp", Group: "org", Token: "x", Client: server.Client()})
+	if err != nil {
+		t.Fatalf("DiscoverRemoteRepos() error = %v", err)
+	}
+	if want := []lazypath.GitRepo{{Name: "api"}}; !reflect.DeepEqual(got.Repos, want) {
+		t.Errorf("Repos = %+v, want %+v", got.Repos, want)
+	}
+}

@@ -91,7 +91,7 @@ func AddWorktree(out io.Writer, o AddWorktreeOptions) (lazypath.Worktree, error)
 		Path:    worktreePath(project.Path, name, o.Path),
 	}
 	if err := worktree.Validate(); err != nil {
-		return lazypath.Worktree{}, fmt.Errorf("worktree %s %v", worktree.ShortName(), err)
+		return lazypath.Worktree{}, fmt.Errorf("worktree %s %w", worktree.ShortName(), err)
 	}
 	if _, _, found := lazypath.FindWorktree(worktree.Project, worktree.Name); found {
 		return lazypath.Worktree{}, fmt.Errorf("%s is already in the configuration", worktree.ShortName())

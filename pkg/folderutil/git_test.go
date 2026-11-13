@@ -1090,3 +1090,51 @@ func TestCloneIfMissing_RefusesAFolderInsideAnotherRepository(t *testing.T) {
 		t.Error("cloneIfMissing() error = nil, want a folder that is not a repository refused")
 	}
 }
+
+func TestCheckGitRemote_MatchesOnlyTheConfiguredRepository(t *testing.T) {
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	server := &lazypath.GitServer{Name: "gh", HTTPS: "https://github.com/", SSH: "git@github.com"}
+	gitConfig := &lazypath.GitConfig{Group: "org"}
+	api := lazypath.GitRepo{Name: "api"}
+
+	cases := map[string]bool{
+		"git@github.com:org/api.git":             true,
+		"https://github.com/org/api":             true,
+		"https://github.com/org/api.git":         true,
+		"git@evil.example:other/api-gateway.git": false,
+		"git@github.com:org/api-gateway.git":     false,
+	}
+	for url, ok := range cases {
+		if out, err := exec.Command("git", "-C", repo, "remote", "add", "origin", url).CombinedOutput(); err != nil {
+			if out, err = exec.Command("git", "-C", repo, "remote", "set-url", "origin", url).CombinedOutput(); err != nil {
+				t.Fatalf("git remote: %v\n%s", err, out)
+			}
+		}
+		if err := checkGitRemote(repo, server, gitConfig, api); (err == nil) != ok {
+			t.Errorf("checkGitRemote(origin %s) error = %v, want accepted %v", url, err, ok)
+		}
+	}
+}
+
+func TestCheckFolderGitRepos_ReportsProblems(t *testing.T) {
+	folder := lazypath.Folder{
+		Path: t.TempDir(),
+		Git:  &lazypath.GitConfig{Host: "github", Group: "org", Repos: []lazypath.GitRepo{{Name: "plain"}}},
+	}
+	if err := os.MkdirAll(filepath.Join(folder.Path, "plain"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	lazypath.SetTestConfig(lazypath.Config{})
+	if err := checkFolderGitRepos(folder); err == nil {
+		t.Error("checkFolderGitRepos() with an unknown server error = nil, want an error")
+	}
+
+	lazypath.SetTestConfig(lazypath.Config{GitServers: []lazypath.GitServer{{Name: "github", HTTPS: "https://github.com", SSH: "git@github.com"}}})
+	if err := checkFolderGitRepos(folder); err == nil {
+		t.Error("checkFolderGitRepos() with a folder that is not a repository error = nil, want an error")
+	}
+}

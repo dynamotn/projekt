@@ -226,3 +226,34 @@ func TestTagsAfter(t *testing.T) {
 		t.Errorf("tagsAfter() = %v, want a,c sorted and deduplicated", got)
 	}
 }
+
+func TestMoveFolderFiles_KeepsTheSourceWhenTheRenameIsRefused(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the read-only parent")
+	}
+	parent := t.TempDir()
+	from := filepath.Join(parent, "myapp")
+	if err := os.MkdirAll(from, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(from, "keep.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The source cannot be unlinked from a read-only parent: a copy would
+	// succeed and the removal of the original would half-fail.
+	if err := os.Chmod(parent, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+
+	to := filepath.Join(t.TempDir(), "renamed")
+	if err := moveFolder(from, to); err == nil {
+		t.Fatal("moveFolder() error = nil, want the refused rename reported")
+	}
+	if _, err := os.Stat(filepath.Join(from, "keep.txt")); err != nil {
+		t.Errorf("source lost its file: %v", err)
+	}
+	if _, err := os.Stat(to); !os.IsNotExist(err) {
+		t.Errorf("target %s left behind: %v", to, err)
+	}
+}

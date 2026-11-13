@@ -215,8 +215,10 @@ projekt folder add ~/work/myorg -W -p myorg --discover
 **Or ask the server.** On a new machine nothing is on disk yet, so
 `--from-remote` asks the git server what a group holds and writes the same
 section; `folder sync` then clones the lot. A private group needs a token —
-`GITLAB_TOKEN` or `GITHUB_TOKEN`, or a `glab`/`gh` you are logged in with — and
-it is used for the request and kept nowhere.
+`GITLAB_TOKEN` or `GITHUB_TOKEN` (`GH_ENTERPRISE_TOKEN` for a GitHub server
+other than github.com, `GITLAB_HOST` to point `GITLAB_TOKEN` at a self-hosted
+GitLab), or a `glab`/`gh` you are logged in with — and it is used for the
+request and kept nowhere.
 
 ```bash
 projekt folder add ~/work/myorg -W -p myorg --from-remote --host gitlab --group myorg/team

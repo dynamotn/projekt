@@ -69,9 +69,11 @@ second.
 | `--archived` | keep the archived ones, which are left out by default |
 | `--include`, `--exclude` | regular expressions on the repository name |
 
-A token is taken from `GITLAB_TOKEN`/`GL_TOKEN` or `GITHUB_TOKEN`/`GH_TOKEN`,
-or failing that from `glab config get token` / `gh auth token` when the tool
-is on PATH. It is sent with the request and never written anywhere. Without
+A token is taken from the environment the way `glab` and `gh` take it —
+`GITLAB_TOKEN`/`GL_TOKEN` for gitlab.com or the host `GITLAB_HOST` names,
+`GITHUB_TOKEN`/`GH_TOKEN` for github.com, `GH_ENTERPRISE_TOKEN` for any other
+GitHub server — or failing that from `glab config get token` / `gh auth token`
+when the tool is on PATH. No token is sent over plain `http://`. It is sent with the request and never written anywhere. Without
 one, a public group still answers.
 
 ### Check Repository Status

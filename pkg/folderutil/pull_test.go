@@ -3,6 +3,7 @@ package folderutil
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
@@ -207,11 +208,20 @@ func TestSyncRepo_PullCoversRepoAndWorktrees(t *testing.T) {
 		worktreePaths: []string{worktree},
 		pull:          true,
 	}
+	trace := filepath.Join(t.TempDir(), "trace")
+	t.Setenv("GIT_TRACE2_EVENT", trace)
 	if err := syncRepo(job, false); err != nil {
 		t.Fatalf("syncRepo() error = %v", err)
 	}
+	t.Setenv("GIT_TRACE2_EVENT", "")
 	if out, _ := gitOutput(clone, "rev-list", "--count", "HEAD..@{u}"); out != "0\n" {
 		t.Errorf("main clone still behind by %q", out)
+	}
+	// The worktree shares the clone's refs: one fetch serves both.
+	if events, err := os.ReadFile(trace); err != nil {
+		t.Fatal(err)
+	} else if n := strings.Count(string(events), `"fetch","--all"`); n != 1 {
+		t.Errorf("syncRepo() ran fetch --all %d times, want 1", n)
 	}
 	if out, _ := gitOutput(worktree, "rev-list", "--count", "HEAD..@{u}"); out != "0\n" {
 		t.Errorf("worktree still behind by %q", out)
@@ -229,5 +239,27 @@ func TestSyncRepo_WithoutPullLeavesClonesAlone(t *testing.T) {
 	}
 	if head(t, clone) != before {
 		t.Error("sync without --pull must not move an existing clone")
+	}
+}
+
+func TestBatchEnv_KeepsTheUsersSSHCommand(t *testing.T) {
+	last := func(env []string, key string) string {
+		value := ""
+		for _, entry := range env {
+			if v, ok := strings.CutPrefix(entry, key+"="); ok {
+				value = v
+			}
+		}
+		return value
+	}
+
+	t.Setenv("GIT_SSH_COMMAND", "ssh -i ~/.ssh/work")
+	if got := last(batchEnv(), "GIT_SSH_COMMAND"); got != "ssh -i ~/.ssh/work -oBatchMode=yes" {
+		t.Errorf("GIT_SSH_COMMAND = %q, want the user's command kept", got)
+	}
+
+	t.Setenv("GIT_SSH_COMMAND", "")
+	if got := last(batchEnv(), "GIT_SSH_COMMAND"); got != "ssh -oBatchMode=yes" {
+		t.Errorf("GIT_SSH_COMMAND = %q, want batch mode by default", got)
 	}
 }

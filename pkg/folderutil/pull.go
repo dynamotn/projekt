@@ -41,7 +41,11 @@ func pullRepo(path string, batch bool) (pullResult, error) {
 	if err := fetch(path, batch); err != nil {
 		return pullResult{}, fmt.Errorf("fetch: %w", err)
 	}
+	return fastForward(path)
+}
 
+// fastForward moves a tree's branch onto its upstream as last fetched.
+func fastForward(path string) (pullResult, error) {
 	if reason := pullBlocker(path); reason != "" {
 		return pullResult{Outcome: pullSkipped, Reason: reason}, nil
 	}
@@ -91,7 +95,7 @@ func pullBlocker(path string) string {
 func fetch(path string, batch bool) error {
 	cmd := cli.Command("git", "-C", path, "fetch", "--all", "--prune", "--quiet")
 	if batch {
-		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -oBatchMode=yes")
+		cmd.Env = batchEnv()
 	}
 
 	var output bytes.Buffer
@@ -127,6 +131,14 @@ func pullTrees(job syncJob, dryRun bool) error {
 		}
 	}
 
+	if !dryRun {
+		// Working trees share the repository's refs, so one fetch serves all.
+		if err := fetch(job.repoPath, job.batch); err != nil {
+			cli.Error("Failed to pull %s: %v", job.repo.Name, err)
+			return fmt.Errorf("pull %s: fetch: %w", job.repo.Name, err)
+		}
+	}
+
 	var errs []error
 	for _, tree := range trees {
 		if dryRun {
@@ -134,7 +146,7 @@ func pullTrees(job syncJob, dryRun bool) error {
 			continue
 		}
 
-		result, err := pullRepo(tree.path, job.batch)
+		result, err := fastForward(tree.path)
 		if err != nil {
 			cli.Error("Failed to pull %s: %v", tree.name, err)
 			errs = append(errs, fmt.Errorf("pull %s: %w", tree.name, err))
@@ -151,4 +163,21 @@ func pullTrees(job syncJob, dryRun bool) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// batchEnv is git's environment when nobody can answer a question. An ssh
+// command of the user's own — a key, a jump host — is kept and told not to ask
+// rather than replaced.
+func batchEnv() []string {
+	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	switch ssh := os.Getenv("GIT_SSH_COMMAND"); {
+	case ssh != "":
+		return append(env, "GIT_SSH_COMMAND="+ssh+" -oBatchMode=yes")
+	case os.Getenv("GIT_SSH") != "":
+		// GIT_SSH_COMMAND would take its place, and a program cannot be
+		// handed an option it may not understand.
+		return env
+	default:
+		return append(env, "GIT_SSH_COMMAND=ssh -oBatchMode=yes")
+	}
 }

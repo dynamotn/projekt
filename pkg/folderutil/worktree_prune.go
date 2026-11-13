@@ -104,7 +104,7 @@ func PruneWorktrees(out io.Writer, o PruneWorktreeOptions) error {
 		return err
 	}
 	_, err = fmt.Fprintf(out, "%d entr%s forgotten, %d repositor%s pruned\n",
-		len(gone), entryPlural(len(gone)), pruned, repoPlural(pruned))
+		len(gone), entryPlural(len(gone)), pruned, entryPlural(pruned))
 	return err
 }
 
@@ -119,13 +119,6 @@ func sortedPaths(projects map[string]string) []string {
 }
 
 func entryPlural(count int) string {
-	if count == 1 {
-		return "y"
-	}
-	return "ies"
-}
-
-func repoPlural(count int) string {
 	if count == 1 {
 		return "y"
 	}

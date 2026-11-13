@@ -112,6 +112,11 @@ func DiscoverRemoteRepos(servers []lazypath.GitServer, o RemoteDiscoverOptions) 
 	taken := map[string]string{}
 	for _, repo := range repos {
 		switch {
+		case !safeRepoName(repo.Name):
+			// The name becomes a path on this machine; the server is not
+			// trusted to keep it inside the workspace.
+			cli.Warn("Skipping %q: not a repository name", repo.Name)
+			continue
 		case repo.Archived && !o.Archived:
 			cli.Debug("Skipping archived %s", repo.Name)
 			continue
@@ -171,27 +176,69 @@ func nameFilters(include, exclude string) (in, out *regexp.Regexp, err error) {
 	return in, out, nil
 }
 
+// safeRepoName reports whether a name from the server stays a relative path
+// of plain segments, with no way out of the folder it is joined to.
+func safeRepoName(name string) bool {
+	if name == "" || strings.HasPrefix(name, "/") || strings.Contains(name, "\\") {
+		return false
+	}
+	for _, part := range strings.Split(name, "/") {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
+}
+
 // remoteToken finds a token for a server without asking: the usual
 // environment variables first, then the server's own command-line tool when
 // it is on PATH and logged in. Nothing found means the request goes out
 // unauthenticated, which a public group answers anyway.
+//
+// The variables follow gh and glab: GITHUB_TOKEN is for github.com and
+// GH_ENTERPRISE_TOKEN for any other host, GITLAB_TOKEN for gitlab.com or the
+// GITLAB_HOST it names. A token is never sent to a host it was not meant for,
+// nor over plain http.
 func remoteToken(server lazypath.GitServer) string {
+	if parsed, err := url.Parse(strings.TrimSpace(server.HTTPS)); err != nil || parsed.Scheme != "https" {
+		return ""
+	}
 	host := apiHost(server)
 	switch strings.ToLower(server.Type) {
 	case "gitlab":
-		for _, name := range []string{"GITLAB_TOKEN", "GL_TOKEN"} {
-			if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		if host == "gitlab.com" || host == gitlabHost() {
+			if value := firstEnv("GITLAB_TOKEN", "GL_TOKEN"); value != "" {
 				return value
 			}
 		}
 		return toolOutput("glab", "config", "get", "token", "--host", host)
 	case "github":
-		for _, name := range []string{"GITHUB_TOKEN", "GH_TOKEN"} {
-			if value := strings.TrimSpace(os.Getenv(name)); value != "" {
-				return value
-			}
+		names := []string{"GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"}
+		if host == "github.com" {
+			names = []string{"GITHUB_TOKEN", "GH_TOKEN"}
+		}
+		if value := firstEnv(names...); value != "" {
+			return value
 		}
 		return toolOutput("gh", "auth", "token", "--hostname", host)
+	}
+	return ""
+}
+
+// gitlabHost is the host GITLAB_HOST names, which may be a URL or a bare host.
+func gitlabHost() string {
+	value := strings.TrimSpace(os.Getenv("GITLAB_HOST"))
+	if parsed, err := url.Parse(value); err == nil && parsed.Host != "" {
+		return parsed.Hostname()
+	}
+	return value
+}
+
+func firstEnv(names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value
+		}
 	}
 	return ""
 }
@@ -294,7 +341,11 @@ func (a apiClient) gitlabProjects(group string, recursive bool) ([]remoteRepo, e
 			}
 			repos = append(repos, remoteRepo{Name: name, Archived: item.Archived})
 		}
-		page, _ = strconv.Atoi(strings.TrimSpace(headers.Get("X-Next-Page")))
+		next, _ := strconv.Atoi(strings.TrimSpace(headers.Get("X-Next-Page")))
+		if next != 0 && next <= page {
+			return nil, fmt.Errorf("the server sent page %d after page %d", next, page)
+		}
+		page = next
 	}
 	return repos, nil
 }

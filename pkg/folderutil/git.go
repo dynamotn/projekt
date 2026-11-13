@@ -411,10 +411,12 @@ func checkFolderGitRepos(folder lazypath.Folder) error {
 
 	gitServer := getGitServer(folder.Git.Host)
 	if gitServer == nil {
-		cli.Warn("  Git server '%s' not found in configuration", folder.Git.Host)
-		return nil
+		return fmt.Errorf("git server %q not found in configuration", folder.Git.Host)
 	}
 
+	// A repository not cloned yet is what sync is for, not a problem; one that
+	// is not a repository or points elsewhere is.
+	var problems int
 	for _, repo := range folder.Git.Repos {
 		repoPath := repoTargetPath(folder, repo)
 
@@ -427,12 +429,14 @@ func checkFolderGitRepos(folder lazypath.Folder) error {
 		gitDir := filepath.Join(repoPath, ".git")
 		if _, err := os.Stat(gitDir); os.IsNotExist(err) {
 			cli.Warn("  [NOT GIT] %s (%s)", repo.Name, repoPath)
+			problems++
 			continue
 		}
 
 		// Check remote URL
 		if err := checkGitRemote(repoPath, gitServer, folder.Git, repo); err != nil {
 			cli.Warn("  [WARNING] %s: %v", repo.Name, err)
+			problems++
 		} else {
 			cli.Info("  [OK] %s (%s)", repo.Name, repoPath)
 		}
@@ -441,6 +445,9 @@ func checkFolderGitRepos(folder lazypath.Folder) error {
 		checkWorktrees(folder, repo)
 	}
 
+	if problems > 0 {
+		return fmt.Errorf("%d repositor%s with problems", problems, entryPlural(problems))
+	}
 	return nil
 }
 
@@ -646,7 +653,7 @@ func cloneRepo(gitURL, targetPath string, batch bool) error {
 		// Four clones at once cannot share one terminal: a password or a
 		// host-key question from one of them, with its text hidden in the
 		// buffer, would hang the whole run. Better to fail and say so.
-		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -oBatchMode=yes")
+		cmd.Env = batchEnv()
 	}
 	// Concurrent clones would interleave git's progress output line by line on
 	// the shared streams, so buffer it per clone and surface it as a whole:
@@ -678,12 +685,23 @@ func checkGitRemote(repoPath string, server *lazypath.GitServer, gitConfig *lazy
 	remoteURL := strings.TrimSpace(string(output))
 	expectedURL := buildGitURL(server, gitConfig.Group, repo.Name)
 
-	// Also check HTTPS variant
-	expectedHTTPS := fmt.Sprintf("%s/%s/%s.git", server.HTTPS, gitConfig.Group, repo.Name)
-
-	if remoteURL != expectedURL && remoteURL != expectedHTTPS && !strings.Contains(remoteURL, repo.Name) {
-		return fmt.Errorf("remote URL mismatch: got %s, expected %s", cli.RedactURL(remoteURL), cli.RedactURL(expectedURL))
+	accepted := []string{expectedURL, buildHTTPSURL(server, gitConfig.Group, repo.Name)}
+	if origin, ok := repo.Remotes["origin"]; ok {
+		accepted = append(accepted, origin)
 	}
+	for _, url := range accepted {
+		if sameRemote(remoteURL, url) {
+			return nil
+		}
+	}
+	return fmt.Errorf("remote URL mismatch: got %s, expected %s", cli.RedactURL(remoteURL), cli.RedactURL(expectedURL))
+}
 
-	return nil
+// sameRemote compares two clone URLs, ignoring the optional .git suffix and a
+// trailing slash that git accepts either way.
+func sameRemote(a, b string) bool {
+	norm := func(url string) string {
+		return strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(url), "/"), ".git")
+	}
+	return norm(a) == norm(b)
 }

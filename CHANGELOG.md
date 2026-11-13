@@ -101,9 +101,25 @@
   an existing folder that is not a repository instead of adding remotes,
   worktrees and pulls to the one around it; `folder status`, `folder archive`
   and `worktree prune` stop reporting on or pruning the outer repository
+- **folder check**: an origin is accepted only when it is the configured
+  repository on the configured server, by SSH or HTTPS, with or without
+  `.git` — not any URL that happens to contain the name. An unknown server, a
+  folder that is not a repository and a wrong origin now fail the command;
+  a repository not cloned yet is still only reported
+- **folder move**, **folder archive**: only a move across filesystems falls
+  back to copying. Any other refused rename is reported and the folder left
+  where it was, instead of being copied and then half-removed; a copy that
+  fails takes its partial target with it, so the command can be retried
+- **folder sync**: in parallel runs, a `GIT_SSH_COMMAND` of your own — a key,
+  a jump host — is kept and told not to ask questions, instead of replaced;
+  a `GIT_SSH` program is left alone
+- **folder add --from-remote**: a GitLab server that keeps answering with the
+  same next page is reported instead of asked forever
 
 ### Performance
 
+- **folder sync --pull**: a repository is fetched once, and its working trees
+  fast-forwarded from that fetch, instead of fetched again for every tree
 - **pj**, completion: the workspace regex is compiled once per pattern per
   process and the configuration is no longer validated — every folder stat'ed —
   on every jump; `config check` and `doctor` still do that
@@ -113,6 +129,12 @@
 
 ### Security
 
+- **folder add --from-remote**: a token from the environment goes only to
+  the host it is for, as with `gh` and `glab`: `GITHUB_TOKEN`/`GH_TOKEN` to
+  github.com, `GH_ENTERPRISE_TOKEN` to any other GitHub server, `GITLAB_TOKEN`
+  to gitlab.com or the `GITLAB_HOST` it names — and no token over plain
+  `http://`. A repository name from the server that is absolute or holds `..`
+  is skipped rather than checked out outside the workspace
 - **folder**, **t**, **doctor**: `git` and `cp` are resolved to an absolute
   path on `PATH` before they run, in one place, and one that resolves through
   a relative `PATH` entry is refused rather than run from the folder being
