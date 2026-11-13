@@ -1,14 +1,13 @@
 package tplutil
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/OpenPeeDeeP/xdg"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
@@ -50,7 +49,11 @@ func (t Template) IsDir() bool {
 // DefaultTemplateDir returns the folder templates live in when no override is
 // given: $XDG_DATA_HOME/projekt/templates.
 func DefaultTemplateDir() string {
-	return filepath.Join(xdg.DataHome(), "projekt", "templates")
+	data := lazypath.DataHome()
+	if data == "" {
+		return ""
+	}
+	return filepath.Join(data, "projekt", "templates")
 }
 
 // Dir returns the template folder to use, honouring --template-dir first and
@@ -61,7 +64,10 @@ func Dir() (string, error) {
 		dir = os.Getenv("PROJEKT_TEMPLATE_DIR")
 	}
 	if dir == "" {
-		return DefaultTemplateDir(), nil
+		if dir = DefaultTemplateDir(); dir == "" {
+			return "", errors.New("no home directory to keep the templates in: set HOME or PROJEKT_TEMPLATE_DIR")
+		}
+		return dir, nil
 	}
 	return normalizeDir(dir)
 }

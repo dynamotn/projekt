@@ -10,8 +10,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/OpenPeeDeeP/xdg"
-
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
@@ -33,7 +31,11 @@ type ArchiveOptions struct {
 // DefaultArchiveDir returns where finished projects go when nothing says
 // otherwise: $XDG_DATA_HOME/projekt/archive.
 func DefaultArchiveDir() string {
-	return filepath.Join(xdg.DataHome(), "projekt", "archive")
+	data := lazypath.DataHome()
+	if data == "" {
+		return ""
+	}
+	return filepath.Join(data, "projekt", "archive")
 }
 
 // archiveRoot works out the folder to archive into.
@@ -46,7 +48,10 @@ func archiveRoot(o ArchiveOptions) (string, error) {
 		dir = strings.TrimSpace(os.Getenv("PROJEKT_ARCHIVE_DIR"))
 	}
 	if dir == "" {
-		return DefaultArchiveDir(), nil
+		if dir = DefaultArchiveDir(); dir == "" {
+			return "", errors.New("no home directory to keep the archive in: set HOME or PROJEKT_ARCHIVE_DIR")
+		}
+		return dir, nil
 	}
 	return lazypath.NormalizePath(dir)
 }

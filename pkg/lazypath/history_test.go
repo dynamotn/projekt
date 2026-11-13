@@ -220,3 +220,15 @@ func mustRecord(t *testing.T, name, path string) {
 		t.Fatalf("RecordVisit(%s) error = %v", name, err)
 	}
 }
+
+func TestDataHome_NeverRelative(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", ".local/share")
+	t.Setenv("HOME", "/home/someone")
+	if got := DataHome(); got != "/home/someone/.local/share" {
+		t.Errorf("DataHome() = %v, want the default under HOME", got)
+	}
+	t.Setenv("HOME", "")
+	if got := DataHome(); got != "" {
+		t.Errorf("DataHome() without a home = %v, want nothing", got)
+	}
+}

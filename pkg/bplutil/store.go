@@ -19,17 +19,18 @@
 package bplutil
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
-	"github.com/OpenPeeDeeP/xdg"
 	yaml "go.yaml.in/yaml/v3"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
@@ -114,7 +115,11 @@ type Recipe struct {
 // DefaultRecipeDir returns the folder recipes live in when no override is
 // given: $XDG_DATA_HOME/projekt/boilerplates.
 func DefaultRecipeDir() string {
-	return filepath.Join(xdg.DataHome(), "projekt", "boilerplates")
+	data := lazypath.DataHome()
+	if data == "" {
+		return ""
+	}
+	return filepath.Join(data, "projekt", "boilerplates")
 }
 
 // Dir returns the recipe folder to use, honouring --boilerplate-dir first and
@@ -125,7 +130,10 @@ func Dir() (string, error) {
 		dir = os.Getenv("PROJEKT_BOILERPLATE_DIR")
 	}
 	if dir == "" {
-		return DefaultRecipeDir(), nil
+		if dir = DefaultRecipeDir(); dir == "" {
+			return "", errors.New("no home directory to keep the boilerplates in: set HOME or PROJEKT_BOILERPLATE_DIR")
+		}
+		return dir, nil
 	}
 	return normalizeDir(dir)
 }

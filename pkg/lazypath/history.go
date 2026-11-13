@@ -51,6 +51,16 @@ func StateHome() string {
 	return state
 }
 
+// DataHome is the XDG data directory, or "" when there is no home to put it
+// under; the stores and the archive live there.
+func DataHome() string {
+	data, err := xdgHome("XDG_DATA_HOME", ".local", "share")
+	if err != nil {
+		cli.Debug("No data directory: %v", err)
+	}
+	return data
+}
+
 // xdgHome returns the base directory the variable env names, or the default
 // under the home directory. A relative value is ignored, as the XDG spec says:
 // it would resolve against the current folder, which a repository controls.

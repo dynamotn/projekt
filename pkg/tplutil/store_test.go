@@ -181,3 +181,17 @@ func TestList_ALinkToAFolderOfTheStoreIsAFolderTemplate(t *testing.T) {
 		t.Errorf("Stat(main.go) error = %v, want the linked folder rendered", err)
 	}
 }
+
+func TestDir_NoHomeIsAnError(t *testing.T) {
+	previous := TemplateDir
+	TemplateDir = ""
+	t.Cleanup(func() { TemplateDir = previous })
+	t.Setenv("PROJEKT_TEMPLATE_DIR", "")
+	t.Setenv("XDG_DATA_HOME", "relative")
+	t.Setenv("HOME", "")
+	// The store would otherwise be ./relative/projekt/templates, inside
+	// whatever folder the command runs in.
+	if dir, err := Dir(); err == nil {
+		t.Errorf("Dir() = %v, want an error without a home", dir)
+	}
+}

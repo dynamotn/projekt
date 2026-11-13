@@ -4,7 +4,6 @@ go 1.26.9
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/OpenPeeDeeP/xdg v1.0.0
 	github.com/fatih/color v1.19.0
 	github.com/jedib0t/go-pretty/v6 v6.8.3
 	github.com/mattn/go-isatty v0.0.24

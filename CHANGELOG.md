@@ -186,6 +186,9 @@
 
 ### Security
 
+- **t**, **b**, **folder archive**: a relative `XDG_DATA_HOME` is ignored and
+  a missing `HOME` is an error, so the template store, the boilerplate store
+  and the archive can no longer land in the current folder
 - **t**, **b**: the record, the base copies under `.projekt/base` and a
   template's manifest are never read or written through a link, and a
   record entry that is a link is read as the link; a committed
