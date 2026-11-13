@@ -58,7 +58,7 @@ func mergeIncludes(own Config, configFile string) Config {
 // mergeOne reads one included file and appends what it holds.
 func mergeOne(into Config, path string, seen map[string]struct{}, depth int) Config {
 	if depth <= 0 {
-		cli.Warn("Not following %s: includes are nested too deeply", path)
+		notice("Not following %s: includes are nested too deeply", path)
 		return into
 	}
 	key := Canonical(path)
@@ -72,13 +72,13 @@ func mergeOne(into Config, path string, seen map[string]struct{}, depth int) Con
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		cli.Warn("Cannot read included config %s: %v", path, err)
+		notice("Cannot read included config %s: %v", path, err)
 		return into
 	}
 
 	var included Config
 	if err := yaml.Unmarshal(data, &included); err != nil {
-		cli.Warn("Cannot parse included config %s: %v", path, err)
+		notice("Cannot parse included config %s: %v", path, err)
 		return into
 	}
 
@@ -115,12 +115,12 @@ func includePaths(includes []string, configFile string) []string {
 			if include != "~" && !strings.HasPrefix(include, "~/") {
 				// ~user is a shell thing; nothing here can expand it, and
 				// silently reading it against the current folder is worse.
-				cli.Warn("Cannot resolve included config %s: only ~ and ~/ are expanded", include)
+				notice("Cannot resolve included config %s: only ~ and ~/ are expanded", include)
 				continue
 			}
 			expanded, err := NormalizePath(include)
 			if err != nil {
-				cli.Warn("Cannot resolve included config %s: %v", include, err)
+				notice("Cannot resolve included config %s: %v", include, err)
 				continue
 			}
 			paths = append(paths, expanded)

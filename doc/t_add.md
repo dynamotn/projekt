@@ -41,6 +41,7 @@ t add [file or folder] [flags]
 ### Options inherited from parent commands
 
 ```
+      --config string         config file (default is $XDG_CONFIG_HOME/projekt/config.yaml)
       --template-dir string   Template folder (default is $XDG_DATA_HOME/projekt/templates)
   -v, --verbose string        Log level, available options are: (trace, debug, info, warn, error, fatal) (default "info")
 ```

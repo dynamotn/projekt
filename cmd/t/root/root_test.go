@@ -2,8 +2,14 @@ package root
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
+
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 func TestNewProjektTemplateCmd(t *testing.T) {
@@ -186,5 +192,48 @@ func TestNewRootCmd_UpdateMeansApply(t *testing.T) {
 	}
 	if found.Name() != "apply" {
 		t.Errorf("t update runs %q, want apply", found.Name())
+	}
+}
+
+func runT(t *testing.T, args ...string) error {
+	t.Helper()
+	t.Cleanup(func() {
+		lazypath.CfgFile = ""
+		lazypath.ResetTestConfig()
+		viper.Reset()
+	})
+	var out bytes.Buffer
+	cmd := NewRootCmd(&out)
+	cmd.SetArgs(args)
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	return cmd.Execute()
+}
+
+func TestRootCmd_ConfigFlagIsRead(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	conf := "gitServers:\n  - name: gl\n    type: gitlab\n    https: https://gitlab.example.com\n"
+	if err := os.WriteFile(file, []byte(conf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runT(t, "--config", file, "--template-dir", t.TempDir(), "list"); err != nil {
+		t.Fatalf("t list: %v", err)
+	}
+
+	servers := lazypath.GetConfig().GitServers
+	if len(servers) != 1 || servers[0].Name != "gl" {
+		t.Errorf("GitServers = %v, want the gl entry", servers)
+	}
+}
+
+func TestRootCmd_BrokenConfigDoesNotStopT(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(file, []byte("folders: [\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runT(t, "--config", file, "--template-dir", t.TempDir(), "list"); err != nil {
+		t.Errorf("t list with a broken config: %v", err)
 	}
 }

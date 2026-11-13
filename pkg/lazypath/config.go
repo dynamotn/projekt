@@ -34,7 +34,20 @@ var (
 	// pinned says c was set directly rather than read from the file, so it,
 	// not the file, is what a write starts from.
 	pinned bool
+	// quiet says the configuration is read by a command that can do without
+	// it, so what is wrong with it is debug output, not a warning.
+	quiet bool
 )
+
+// notice reports a problem with the configuration: a warning, or only a debug
+// line when the command reading it can do without.
+func notice(format string, v ...any) {
+	if quiet {
+		cli.Debug(format, v...)
+		return
+	}
+	cli.Warn(format, v...)
+}
 
 // LoadError returns the error that prevented the config file from being read,
 // or nil when the configuration is usable.
@@ -83,7 +96,11 @@ func unmarshalConfig() {
 		// what was decoded is a fragment, and saving it would replace the
 		// whole file with the fragment.
 		loadErr = fmt.Errorf("cannot decode %s: %w", ConfigFile(), err)
-		cli.Error("%v", loadErr)
+		if quiet {
+			cli.Debug("%v", loadErr)
+		} else {
+			cli.Error("%v", loadErr)
+		}
 		c = Config{}
 	}
 
@@ -335,6 +352,18 @@ func ResetTestConfig() {
 
 // InitConfig initializes the configuration from file or creates a new one
 func InitConfig() {
+	initConfig(false)
+}
+
+// InitConfigReadOnly loads the configuration for a command that only reads
+// it and can do without: it never creates the file, a missing file is not an
+// error, and a file that cannot be used is reported at debug level only.
+func InitConfigReadOnly() {
+	initConfig(true)
+}
+
+func initConfig(readOnly bool) {
+	quiet = readOnly
 	defaultFile := ""
 	if home, err := xdgHome("XDG_CONFIG_HOME", ".config"); err == nil {
 		defaultFile = filepath.Join(home, "projekt", "config.yaml")
@@ -376,9 +405,13 @@ func InitConfig() {
 		// The file exists but is unusable (malformed YAML, bad permissions...).
 		// Never recreate it here: that would silently wipe the user config.
 		loadErr = fmt.Errorf("failed to read config file %s: %w", CfgFile, err)
+		cli.Debug("%v", loadErr)
 		return
 	}
 
+	if readOnly {
+		return
+	}
 	if !create {
 		loadErr = fmt.Errorf("config file not found: %s", CfgFile)
 		return

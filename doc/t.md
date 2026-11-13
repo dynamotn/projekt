@@ -5,6 +5,7 @@ Create a template file from various sources
 ### Options
 
 ```
+      --config string         config file (default is $XDG_CONFIG_HOME/projekt/config.yaml)
   -h, --help                  help for t
       --template-dir string   Template folder (default is $XDG_DATA_HOME/projekt/templates)
   -v, --verbose string        Log level, available options are: (trace, debug, info, warn, error, fatal) (default "info")

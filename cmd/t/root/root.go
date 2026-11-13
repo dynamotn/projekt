@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
@@ -47,6 +48,14 @@ func NewRootCmd(out io.Writer) *cobra.Command {
 
 	f := rootCmd.PersistentFlags()
 	cli.GetEnv().AddFlags(f)
+	f.StringVar(&lazypath.CfgFile, "config", "", "config file (default is $XDG_CONFIG_HOME/projekt/config.yaml)")
+
+	// Flags are parsed by now, so --config is known. Templates only read the
+	// configuration, and `t` works without it.
+	rootCmd.PersistentPreRunE = func(*cobra.Command, []string) error {
+		lazypath.InitConfigReadOnly()
+		return nil
+	}
 
 	rootCmd.AddCommand(
 		cli.NewVersionCmd(out),

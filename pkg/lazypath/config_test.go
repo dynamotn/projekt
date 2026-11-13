@@ -1,6 +1,7 @@
 package lazypath
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -8,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
+
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -538,5 +541,115 @@ func TestGitRepoRemoteNames(t *testing.T) {
 
 	if got := (&GitRepo{}).RemoteNames(); got != nil {
 		t.Errorf("RemoteNames() with no remotes = %q, want nil", got)
+	}
+}
+
+// readOnlyEnv points the configuration at file and cleans up after the test.
+func readOnlyEnv(t *testing.T, file string) {
+	t.Helper()
+	originalCfgFile := CfgFile
+	CfgFile = file
+	t.Cleanup(func() {
+		CfgFile = originalCfgFile
+		quiet = false
+		ResetTestConfig()
+		viper.Reset()
+	})
+}
+
+func TestInitConfigReadOnly_MissingFileIsNotCreated(t *testing.T) {
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	readOnlyEnv(t, configFile)
+
+	InitConfigReadOnly()
+
+	if _, err := os.Stat(configFile); !os.IsNotExist(err) {
+		t.Errorf("InitConfigReadOnly() created %s", configFile)
+	}
+	if err := LoadError(); err != nil {
+		t.Errorf("LoadError() = %v, want nil", err)
+	}
+	if n := len(GetConfig().Folders); n != 0 {
+		t.Errorf("GetConfig() has %d folders, want 0", n)
+	}
+}
+
+func TestInitConfigReadOnly_DefaultPathIsNotCreated(t *testing.T) {
+	cfgHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfgHome)
+	readOnlyEnv(t, "")
+
+	InitConfigReadOnly()
+
+	if _, err := os.Stat(filepath.Join(cfgHome, "projekt")); !os.IsNotExist(err) {
+		t.Errorf("InitConfigReadOnly() created the default config folder")
+	}
+}
+
+func TestInitConfigReadOnly_ReadsWhatIsThere(t *testing.T) {
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configFile, []byte("folders:\n  - path: /srv/code\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	readOnlyEnv(t, configFile)
+
+	InitConfigReadOnly()
+
+	folders := GetConfig().Folders
+	if len(folders) != 1 || folders[0].Path != "/srv/code" {
+		t.Errorf("GetConfig().Folders = %v, want /srv/code", folders)
+	}
+}
+
+func TestInitConfigReadOnly_BrokenFileIsQuiet(t *testing.T) {
+	for _, content := range []string{"folders: [\n", "folders: 5\n"} {
+		t.Run(content, func(t *testing.T) {
+			configFile := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(configFile, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			readOnlyEnv(t, configFile)
+
+			// The logger writes to the stderr it was built with, so rebuild
+			// it over a pipe, at the level a plain `t` runs at.
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			realStderr := os.Stderr
+			os.Stderr = w
+			t.Cleanup(func() { os.Stderr = realStderr })
+			cli.GetEnv().LogLevel = "warn"
+			t.Cleanup(func() { cli.GetEnv().LogLevel = "" })
+			cli.InitLogging()
+
+			InitConfigReadOnly()
+			got := len(GetConfig().Folders)
+			os.Stderr = realStderr
+			_ = w.Close()
+			logged, _ := io.ReadAll(r)
+
+			if got != 0 {
+				t.Errorf("GetConfig() has %d folders, want 0", got)
+			}
+			if LoadError() == nil {
+				t.Error("LoadError() = nil, want the reason the file is unusable")
+			}
+			if len(logged) != 0 {
+				t.Errorf("logged at warning level or above: %s", logged)
+			}
+		})
+	}
+}
+
+func TestInitConfigReadOnly_NoHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	readOnlyEnv(t, "")
+
+	InitConfigReadOnly()
+
+	if n := len(GetConfig().Folders); n != 0 {
+		t.Errorf("GetConfig() has %d folders, want 0", n)
 	}
 }

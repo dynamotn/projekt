@@ -76,7 +76,8 @@ That's it. Everything below is optional.
 ## ⚙️ Configuration
 
 `$XDG_CONFIG_HOME/projekt/config.yaml` (`~/.config/projekt/config.yaml`),
-overridable with `--config`, created empty on first run.
+overridable with `--config`, created empty on first run (`t` only reads it,
+and never creates it).
 
 ```yaml
 folders:

@@ -60,6 +60,10 @@
 
 ### Changed
 
+- **t**: `t` reads the projekt configuration, with `--config` like `projekt`
+  and `b`, so `t init gl:group/store` resolves a configured git server. It
+  only reads: a missing or broken configuration never stops `t`, and `t`
+  never creates the file
 - **t**, **b**: `after:` lines run with `sh -c`, `sh` found on `PATH`, instead
   of your login shell, so a POSIX line means the same under fish, nu or none;
   this works on Termux too, where `/usr/bin/env` does not exist
