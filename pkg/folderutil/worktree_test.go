@@ -397,3 +397,53 @@ func TestFindFolder(t *testing.T) {
 		t.Error("FindFolder() of an unknown name error = nil, want an error")
 	}
 }
+
+func TestAddWorktree_RefusesALinkedWorktreeFolder(t *testing.T) {
+	_, repoPath := worktreeRepo(t)
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(repoPath, WorktreeFolder)); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if _, err := AddWorktree(&out, AddWorktreeOptions{Project: "oss-mytool", Branch: "next"}); err == nil {
+		t.Error("AddWorktree() through a linked .worktrees error = nil, want an error")
+	}
+	if entries, _ := os.ReadDir(outside); len(entries) != 0 {
+		t.Errorf("the link's target was written to: %v", entries)
+	}
+	if len(lazypath.GetConfig().Worktrees) != 0 {
+		t.Error("the refused worktree was recorded")
+	}
+}
+
+func TestAddWorktree_RefusesOptionLikeBranchesAndNames(t *testing.T) {
+	_, repoPath := worktreeRepo(t)
+	// Every git command leaves a line here; a refused call must not reach
+	// `git worktree add`.
+	trace := filepath.Join(t.TempDir(), "trace")
+	t.Setenv("GIT_TRACE", trace)
+
+	cases := []AddWorktreeOptions{
+		{Project: "oss-mytool", Branch: "--upload-pack=x"},
+		{Project: "oss-mytool", Branch: "next", Name: "-f"},
+		{Project: "oss-mytool", Branch: "next", Name: ".."},
+		{Project: "oss-mytool", Branch: "next", Name: "a/b"},
+	}
+	var out bytes.Buffer
+	for _, o := range cases {
+		if _, err := AddWorktree(&out, o); err == nil {
+			t.Errorf("AddWorktree(%+v) error = nil, want an error", o)
+		}
+	}
+
+	if b, _ := os.ReadFile(trace); strings.Contains(string(b), "git worktree add") {
+		t.Errorf("git was asked to add a worktree:\n%s", b)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(repoPath, WorktreeFolder)); len(entries) != 0 {
+		t.Errorf("a working tree was created: %v", entries)
+	}
+	if len(lazypath.GetConfig().Worktrees) != 0 {
+		t.Error("a refused worktree was recorded")
+	}
+}

@@ -217,6 +217,10 @@
 
 ### Security
 
+- **worktree add**: a `.worktrees` folder that is a symbolic link is
+  refused, so a cloned repository cannot make a new working tree land outside
+  the project; a branch or a name starting with a dash, and a name that is a
+  path, are refused before git is asked
 - **t**, **b**, **folder archive**: a relative `XDG_DATA_HOME` is ignored and
   a missing `HOME` is an error, so the template store, the boilerplate store
   and the archive can no longer land in the current folder

@@ -58,6 +58,12 @@ func AddWorktree(out io.Writer, o AddWorktreeOptions) (lazypath.Worktree, error)
 		return lazypath.Worktree{}, err
 	}
 
+	// git hands the branch to an inner `git branch` past the "--", so one
+	// that starts with a dash would be read as an option.
+	if strings.HasPrefix(strings.TrimSpace(o.Branch), "-") {
+		return lazypath.Worktree{}, fmt.Errorf("branch %q starts with a dash", o.Branch)
+	}
+
 	project, err := FindFolder(o.Project)
 	if err != nil {
 		return lazypath.Worktree{}, err
@@ -79,9 +85,19 @@ func AddWorktree(out io.Writer, o AddWorktreeOptions) (lazypath.Worktree, error)
 	name := strings.TrimSpace(o.Name)
 	if name == "" {
 		name = WorktreeNameFromBranch(branch)
+	} else if strings.HasPrefix(name, "-") || strings.HasPrefix(name, ".") || strings.ContainsAny(name, `/\`) {
+		// The same rule WorktreeNameFromBranch applies to a derived name: a
+		// folder name, never an option or a path.
+		return lazypath.Worktree{}, fmt.Errorf("name %q starts with a dash or a dot, or is a path", name)
 	}
 	if name == "" {
 		return lazypath.Worktree{}, fmt.Errorf("cannot work out a name from branch %q, pass --name", branch)
+	}
+
+	if o.Path == "" {
+		if err := worktreeFolderIsPlain(project.Path); err != nil {
+			return lazypath.Worktree{}, err
+		}
 	}
 
 	worktree := lazypath.Worktree{
@@ -143,6 +159,25 @@ func worktreePath(projectPath, name, override string) string {
 		return filepath.Clean(override)
 	}
 	return filepath.Join(projectPath, override)
+}
+
+// worktreeFolderIsPlain fails when the project's .worktrees is a symbolic
+// link: a cloned repository must not be able to make a new working tree land
+// outside the project. A missing folder is fine. shortcut: the check and git's
+// mkdir are not atomic; upgrade to openat-style creation if that matters.
+func worktreeFolderIsPlain(projectPath string) error {
+	p := filepath.Join(projectPath, WorktreeFolder)
+	info, err := os.Lstat(p)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%s is a symbolic link; a working tree is never created through one, pass --path", p)
+	}
+	return nil
 }
 
 // unsafeInName is everything a folder name is better off without.
