@@ -60,15 +60,50 @@ func NoteFolder(out io.Writer, shortName string, o NoteOptions) error {
 		return editNote(path, o)
 	}
 
-	content, err := os.ReadFile(path)
-	if os.IsNotExist(err) || (err == nil && strings.TrimSpace(string(content)) == "") {
-		return fmt.Errorf("%w for %s; add one with --add or --edit", ErrNoNote, folder.ShortName)
-	}
+	content, err := ReadNote(folder.Path)
 	if err != nil {
 		return err
 	}
-	_, err = out.Write(content)
+	if strings.TrimSpace(content) == "" {
+		return fmt.Errorf("%w for %s; add one with --add or --edit", ErrNoNote, folder.ShortName)
+	}
+	_, err = io.WriteString(out, content)
 	return err
+}
+
+// ReadNote returns the whole note of a project, or "" when there is none. It
+// refuses a note reached through a link: a cloned repository must not be able
+// to point its note at another file and have it read back.
+func ReadNote(projectPath string) (string, error) {
+	if err := noteIsPlain(projectPath); err != nil {
+		return "", err
+	}
+	content, err := os.ReadFile(filepath.Join(projectPath, NoteFile))
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	return string(content), err
+}
+
+// noteIsPlain fails when .projekt or the note is a symbolic link; a missing
+// path is fine. shortcut: the check and the open are not atomic, so a link
+// swapped in between is not caught; upgrade to openat-style opens if that
+// matters.
+func noteIsPlain(projectPath string) error {
+	dir := filepath.Join(projectPath, filepath.Dir(NoteFile))
+	for _, p := range []string{dir, filepath.Join(projectPath, NoteFile)} {
+		info, err := os.Lstat(p)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%s is a symbolic link; a note is never read or written through one", p)
+		}
+	}
+	return nil
 }
 
 // noteTarget resolves which project a note belongs to.
@@ -91,6 +126,9 @@ func noteTarget(shortName string) (ParsedFolder, error) {
 func appendNote(path string, text string, now func() time.Time) error {
 	if now == nil {
 		now = time.Now
+	}
+	if err := noteIsPlain(filepath.Dir(filepath.Dir(path))); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -121,6 +159,9 @@ func appendNote(path string, text string, now func() time.Time) error {
 // editNote opens the note in the editor, with the project as the working
 // directory so that a relative link in it resolves.
 func editNote(path string, o NoteOptions) error {
+	if err := noteIsPlain(filepath.Dir(filepath.Dir(path))); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -140,11 +181,11 @@ func editNote(path string, o NoteOptions) error {
 // "" when there is none: a heading loses its marks and a list item its bullet,
 // so that a column of them reads as prose.
 func NoteHeadline(projectPath string) string {
-	content, err := os.ReadFile(filepath.Join(projectPath, NoteFile))
+	content, err := ReadNote(projectPath)
 	if err != nil {
 		return ""
 	}
-	for _, line := range strings.Split(string(content), "\n") {
+	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)
 		line = strings.TrimLeft(line, "#")
 		line = strings.TrimPrefix(strings.TrimSpace(line), "- ")

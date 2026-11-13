@@ -270,6 +270,9 @@
 - **pj**: bash completion no longer passes project names through `compgen
   -W`, which expands each one as shell code; a workspace child named
   `$(...)` is offered literally instead of run
+- **folder note**, **folder status --notes**: a project note that is a
+  symbolic link, or sits under a linked `.projekt`, is neither read nor
+  written, so a cloned repository cannot point the note at another file
 
 ## [4.1.0]
 

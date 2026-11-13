@@ -208,3 +208,64 @@ func TestSelectFolder_PickerSeesDescriptions(t *testing.T) {
 		t.Errorf("out = %q, want the answer read back up to the tab", out.String())
 	}
 }
+
+// linkedNote lays out a project whose note is a link to a file holding a
+// secret, and returns the project and that file.
+func linkedNote(t *testing.T) (project, secret string) {
+	t.Helper()
+	project = t.TempDir()
+	secret = filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(secret, []byte("TOPSECRET\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(project, ".projekt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, filepath.Join(project, NoteFile)); err != nil {
+		t.Fatal(err)
+	}
+	return project, secret
+}
+
+func TestReadNote_RefusesALink(t *testing.T) {
+	project, _ := linkedNote(t)
+
+	if text, err := ReadNote(project); err == nil || strings.Contains(text, "TOPSECRET") {
+		t.Errorf("ReadNote() = %q, %v, want the link refused", text, err)
+	}
+	if got := NoteHeadline(project); got != "" {
+		t.Errorf("NoteHeadline() = %q, want nothing through a link", got)
+	}
+}
+
+func TestAppendNote_RefusesALink(t *testing.T) {
+	project, secret := linkedNote(t)
+
+	if err := appendNote(filepath.Join(project, NoteFile), "x", nil); err == nil {
+		t.Error("appendNote() through a link = nil, want an error")
+	}
+	if got, _ := os.ReadFile(secret); string(got) != "TOPSECRET\n" {
+		t.Errorf("the linked file was changed: %q", got)
+	}
+}
+
+func TestReadNote_RefusesALinkedFolder(t *testing.T) {
+	project := t.TempDir()
+	other := t.TempDir()
+	if err := os.WriteFile(filepath.Join(other, "notes.md"), []byte("TOPSECRET\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(other, filepath.Join(project, ".projekt")); err != nil {
+		t.Fatal(err)
+	}
+
+	if text, err := ReadNote(project); err == nil || strings.Contains(text, "TOPSECRET") {
+		t.Errorf("ReadNote() = %q, %v, want the linked folder refused", text, err)
+	}
+}
+
+func TestReadNote_NoNoteIsEmpty(t *testing.T) {
+	if text, err := ReadNote(t.TempDir()); text != "" || err != nil {
+		t.Errorf("ReadNote() = %q, %v, want empty and no error", text, err)
+	}
+}
