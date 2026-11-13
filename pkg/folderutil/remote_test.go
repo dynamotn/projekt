@@ -252,3 +252,29 @@ func TestSafeRepoName(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscoverRemoteRepos_GitHubOwnUserIncludesPrivate(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v3/user":
+			_ = json.NewEncoder(w).Encode(map[string]any{"login": "Jane"})
+		case r.URL.Path == "/api/v3/user/repos" && r.URL.Query().Get("affiliation") == "owner":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"name": "dotfiles"}, {"name": "secret-notes"}})
+		case strings.HasPrefix(r.URL.Path, "/api/v3/users/jane/repos"):
+			// What GitHub answers here, token or not: public only.
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"name": "dotfiles"}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	servers := []lazypath.GitServer{{Name: "hub", Type: "github", HTTPS: server.URL}}
+	got, err := DiscoverRemoteRepos(servers, RemoteDiscoverOptions{Host: "hub", Group: "jane", Token: "t", Client: server.Client()})
+	if err != nil {
+		t.Fatalf("DiscoverRemoteRepos() error = %v", err)
+	}
+	if want := []lazypath.GitRepo{{Name: "dotfiles"}, {Name: "secret-notes"}}; !reflect.DeepEqual(got.Repos, want) {
+		t.Errorf("Repos = %+v, want %+v", got.Repos, want)
+	}
+}

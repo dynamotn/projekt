@@ -65,6 +65,9 @@
 
 ### Fixed
 
+- **folder add --from-remote**: on GitHub, your own user lists your private
+  repositories too when the token is yours; the public listing GitHub gives
+  for a user name left them out
 - **folder list**, **folder status**, **worktree list**, **t list**,
   **b list**, **doctor**: a table piped into another command or a file, or
   printed with `NO_COLOR` set, has no color escapes; a terminal still gets

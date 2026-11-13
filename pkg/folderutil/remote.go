@@ -373,28 +373,34 @@ func (a apiClient) gitlabProjects(group string, recursive bool) ([]remoteRepo, e
 // name is not an organisation.
 func (a apiClient) githubRepos(owner string) ([]remoteRepo, error) {
 	api := githubAPI(a.server)
-	var repos []remoteRepo
-	for _, kind := range []string{"orgs", "users"} {
-		found, err := a.githubPages(fmt.Sprintf("%s/%s/%s/repos", api, kind, url.PathEscape(owner)))
-		if err == nil {
-			return found, nil
-		}
-		if kind == "users" || !strings.Contains(err.Error(), "not found") {
-			return nil, err
-		}
-		cli.Debug("%s is not an organisation, trying a user", owner)
+	found, err := a.githubPages(fmt.Sprintf("%s/orgs/%s/repos", api, url.PathEscape(owner)), url.Values{"type": {"all"}})
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		return found, err
 	}
-	return repos, nil
+	cli.Debug("%s is not an organisation, trying a user", owner)
+
+	// /users/{name}/repos lists only what is public, even to its owner: your
+	// own private repositories come from /user/repos, for the token's user.
+	if a.token != "" {
+		var me struct {
+			Login string `json:"login"`
+		}
+		if _, err := a.get(api+"/user", &me); err == nil && strings.EqualFold(me.Login, owner) {
+			return a.githubPages(api+"/user/repos", url.Values{"affiliation": {"owner"}})
+		}
+	}
+	return a.githubPages(fmt.Sprintf("%s/users/%s/repos", api, url.PathEscape(owner)), url.Values{"type": {"all"}})
 }
 
-func (a apiClient) githubPages(base string) ([]remoteRepo, error) {
+func (a apiClient) githubPages(base string, query url.Values) ([]remoteRepo, error) {
 	var repos []remoteRepo
 	for page := 1; ; page++ {
 		var items []struct {
 			Name     string `json:"name"`
 			Archived bool   `json:"archived"`
 		}
-		query := url.Values{"per_page": {"100"}, "page": {strconv.Itoa(page)}, "type": {"all"}}
+		query.Set("per_page", "100")
+		query.Set("page", strconv.Itoa(page))
 		if _, err := a.get(base+"?"+query.Encode(), &items); err != nil {
 			return nil, err
 		}
