@@ -593,6 +593,12 @@ claude mcp add projekt -- projekt mcp
 With `dyai`, add it to the configuration's MCP servers and every agent gets
 it. See [`projekt mcp`](doc/projekt_mcp.md).
 
+## ✍️ Writing AI materials
+
+An `AGENTS.md`, a skill and a project note each do a different job. The
+[guide](doc/agent-materials.md) says which is which, how to write a skill an
+agent uses, and how to keep one source for every agent with `t` and `t apply`.
+
 ## 📚 Commands
 
 ### 📁 `projekt` — project folders

@@ -4,6 +4,9 @@
 
 ### Added
 
+- **docs**: `doc/agent-materials.md` — which of `AGENTS.md`, a skill and a
+  project note is for what, how to write a skill an agent uses, and how to
+  keep one source for every agent with `t new agent-docs` and `t apply`
 - **examples**: `agent-docs` writes one `AGENTS.md` for a project, with
   `CLAUDE.md` and `GEMINI.md` as links to it, and `agent-skill` scaffolds a
   skill; both read `.Folder`.
