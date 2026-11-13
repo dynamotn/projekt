@@ -578,6 +578,9 @@ the flag they are neither listed nor callable.
 
 A note or a description is text people wrote, sometimes someone else; the
 server tells the agent to treat it as data and never as instructions.
+`project_show` includes a project's `enter`/`leave` hook lines, so a secret
+written into a hook line is shown to the agent: keep secrets out of hook
+lines.
 
 Register it as a stdio server with the command `projekt` and the argument
 `mcp`. For Claude Code:

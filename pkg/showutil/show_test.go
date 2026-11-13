@@ -173,3 +173,20 @@ func TestGather_LinkedNoteIsAnError(t *testing.T) {
 		t.Error("want the error from ReadNote")
 	}
 }
+
+func TestGather_SourceIsAbsolute(t *testing.T) {
+	dir, name := project(t, "")
+	lazypath.SetTestConfig(lazypath.Config{Folders: []lazypath.Folder{{Path: dir}}})
+	// What --config=config.yaml leaves behind.
+	previous := lazypath.CfgFile
+	lazypath.CfgFile = "config.yaml"
+	t.Cleanup(func() { lazypath.CfgFile = previous })
+
+	info, err := Gather(name, Options{NoStatus: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want, _ := filepath.Abs("config.yaml"); info.Source != want {
+		t.Errorf("Source = %q, want %q", info.Source, want)
+	}
+}

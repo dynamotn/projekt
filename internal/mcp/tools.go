@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"strings"
+	"unicode"
 
 	_ "embed"
 
@@ -28,8 +30,24 @@ func NewServer(write bool) *Server {
 	}
 	return &Server{
 		Name: "projekt", Version: version.GetVersionStr(), Instructions: instructions,
-		Tools: tools, Before: lazypath.ReloadConfig,
+		Tools: tools, Before: reload,
 	}
+}
+
+// reload re-reads the configuration ahead of every call and fails the way the
+// CLI does, so a broken file is never served as "no projects".
+func reload() error {
+	if err := lazypath.ReloadConfig(); err != nil {
+		return err
+	}
+	// ReloadConfig shrugs off a missing file and viper keeps what it had.
+	if _, err := os.Stat(lazypath.ConfigFile()); err != nil {
+		return fmt.Errorf("cannot read config file %s: %w", lazypath.ConfigFile(), err)
+	}
+	// Decoding is lazy: only GetConfig finds a file that parses but does not
+	// decode.
+	lazypath.GetConfig()
+	return lazypath.LoadError()
 }
 
 // ReadTools are the tools that change nothing.
@@ -263,9 +281,26 @@ func projectCurrent(arguments json.RawMessage) (string, error) {
 	})
 }
 
-// lineBreaks is a run of CR and LF: text with one in it could forge a dated
-// line of its own in the note.
-var lineBreaks = regexp.MustCompile(`[\r\n]+`)
+// lineBreaks is a run of anything an editor may draw as a line break: text
+// with one in it could forge a dated line of its own in the note.
+var lineBreaks = regexp.MustCompile("[\r\n\v\f\u0085\u2028\u2029]+")
+
+// Caps on what the write tools accept, in bytes.
+const (
+	maxNoteText    = 2000
+	maxDescription = 300
+)
+
+// oneLine flattens line breaks into a space and drops other control
+// characters.
+func oneLine(text string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, lineBreaks.ReplaceAllString(text, " "))
+}
 
 // The write tools check name and project themselves: an empty short name
 // means the folder the server runs in, which an agent must never reach.
@@ -281,9 +316,12 @@ func noteAdd(arguments json.RawMessage) (string, error) {
 	if err := required("name", a.Name); err != nil {
 		return "", err
 	}
-	text := strings.TrimSpace(lineBreaks.ReplaceAllString(a.Text, " "))
+	text := strings.TrimSpace(oneLine(a.Text))
 	if err := required("text", text); err != nil {
 		return "", err
+	}
+	if len(text) > maxNoteText {
+		return "", fmt.Errorf("text is longer than %d bytes", maxNoteText)
 	}
 	if err := folderutil.NoteFolder(io.Discard, a.Name, folderutil.NoteOptions{Add: text}); err != nil {
 		return "", err
@@ -305,6 +343,9 @@ func describeSet(arguments json.RawMessage) (string, error) {
 	// Without text DescribeFolder would only print the description.
 	if err := required("description", a.Description); err != nil {
 		return "", err
+	}
+	if len(strings.TrimSpace(a.Description)) > maxDescription {
+		return "", fmt.Errorf("description is longer than %d bytes", maxDescription)
 	}
 	if err := folderutil.DescribeFolder(io.Discard, a.Name, a.Description, false); err != nil {
 		return "", err

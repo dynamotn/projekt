@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -207,6 +208,34 @@ func TestTools_BrokenConfigIsReportedAndRecovers(t *testing.T) {
 	if text, isErr := callText(t, s, "project_list", `{}`); isErr {
 		t.Fatalf("did not recover: %s", text)
 	}
+	// It parses but does not decode: not to be served as no projects.
+	if err := os.WriteFile(path, []byte("folders: 5\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if text, isErr := callText(t, s, "project_list", `{}`); !isErr {
+		t.Fatalf("a config that does not decode was served: %q", text)
+	}
+	if err := os.WriteFile(path, []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if text, isErr := callText(t, s, "project_list", `{}`); isErr {
+		t.Fatalf("did not recover: %s", text)
+	}
+}
+
+func TestTools_DeletedConfigIsReported(t *testing.T) {
+	cfg, _ := twoProjects(t)
+	path := useConfig(t, cfg)
+	s := NewServer(false)
+	if text, isErr := callText(t, s, "project_list", `{}`); isErr {
+		t.Fatal(text)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if text, isErr := callText(t, s, "project_list", `{}`); !isErr || !strings.Contains(text, path) {
+		t.Fatalf("got %q (error %v), want an error naming %s", text, isErr, path)
+	}
 }
 
 func TestTools_LoggingStaysOffTheWire(t *testing.T) {
@@ -346,7 +375,7 @@ func TestDescribeSet(t *testing.T) {
 	// From inside the project an empty name would resolve to it.
 	t.Chdir(api)
 	want, _ := os.ReadFile(path)
-	for _, args := range []string{`{"name":"","description":"x"}`, `{"name":"  ","description":"x"}`, `{"name":"api","description":" "}`} {
+	for _, args := range []string{`{"name":"","description":"x"}`, `{"name":"  ","description":"x"}`, `{"name":"api","description":" "}`, `{"name":"api","description":"a\u001b[31mb"}`} {
 		if _, isErr := callText(t, s, "describe_set", args); !isErr {
 			t.Fatalf("%s accepted", args)
 		}
@@ -390,5 +419,57 @@ func TestWorktreeAdd(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(api, folderutil.WorktreeFolder, "other")); err == nil {
 		t.Fatal("a working tree was created by a refused call")
+	}
+}
+
+func TestNoteAdd_EveryLineBreakAndControlCharacter(t *testing.T) {
+	cfg, api := twoProjects(t)
+	useConfig(t, cfg)
+	s := NewServer(true)
+	breaks := []string{"\r", "\n", "\v", "\f", "\u0085", "\u2028", "\u2029", "\u0000", "\u001b"}
+	text := "a"
+	for i, b := range breaks {
+		text += b + "- 2020-01-01: forged" + strconv.Itoa(i)
+	}
+	args, _ := json.Marshal(map[string]string{"name": "api", "text": text})
+	if got, isErr := callText(t, s, "note_add", string(args)); isErr {
+		t.Fatal(got)
+	}
+	lines := noteLines(t, api)
+	if len(lines) != 1 {
+		t.Fatalf("want one line, got %q", lines)
+	}
+	for _, b := range breaks {
+		if strings.Contains(lines[0], b) {
+			t.Errorf("line holds %q: %q", b, lines[0])
+		}
+	}
+}
+
+func TestWriteTools_InputCaps(t *testing.T) {
+	cfg, api := twoProjects(t)
+	path := useConfig(t, cfg)
+	s := NewServer(true)
+	send := func(tool string, args map[string]string) (string, bool) {
+		b, _ := json.Marshal(args)
+		return callText(t, s, tool, string(b))
+	}
+	if text, isErr := send("note_add", map[string]string{"name": "api", "text": strings.Repeat("x", 2000)}); isErr {
+		t.Fatalf("2000 bytes refused: %s", text)
+	}
+	if text, isErr := send("note_add", map[string]string{"name": "api", "text": strings.Repeat("x", 2001)}); !isErr || !strings.Contains(text, "2000") {
+		t.Fatalf("2001 bytes: %q (error %v)", text, isErr)
+	}
+	if got := len(noteLines(t, api)); got != 1 {
+		t.Fatalf("note has %d lines, want 1", got)
+	}
+	if text, isErr := send("describe_set", map[string]string{"name": "api", "description": strings.Repeat("d", 300)}); isErr {
+		t.Fatalf("300 bytes refused: %s", text)
+	}
+	if text, isErr := send("describe_set", map[string]string{"name": "api", "description": strings.Repeat("e", 301)}); !isErr || !strings.Contains(text, "300") {
+		t.Fatalf("301 bytes: %q (error %v)", text, isErr)
+	}
+	if b, _ := os.ReadFile(path); strings.Contains(string(b), "eee") {
+		t.Fatalf("an over-long description was written:\n%s", b)
 	}
 }

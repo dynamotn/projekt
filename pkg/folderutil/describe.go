@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
@@ -29,8 +30,10 @@ func DescribeFolder(out io.Writer, shortName string, text string, clear bool) er
 		_, err := fmt.Fprintln(out, folder.Description)
 		return err
 	}
-	if strings.ContainsAny(text, "\n\r\t") {
-		return fmt.Errorf("a description is one line")
+	// A control character would reach the terminal raw through `folder list`
+	// and shell completion; a line break is one of them.
+	if strings.ContainsFunc(text, unicode.IsControl) {
+		return fmt.Errorf("a description is one line of text, without control characters")
 	}
 
 	if err := lazypath.LoadError(); err != nil {

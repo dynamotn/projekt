@@ -269,3 +269,48 @@ func TestReadNote_NoNoteIsEmpty(t *testing.T) {
 		t.Errorf("ReadNote() = %q, %v, want empty and no error", text, err)
 	}
 }
+
+func TestNoteFolder_EditRefusesALink(t *testing.T) {
+	_, project := editable(t)
+	secret := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(secret, []byte("TOPSECRET\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(project, ".projekt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, filepath.Join(project, NoteFile)); err != nil {
+		t.Fatal(err)
+	}
+	// An editor that leaves a marker behind, so a run of it shows.
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "ran")
+	editor := filepath.Join(dir, "editor")
+	if err := os.WriteFile(editor, []byte("#!/bin/sh\ntouch '"+marker+"'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", editor)
+
+	var out bytes.Buffer
+	if err := NoteFolder(&out, "work-myapp", NoteOptions{Edit: true}); err == nil {
+		t.Error("NoteFolder(edit) through a link = nil, want an error")
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("the editor ran on a linked note")
+	}
+}
+
+func TestDescribeFolder_RefusesControlCharacters(t *testing.T) {
+	editable(t)
+
+	var out bytes.Buffer
+	for _, text := range []string{"a\x00b", "a\x1b[31mb", "a\tb", "a\u0085b"} {
+		if err := DescribeFolder(&out, "work-myapp", text, false); err == nil {
+			t.Errorf("DescribeFolder(%q) error = nil, want an error", text)
+		}
+	}
+	if data, _ := os.ReadFile(lazypath.CfgFile); strings.Contains(string(data), "description") {
+		t.Errorf("config = %q, want no description written", data)
+	}
+}

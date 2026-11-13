@@ -84,6 +84,8 @@
 
 ### Fixed
 
+- **folder describe**: a description holding a control character is refused,
+  like one holding a line break
 - **config**: two commands that write the configuration at the same time, or
   a long `folder sync` or `b new` while you edit the file, no longer drop each
   other's changes — a write locks the file, re-reads it and applies only its

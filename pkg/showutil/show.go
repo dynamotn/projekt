@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -98,6 +99,10 @@ func Gather(name string, o Options) (Info, error) {
 	}
 	if entry, ok := folderutil.EntryFor(config.Folders, folder); ok && entry.Source != "" {
 		info.Source = entry.Source
+	}
+	// A --config given as a relative path would otherwise come back relative.
+	if abs, err := filepath.Abs(info.Source); err == nil && info.Source != "" {
+		info.Source = abs
 	}
 
 	if info.Note, err = folderutil.ReadNote(folder.Path); err != nil {
