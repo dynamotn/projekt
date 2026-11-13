@@ -1108,8 +1108,8 @@ func TestCheckGitRemote_MatchesOnlyTheConfiguredRepository(t *testing.T) {
 		"git@github.com:org/api-gateway.git":     false,
 	}
 	for url, ok := range cases {
-		if out, err := exec.Command("git", "-C", repo, "remote", "add", "origin", url).CombinedOutput(); err != nil {
-			if out, err = exec.Command("git", "-C", repo, "remote", "set-url", "origin", url).CombinedOutput(); err != nil {
+		if exec.Command("git", "-C", repo, "remote", "add", "origin", url).Run() != nil {
+			if out, err := exec.Command("git", "-C", repo, "remote", "set-url", "origin", url).CombinedOutput(); err != nil {
 				t.Fatalf("git remote: %v\n%s", err, out)
 			}
 		}
