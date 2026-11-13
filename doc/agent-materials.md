@@ -38,8 +38,9 @@ red build cannot be pulled back" gets followed, "Run the tests" gets skipped
 when it looks slow. Keep one skill to one job; two jobs mean a description that
 matches neither well.
 
-`agent-skill` scaffolds one: it asks for the description, then writes the front
-matter and `When to use`, `Steps` and `Checks` headings for you to fill in.
+`agent-skill` scaffolds one: it asks for the description and takes the name from
+the folder, as agents look a skill up by folder. It writes the front matter and
+`When to use`, `Steps` and `Checks` headings for you to fill in.
 
 ```bash
 t new agent-skill ./release -i
@@ -89,7 +90,7 @@ has the rest.
 project's work committed, so that nothing is lost either way.
 
 ```bash
-git add -A && git commit -m "before agent-docs"
+git add AGENTS.md CLAUDE.md GEMINI.md && git commit -m "before agent-docs"
 t new agent-docs . -i --force
 git diff
 ```

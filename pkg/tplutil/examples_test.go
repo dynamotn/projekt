@@ -251,10 +251,10 @@ func TestExample_AgentDocsRefusesAnExistingFile(t *testing.T) {
 
 // skillFrontMatter renders agent-skill and parses the YAML between its `---`
 // lines, which is what an agent does before it trusts the skill.
-func skillFrontMatter(t *testing.T, values Values) map[string]string {
+func skillFrontMatter(t *testing.T, folder, name string, values Values) map[string]string {
 	t.Helper()
-	dest := filepath.Join(t.TempDir(), "release-notes")
-	if _, err := renderExample(t, "agent-skill", dest, "release-notes", false, values); err != nil {
+	dest := filepath.Join(t.TempDir(), folder)
+	if _, err := renderExample(t, "agent-skill", dest, name, false, values); err != nil {
 		t.Fatalf("Render error = %v", err)
 	}
 	got, _ := os.ReadFile(filepath.Join(dest, "SKILL.md"))
@@ -273,14 +273,23 @@ func skillFrontMatter(t *testing.T, values Values) map[string]string {
 // TestExample_AgentSkillFrontMatter: the description is what an agent matches
 // a request against, so it must be there, and it must survive YAML.
 func TestExample_AgentSkillFrontMatter(t *testing.T) {
-	meta := skillFrontMatter(t, nil)
+	meta := skillFrontMatter(t, "release-notes", "release-notes", nil)
 	if meta["name"] != "release-notes" || !strings.HasPrefix(meta["description"], "Use when") {
 		t.Errorf("default front matter = %v, want the name and a \"Use when\" trigger", meta)
 	}
 
 	const given = `Use when asked: "release notes" [draft]`
-	meta = skillFrontMatter(t, Values{"description": given})
+	meta = skillFrontMatter(t, "release-notes", "release-notes", Values{"description": given})
 	if meta["name"] != "release-notes" || meta["description"] != given {
 		t.Errorf("front matter = %v, want name release-notes and description %q", meta, given)
+	}
+}
+
+// TestExample_AgentSkillNameIsItsFolder: agents look a skill up by folder, and
+// `t new agent-skill ./release` sets no name, so the folder must supply it.
+func TestExample_AgentSkillNameIsItsFolder(t *testing.T) {
+	meta := skillFrontMatter(t, "release", "", nil)
+	if meta["name"] != "release" || !strings.Contains(meta["description"], "release") {
+		t.Errorf("front matter = %v, want name and default description to say release", meta)
 	}
 }

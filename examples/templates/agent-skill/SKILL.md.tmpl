@@ -1,9 +1,9 @@
 ---
-name: {{ .Name }}
-description: {{ .Values.description | default (printf "Use when the user asks for %s; say here what that looks like." .Name) | toJson }}
+name: {{ base .Dir | toJson }}
+description: {{ .Values.description | default (printf "Use when the user asks for %s; say here what that looks like." (base .Dir)) | toJson }}
 ---
 
-# {{ .Name }}
+# {{ base .Dir }}
 
 ## When to use
 
