@@ -12,7 +12,7 @@ and leave hooks it declares are handed to your shell only once you have looked
 at that version of the file and trusted it. On a terminal, 'pj' asks the first
 time; this trusts beforehand, for a shell started by a script.
 
-  projekt config trust                      # every included file
+  projekt config trust --all                # every included file
   projekt config trust ~/dotfiles/team.yaml
 
 Trust covers the exact content: a later change to the file asks again.
@@ -24,6 +24,7 @@ projekt config trust [file...] [flags]
 ### Options
 
 ```
+      --all    Trust every included file
   -h, --help   help for trust
 ```
 

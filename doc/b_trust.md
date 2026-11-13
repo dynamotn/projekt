@@ -20,7 +20,7 @@ else it is refused, and this is how to allow it beforehand.
 Examples:
 
   b trust go-cli       # one recipe
-  b trust              # every recipe of the store
+  b trust --all        # every recipe of the store
 
 ```
 b trust [boilerplate...] [flags]
@@ -29,6 +29,7 @@ b trust [boilerplate...] [flags]
 ### Options
 
 ```
+      --all    Trust every recipe of the store
   -h, --help   help for trust
 ```
 

@@ -24,7 +24,7 @@ Review first: `t show <template>`, or the history of the store with
 Examples:
 
   t trust go-cli       # one template
-  t trust              # every template of the store
+  t trust --all        # every template of the store
 
 ```
 projekt template trust [template...] [flags]
@@ -33,6 +33,7 @@ projekt template trust [template...] [flags]
 ### Options
 
 ```
+      --all    Trust every template of the store
   -h, --help   help for trust
 ```
 

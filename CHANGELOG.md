@@ -53,6 +53,9 @@
 - **t**, **b**: `after:` lines run with `sh -c`, `sh` found on `PATH`, instead
   of your login shell, so a POSIX line means the same under fish, nu or none;
   this works on Termux too, where `/usr/bin/env` does not exist
+- **t trust**, **b trust**, **config trust**: with no names they stop and ask
+  for the names or `--all`; `--all` trusts every template, recipe or included
+  file, and names together with `--all` is an error
 - **t**: `t update` runs `t apply`, as its help says, instead of pulling the
   template store; `t sync` and `t pull` still pull it
 - **t**: a dry run, `t check` and `b check` no longer run anything: `output`

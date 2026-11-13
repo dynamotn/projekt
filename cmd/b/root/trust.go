@@ -1,6 +1,7 @@
 package root
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -25,15 +26,22 @@ else it is refused, and this is how to allow it beforehand.
 Examples:
 
   b trust go-cli       # one recipe
-  b trust              # every recipe of the store`
+  b trust --all        # every recipe of the store`
 
 func NewBoilerplateTrustCmd(out io.Writer) *cobra.Command {
+	var all bool
 	cmd := &cobra.Command{
 		Use:               "trust [boilerplate...]",
 		Short:             "Allow a recipe from a repository to run commands",
 		Long:              trustLongHelp,
 		ValidArgsFunction: completeRecipeNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if all && len(args) > 0 {
+				return errors.New("--all trusts every recipe: drop the names, or drop --all")
+			}
+			if !all && len(args) == 0 {
+				return errors.New("name the recipe to trust, or pass --all to trust every one")
+			}
 			recipes, err := recipesNamed(args)
 			if err != nil {
 				return err
@@ -54,6 +62,7 @@ func NewBoilerplateTrustCmd(out io.Writer) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&all, "all", false, "Trust every recipe of the store")
 	return cmd
 }
 

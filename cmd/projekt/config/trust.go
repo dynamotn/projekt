@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -12,6 +13,7 @@ import (
 )
 
 func NewConfigTrustCmd(out io.Writer) *cobra.Command {
+	var all bool
 	cmd := &cobra.Command{
 		Use:   "trust [file...]",
 		Short: "Let the hooks of an included configuration file run",
@@ -23,7 +25,7 @@ and leave hooks it declares are handed to your shell only once you have looked
 at that version of the file and trusted it. On a terminal, 'pj' asks the first
 time; this trusts beforehand, for a shell started by a script.
 
-  projekt config trust                      # every included file
+  projekt config trust --all                # every included file
   projekt config trust ~/dotfiles/team.yaml
 
 Trust covers the exact content: a later change to the file asks again.`,
@@ -32,6 +34,12 @@ Trust covers the exact content: a later change to the file asks again.`,
 			return lazypath.IncludedFiles(), cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if all && len(args) > 0 {
+				return errors.New("--all trusts every included file: drop the names, or drop --all")
+			}
+			if !all && len(args) == 0 {
+				return errors.New("name the file to trust, or pass --all to trust every one")
+			}
 			files := args
 			if len(files) == 0 {
 				files = lazypath.IncludedFiles()
@@ -52,6 +60,7 @@ Trust covers the exact content: a later change to the file asks again.`,
 		},
 	}
 
+	cmd.Flags().BoolVar(&all, "all", false, "Trust every included file")
 	cli.SetColorAndStyles(cmd)
 	return cmd
 }

@@ -1,6 +1,7 @@
 package root
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -29,15 +30,22 @@ Review first: ` + "`t show <template>`" + `, or the history of the store with
 Examples:
 
   t trust go-cli       # one template
-  t trust              # every template of the store`
+  t trust --all        # every template of the store`
 
 func NewTemplateTrustCmd(out io.Writer) *cobra.Command {
+	var all bool
 	cmd := &cobra.Command{
 		Use:               "trust [template...]",
 		Short:             "Allow a template of a cloned store to run commands",
 		Long:              trustLongHelp,
 		ValidArgsFunction: completeTemplateNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if all && len(args) > 0 {
+				return errors.New("--all trusts every template: drop the names, or drop --all")
+			}
+			if !all && len(args) == 0 {
+				return errors.New("name the template to trust, or pass --all to trust every one")
+			}
 			templates, err := templatesNamed(args)
 			if err != nil {
 				return err
@@ -53,6 +61,7 @@ func NewTemplateTrustCmd(out io.Writer) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&all, "all", false, "Trust every template of the store")
 	return cmd
 }
 
