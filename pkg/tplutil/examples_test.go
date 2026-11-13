@@ -1,6 +1,7 @@
 package tplutil
 
 import (
+	"go.yaml.in/yaml/v3"
 	"io"
 	"os"
 	"path/filepath"
@@ -161,7 +162,7 @@ func TestExampleTemplatesAsk(t *testing.T) {
 }
 
 // renderExample renders one example template into dest.
-func renderExample(t *testing.T, name, dest, projectName string, force bool) ([]string, error) {
+func renderExample(t *testing.T, name, dest, projectName string, force bool, values ...Values) ([]string, error) {
 	t.Helper()
 	previous := TemplateDir
 	TemplateDir = exampleStore
@@ -172,7 +173,11 @@ func renderExample(t *testing.T, name, dest, projectName string, force bool) ([]
 	if err != nil {
 		t.Fatalf("Get(%s) error = %v", name, err)
 	}
-	return Render(RenderOptions{Template: tpl, Dest: dest, Name: projectName, Force: force})
+	o := RenderOptions{Template: tpl, Dest: dest, Name: projectName, Force: force}
+	if len(values) > 0 {
+		o.Values = values[0]
+	}
+	return Render(o)
 }
 
 // TestExample_AgentDocsLinksEveryAgentToOneFile: CLAUDE.md and GEMINI.md are
@@ -244,21 +249,38 @@ func TestExample_AgentDocsRefusesAnExistingFile(t *testing.T) {
 	}
 }
 
-// TestExample_AgentSkillFrontMatter: the description is what an agent matches
-// a request against, so it must be there.
-func TestExample_AgentSkillFrontMatter(t *testing.T) {
+// skillFrontMatter renders agent-skill and parses the YAML between its `---`
+// lines, which is what an agent does before it trusts the skill.
+func skillFrontMatter(t *testing.T, values Values) map[string]string {
+	t.Helper()
 	dest := filepath.Join(t.TempDir(), "release-notes")
-	if _, err := renderExample(t, "agent-skill", dest, "release-notes", false); err != nil {
+	if _, err := renderExample(t, "agent-skill", dest, "release-notes", false, values); err != nil {
 		t.Fatalf("Render error = %v", err)
 	}
-
 	got, _ := os.ReadFile(filepath.Join(dest, "SKILL.md"))
-	const head = "---\nname: release-notes\ndescription: "
-	if !strings.HasPrefix(string(got), head) {
-		t.Fatalf("SKILL.md = %q, want it to begin with %q", got, head)
+	rest, ok := strings.CutPrefix(string(got), "---\n")
+	front, _, found := strings.Cut(rest, "\n---\n")
+	if !ok || !found {
+		t.Fatalf("SKILL.md has no front matter:\n%s", got)
 	}
-	line := strings.SplitN(strings.TrimPrefix(string(got), head), "\n", 2)[0]
-	if !strings.HasPrefix(line, "Use when") {
-		t.Errorf("description = %q, want a trigger starting with \"Use when\"", line)
+	var meta map[string]string
+	if err := yaml.Unmarshal([]byte(front), &meta); err != nil {
+		t.Fatalf("front matter is not valid YAML: %v\n%s", err, front)
+	}
+	return meta
+}
+
+// TestExample_AgentSkillFrontMatter: the description is what an agent matches
+// a request against, so it must be there, and it must survive YAML.
+func TestExample_AgentSkillFrontMatter(t *testing.T) {
+	meta := skillFrontMatter(t, nil)
+	if meta["name"] != "release-notes" || !strings.HasPrefix(meta["description"], "Use when") {
+		t.Errorf("default front matter = %v, want the name and a \"Use when\" trigger", meta)
+	}
+
+	const given = `Use when asked: "release notes" [draft]`
+	meta = skillFrontMatter(t, Values{"description": given})
+	if meta["name"] != "release-notes" || meta["description"] != given {
+		t.Errorf("front matter = %v, want name release-notes and description %q", meta, given)
 	}
 }

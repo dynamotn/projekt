@@ -1,6 +1,6 @@
 ---
 name: {{ .Name }}
-description: {{ .Values.description | default (printf "Use when the user asks for %s; say here what that looks like." .Name) }}
+description: {{ .Values.description | default (printf "Use when the user asks for %s; say here what that looks like." .Name) | toJson }}
 ---
 
 # {{ .Name }}
