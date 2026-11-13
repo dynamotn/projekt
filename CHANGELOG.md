@@ -4,6 +4,8 @@
 
 ### Added
 
+- **mcp**: `projekt mcp --write` also offers `note_add`, `describe_set` and
+  `worktree_add`; without the flag they are neither listed nor callable
 - **mcp**: `projekt mcp` serves what projekt knows to AI agents over MCP on
   stdio: `project_list`, `project_show`, `project_status`, `project_recent`
   and `project_current`, all read-only. It never offers a tool that runs a

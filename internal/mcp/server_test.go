@@ -150,6 +150,19 @@ func TestServe_APanickingToolDoesNotKillTheServer(t *testing.T) {
 	}
 }
 
+func TestServe_APanickingBeforeDoesNotKillTheServer(t *testing.T) {
+	s := &Server{
+		Before: func() error { panic("reload") },
+		Tools:  []Tool{{Name: "x", Call: func(json.RawMessage) (string, error) { return "", nil }}},
+	}
+	m := roundTrip(t, s, call("x", `{}`), `{"jsonrpc":"2.0","id":3,"method":"ping"}`)
+	res := m[0]["result"].(map[string]any)
+	text := res["content"].([]any)[0].(map[string]any)["text"].(string)
+	if res["isError"] != true || !strings.Contains(text, "reload") || len(m) != 2 {
+		t.Fatalf("result = %v, replies = %d", res, len(m))
+	}
+}
+
 func TestServe_NilSchemaIsAnEmptyObjectSchema(t *testing.T) {
 	m := roundTrip(t, &Server{Tools: []Tool{{Name: "x"}}}, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 	tool := m[0]["result"].(map[string]any)["tools"].([]any)[0].(map[string]any)

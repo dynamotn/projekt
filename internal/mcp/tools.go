@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"regexp"
 	"strings"
 
 	_ "embed"
@@ -21,7 +23,9 @@ var instructions string
 // NewServer builds the projekt server; write adds the write tools.
 func NewServer(write bool) *Server {
 	tools := ReadTools()
-	_ = write // the write tools arrive with the next change
+	if write {
+		tools = append(tools, WriteTools()...)
+	}
 	return &Server{
 		Name: "projekt", Version: version.GetVersionStr(), Instructions: instructions,
 		Tools: tools, Before: lazypath.ReloadConfig,
@@ -74,6 +78,41 @@ func ReadTools() []Tool {
 				"path": prop("string", "An absolute path"),
 			}),
 			ReadOnly: true, Call: projectCurrent,
+		},
+	}
+}
+
+// WriteTools are the tools that change something; NewServer offers them only
+// when asked.
+func WriteTools() []Tool {
+	return []Tool{
+		{
+			Name:        "note_add",
+			Description: "Append a dated line to a project's note. Newlines in the text become spaces: one call adds one line.",
+			Schema: schema([]string{"name", "text"}, map[string]any{
+				"name": prop("string", "The short name of the project"),
+				"text": prop("string", "What to note"),
+			}),
+			Call: noteAdd,
+		},
+		{
+			Name:        "describe_set",
+			Description: "Set the one-line description of a project in the configuration.",
+			Schema: schema([]string{"name", "description"}, map[string]any{
+				"name":        prop("string", "The short name of the project"),
+				"description": prop("string", "The new description, one line"),
+			}),
+			Call: describeSet,
+		},
+		{
+			Name:        "worktree_add",
+			Description: "Create a git working tree of a project on a branch, creating the branch from HEAD when it does not exist, and record it.",
+			Schema: schema([]string{"project", "branch"}, map[string]any{
+				"project": prop("string", "The short name of the project"),
+				"branch":  prop("string", "The branch to check out"),
+				"name":    prop("string", "The name after the @; the last element of the branch when omitted"),
+			}),
+			Call: worktreeAdd,
 		},
 	}
 }
@@ -222,4 +261,75 @@ func projectCurrent(arguments json.RawMessage) (string, error) {
 		"shortName": p.ShortName, "path": p.Path, "workspace": p.Workspace,
 		"tags": tags, "description": p.Description,
 	})
+}
+
+// lineBreaks is a run of CR and LF: text with one in it could forge a dated
+// line of its own in the note.
+var lineBreaks = regexp.MustCompile(`[\r\n]+`)
+
+// The write tools check name and project themselves: an empty short name
+// means the folder the server runs in, which an agent must never reach.
+
+func noteAdd(arguments json.RawMessage) (string, error) {
+	var a struct {
+		Name string `json:"name"`
+		Text string `json:"text"`
+	}
+	if err := decodeArgs(arguments, &a); err != nil {
+		return "", err
+	}
+	if err := required("name", a.Name); err != nil {
+		return "", err
+	}
+	text := strings.TrimSpace(lineBreaks.ReplaceAllString(a.Text, " "))
+	if err := required("text", text); err != nil {
+		return "", err
+	}
+	if err := folderutil.NoteFolder(io.Discard, a.Name, folderutil.NoteOptions{Add: text}); err != nil {
+		return "", err
+	}
+	return encode(map[string]any{"noted": a.Name})
+}
+
+func describeSet(arguments json.RawMessage) (string, error) {
+	var a struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := decodeArgs(arguments, &a); err != nil {
+		return "", err
+	}
+	if err := required("name", a.Name); err != nil {
+		return "", err
+	}
+	// Without text DescribeFolder would only print the description.
+	if err := required("description", a.Description); err != nil {
+		return "", err
+	}
+	if err := folderutil.DescribeFolder(io.Discard, a.Name, a.Description, false); err != nil {
+		return "", err
+	}
+	return encode(map[string]any{"described": a.Name})
+}
+
+func worktreeAdd(arguments json.RawMessage) (string, error) {
+	var a struct {
+		Project string `json:"project"`
+		Branch  string `json:"branch"`
+		Name    string `json:"name"`
+	}
+	if err := decodeArgs(arguments, &a); err != nil {
+		return "", err
+	}
+	if err := required("project", a.Project); err != nil {
+		return "", err
+	}
+	if err := required("branch", a.Branch); err != nil {
+		return "", err
+	}
+	w, err := folderutil.AddWorktree(io.Discard, folderutil.AddWorktreeOptions{Project: a.Project, Branch: a.Branch, Name: a.Name})
+	if err != nil {
+		return "", err
+	}
+	return encode(map[string]any{"name": w.ShortName(), "path": w.Path})
 }

@@ -555,9 +555,9 @@ asks again.
 
 `projekt mcp` is a [Model Context Protocol](https://modelcontextprotocol.io)
 server on stdin and stdout, so an agent can ask what you would: where a
-project is, what it is, what state its repositories are in. Every tool is
-read-only, and none runs a command, moves or removes a project, or changes
-what is trusted.
+project is, what it is, what state its repositories are in. By default every
+tool is read-only, and none ever runs a command, moves or removes a project,
+or changes what is trusted.
 
 | Tool | What it answers |
 | ---- | --------------- |
@@ -566,6 +566,15 @@ what is trusted.
 | `project_status` | The git state of many projects, narrowed by `tags`, `dirty`, `since` or `branches` |
 | `project_recent` | The projects you jumped to last, most recent first |
 | `project_current` | Which project a path is inside |
+
+`projekt mcp --write` also offers three tools that change something. Without
+the flag they are neither listed nor callable.
+
+| Tool | What it does |
+| ---- | ------------ |
+| `note_add` | Appends a dated line to a project's note (`name`, `text`); newlines in the text become spaces |
+| `describe_set` | Sets a project's one-line description in the configuration (`name`, `description`) |
+| `worktree_add` | Creates a working tree on a branch and records it (`project`, `branch`, optional `name`) |
 
 A note or a description is text people wrote, sometimes someone else; the
 server tells the agent to treat it as data and never as instructions.

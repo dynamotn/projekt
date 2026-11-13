@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 
@@ -156,13 +158,16 @@ func TestTools_WrongArguments(t *testing.T) {
 	cfg, _ := twoProjects(t)
 	useConfig(t, cfg)
 	s := NewServer(false)
-	for _, args := range []string{`{}`, `{"name":5}`, `{"name":"a","x":1}`} {
-		if text, isErr := callText(t, s, "project_show", args); !isErr || text == "" {
-			t.Fatalf("%s: got %q (error %v)", args, text, isErr)
+	for args, mentions := range map[string]string{`{}`: "name", `{"name":5}`: "name", `{"name":"a","x":1}`: "x"} {
+		if text, isErr := callText(t, s, "project_show", args); !isErr || !strings.Contains(text, mentions) {
+			t.Fatalf("%s: got %q (error %v), want it to mention %q", args, text, isErr, mentions)
 		}
 	}
-	if text, _ := callText(t, s, "project_show", `{}`); !strings.Contains(text, "name") {
-		t.Fatalf("the error must name the argument: %q", text)
+	// A call with no arguments key at all.
+	m := roundTrip(t, s, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"project_show"}}`)
+	res := m[0]["result"].(map[string]any)
+	if text := res["content"].([]any)[0].(map[string]any)["text"].(string); res["isError"] != true || !strings.Contains(text, "name") {
+		t.Fatalf("no arguments key: %v", res)
 	}
 	if _, isErr := callText(t, s, "project_list", `{}`); isErr {
 		t.Fatal("project_list must still work")
@@ -238,5 +243,136 @@ func TestNewServer_ReadOnlyByDefault(t *testing.T) {
 	want := []string{"project_current", "project_list", "project_recent", "project_show", "project_status"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("tools = %v, want %v", names, want)
+	}
+}
+
+func TestNewServer_WriteToolsOnlyWhenAsked(t *testing.T) {
+	cfg, _ := twoProjects(t)
+	useConfig(t, cfg)
+	write := []string{"note_add", "describe_set", "worktree_add"}
+	listed := func(s *Server) map[string]map[string]any {
+		res := roundTrip(t, s, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)[0]["result"].(map[string]any)
+		got := map[string]map[string]any{}
+		for _, tool := range res["tools"].([]any) {
+			m := tool.(map[string]any)
+			got[m["name"].(string)] = m
+		}
+		return got
+	}
+	off := NewServer(false)
+	for _, name := range write {
+		if _, ok := listed(off)[name]; ok {
+			t.Fatalf("%s listed without --write", name)
+		}
+	}
+	for _, name := range write {
+		m := roundTrip(t, off, call(name, `{}`))[0]
+		if m["error"].(map[string]any)["code"] != float64(-32602) {
+			t.Fatalf("%s callable without --write: %v", name, m)
+		}
+	}
+	on := listed(NewServer(true))
+	for _, name := range write {
+		tool, ok := on[name]
+		if !ok || tool["annotations"].(map[string]any)["readOnlyHint"] != false {
+			t.Fatalf("%s: %v", name, tool)
+		}
+	}
+}
+
+func noteLines(t *testing.T, dir string) []string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, folderutil.NoteFile))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Split(strings.TrimSpace(string(b)), "\n")
+}
+
+func TestNoteAdd(t *testing.T) {
+	cfg, api := twoProjects(t)
+	useConfig(t, cfg)
+	text, isErr := callText(t, NewServer(true), "note_add", `{"name":"api","text":"half done"}`)
+	if isErr || !strings.Contains(text, "noted") {
+		t.Fatalf("got %q (error %v)", text, isErr)
+	}
+	lines := noteLines(t, api)
+	if want := "- " + time.Now().Format("2006-01-02") + ": half done"; lines[len(lines)-1] != want {
+		t.Fatalf("lines = %q, want last %q", lines, want)
+	}
+}
+
+func TestNoteAdd_OneLineAndANameRequired(t *testing.T) {
+	cfg, api := twoProjects(t)
+	useConfig(t, cfg)
+	s := NewServer(true)
+	if _, isErr := callText(t, s, "note_add", `{"name":"api","text":"first"}`); isErr {
+		t.Fatal("first note failed")
+	}
+	before := len(noteLines(t, api))
+	if _, isErr := callText(t, s, "note_add", `{"name":"api","text":"a\n- 2020-01-01: forged\r\n\r\nmore"}`); isErr {
+		t.Fatal("multi-line text must be flattened, not refused")
+	}
+	lines := noteLines(t, api)
+	if len(lines) != before+1 || strings.Count(strings.Join(lines, "\n"), "\n- 2020-01-01") != 0 {
+		t.Fatalf("forged lines: %q", lines)
+	}
+	for _, args := range []string{`{"name":"","text":"x"}`, `{"name":"  ","text":"x"}`, `{"name":"api","text":" \n"}`} {
+		if text, isErr := callText(t, s, "note_add", args); !isErr {
+			t.Fatalf("%s accepted: %q", args, text)
+		}
+	}
+	if got := len(noteLines(t, api)); got != before+1 {
+		t.Fatalf("file changed on refused calls: %d lines", got)
+	}
+}
+
+func TestDescribeSet(t *testing.T) {
+	cfg, _ := twoProjects(t)
+	path := useConfig(t, cfg)
+	s := NewServer(true)
+	if text, isErr := callText(t, s, "describe_set", `{"name":"api","description":"The API"}`); isErr || !strings.Contains(text, "described") {
+		t.Fatalf("got %q (error %v)", text, isErr)
+	}
+	if b, _ := os.ReadFile(path); !strings.Contains(string(b), "The API") {
+		t.Fatalf("config: %s", b)
+	}
+	for _, args := range []string{`{"name":"","description":"x"}`, `{"name":"api","description":" "}`} {
+		if _, isErr := callText(t, s, "describe_set", args); !isErr {
+			t.Fatalf("%s accepted", args)
+		}
+	}
+}
+
+func TestWorktreeAdd(t *testing.T) {
+	cfg, api := twoProjects(t)
+	useConfig(t, cfg)
+	for _, args := range [][]string{
+		{"init", "-q"}, {"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", api}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	s := NewServer(true)
+	text, isErr := callText(t, s, "worktree_add", `{"project":"api","branch":"next"}`)
+	if isErr {
+		t.Fatal(text)
+	}
+	var got map[string]string
+	if err := json.Unmarshal([]byte(text), &got); err != nil || got["name"] != "api@next" {
+		t.Fatalf("result %q: %v", text, err)
+	}
+	if _, err := os.Stat(got["path"]); err != nil {
+		t.Fatal(err)
+	}
+	if show, _ := callText(t, s, "project_show", `{"name":"api"}`); !strings.Contains(show, got["path"]) {
+		t.Fatalf("project_show does not list the working tree: %s", show)
+	}
+	if _, isErr := callText(t, s, "worktree_add", `{"project":" ","branch":"x"}`); !isErr {
+		t.Fatal("a blank project must be refused")
 	}
 }

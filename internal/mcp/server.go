@@ -144,14 +144,7 @@ func (s *Server) call(params json.RawMessage) (any, *rpcError) {
 	if i < 0 {
 		return nil, &rpcError{-32602, fmt.Sprintf("unknown tool: %s", p.Name)}
 	}
-	var text string
-	var err error
-	if s.Before != nil {
-		err = s.Before()
-	}
-	if err == nil {
-		text, err = callTool(s.Tools[i], p.Arguments)
-	}
+	text, err := callTool(s.Before, s.Tools[i], p.Arguments)
 	res := map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}}
 	if err != nil {
 		res["content"] = []any{map[string]any{"type": "text", "text": err.Error()}}
@@ -160,12 +153,18 @@ func (s *Server) call(params json.RawMessage) (any, *rpcError) {
 	return res, nil
 }
 
-// callTool runs a tool; a panic in it must not take the server down.
-func callTool(t Tool, arguments json.RawMessage) (text string, err error) {
+// callTool runs before and then a tool; a panic in either must not take the
+// server down.
+func callTool(before func() error, t Tool, arguments json.RawMessage) (text string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			text, err = "", fmt.Errorf("tool %s panicked: %v", t.Name, r)
 		}
 	}()
+	if before != nil {
+		if err := before(); err != nil {
+			return "", err
+		}
+	}
 	return t.Call(arguments)
 }

@@ -16,6 +16,11 @@ working trees and the git state of its repositories. Without --write every
 tool is read-only. No tool ever runs a command, moves or removes a project,
 or changes what is trusted.
 
+With --write the server also offers note_add (append a dated line to a
+project's note), describe_set (set a project's description) and worktree_add
+(create a working tree on a branch). Without the flag they are neither
+listed nor callable.
+
 Register it as a stdio server with the command 'projekt' and the argument
 'mcp':
 
