@@ -39,9 +39,9 @@ var (
 	quiet bool
 )
 
-// notice reports a problem with the configuration: a warning, or only a debug
+// Notice reports a problem with the configuration: a warning, or only a debug
 // line when the command reading it can do without.
-func notice(format string, v ...any) {
+func Notice(format string, v ...any) {
 	if quiet {
 		cli.Debug(format, v...)
 		return

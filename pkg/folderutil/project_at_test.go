@@ -1,13 +1,16 @@
 package folderutil
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
@@ -104,5 +107,96 @@ func TestProjectAt_ConfigThatDoesNotDecode(t *testing.T) {
 	}
 	if lazypath.LoadError() == nil {
 		t.Error("LoadError() = nil after the decode failed, want it recorded")
+	}
+}
+
+// warnings runs fn with the logger at the level a plain command runs at, and
+// returns what it logged.
+func warnings(t *testing.T, fn func()) string {
+	t.Helper()
+	// The logger writes to the stderr it was built with, so rebuild it over
+	// a pipe.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	realStderr := os.Stderr
+	os.Stderr = w
+	// Cleanups run last-registered first: the logger is rebuilt over the
+	// real stderr, not over the closed pipe.
+	t.Cleanup(cli.InitLogging)
+	t.Cleanup(func() { os.Stderr = realStderr })
+	cli.GetEnv().LogLevel = "warn"
+	t.Cleanup(func() { cli.GetEnv().LogLevel = "" })
+	cli.InitLogging()
+
+	fn()
+	os.Stderr = realStderr
+	_ = w.Close()
+	logged, _ := io.ReadAll(r)
+	return string(logged)
+}
+
+// A workspace that is not on this machine, as with a configuration shared
+// through dotfiles.
+func missingWorkspaceConfig(t *testing.T) string {
+	return "folders:\n  - path: " + filepath.Join(t.TempDir(), "gone") + "\n    is_workspace: true\n"
+}
+
+func TestProjectAt_ReadOnlyConfigIsQuiet(t *testing.T) {
+	config := missingWorkspaceConfig(t)
+	logged := warnings(t, func() {
+		loadConfigFile(t, config)
+		ProjectAt(t.TempDir())
+	})
+	if logged != "" {
+		t.Errorf("logged at warning level or above: %s", logged)
+	}
+}
+
+func TestParseConfig_StillWarnsForProjekt(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(file, []byte(missingWorkspaceConfig(t)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	previous := lazypath.CfgFile
+	lazypath.CfgFile = file
+	t.Cleanup(func() {
+		lazypath.CfgFile = previous
+		lazypath.ResetTestConfig()
+		viper.Reset()
+	})
+
+	logged := warnings(t, func() {
+		lazypath.InitConfig()
+		_, _ = ParseConfig(lazypath.GetConfig())
+	})
+	if !strings.Contains(logged, "Cannot read folder") {
+		t.Errorf("logged %q, want the unreadable workspace warned about", logged)
+	}
+}
+
+// A workspace inside a configured project names the workspace's child, also
+// before the child exists.
+func TestProjectAt_WorkspaceNestedInProject(t *testing.T) {
+	outer := t.TempDir()
+	ws := filepath.Join(outer, "ws")
+	if err := os.Mkdir(ws, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	useConfig(t,
+		lazypath.Folder{Path: outer, Name: "outer"},
+		lazypath.Folder{Path: ws, IsWorkspace: true, Prefix: "w"},
+	)
+	newapp := filepath.Join(ws, "newapp")
+
+	if got, ok := ProjectAt(newapp); !ok || got.ShortName != "w-newapp" {
+		t.Errorf("ProjectAt() before the folder exists = %+v, %v, want w-newapp", got, ok)
+	}
+	if err := os.Mkdir(newapp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := ProjectAt(newapp); !ok || got.ShortName != "w-newapp" {
+		t.Errorf("ProjectAt() once the folder exists = %+v, %v, want w-newapp", got, ok)
 	}
 }

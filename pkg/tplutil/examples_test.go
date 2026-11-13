@@ -1,12 +1,13 @@
 package tplutil
 
 import (
-	"go.yaml.in/yaml/v3"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // exampleStore is the starter set shipped with the repository.

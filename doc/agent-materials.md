@@ -90,7 +90,14 @@ has the rest.
 project's work committed, so that nothing is lost either way.
 
 ```bash
-git add AGENTS.md CLAUDE.md GEMINI.md && git commit -m "before agent-docs"
+git add -- $(ls AGENTS.md CLAUDE.md GEMINI.md 2>/dev/null)
+git commit -m "before agent-docs"
+```
+
+Only when the commit succeeded — or git says there is nothing to commit,
+because the files are already in git — render over them:
+
+```bash
 t new agent-docs . -i --force
 git diff
 ```

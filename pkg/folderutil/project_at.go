@@ -17,10 +17,19 @@ func ProjectAt(path string) (ParsedFolder, bool) {
 	if lazypath.LoadError() != nil {
 		return ParsedFolder{}, false
 	}
-	if project, err := CurrentProject(path); err == nil {
-		return project, true
+	project, err := CurrentProject(path)
+	found := err == nil
+	// A workspace can sit inside a configured project: the deeper answer is
+	// the one the path is in.
+	if child, ok := workspaceChild(path); ok && (!found || len(child.Path) > len(project.Path)) {
+		return child, true
 	}
+	return project, found
+}
 
+// workspaceChild returns the project a path is in, or will be, directly
+// under a configured workspace.
+func workspaceChild(path string) (ParsedFolder, bool) {
 	path, err := lazypath.NormalizePath(path)
 	if err != nil {
 		return ParsedFolder{}, false

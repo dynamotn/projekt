@@ -50,12 +50,12 @@ func ParseConfig(c lazypath.Config) ([]ParsedFolder, error) {
 		}
 		re, err := folder.Regex()
 		if err != nil {
-			cli.Warn("Cannot compile regex for folder %s: %v", folder.Path, err)
+			lazypath.Notice("Cannot compile regex for folder %s: %v", folder.Path, err)
 			continue
 		}
 		entries, err := os.ReadDir(folderPath)
 		if err != nil {
-			cli.Warn("Cannot read folder %s: %v", folder.Path, err)
+			lazypath.Notice("Cannot read folder %s: %v", folder.Path, err)
 			continue
 		}
 
@@ -95,7 +95,7 @@ func appendWorktrees(list []ParsedFolder, shortNames map[string]struct{}, worktr
 
 	for _, worktree := range worktrees {
 		if err := worktree.Validate(); err != nil {
-			cli.Warn("Skipping worktree %s: %v", worktree.ShortName(), err)
+			lazypath.Notice("Skipping worktree %s: %v", worktree.ShortName(), err)
 			continue
 		}
 		project, ok := projects[worktree.Project]

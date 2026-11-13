@@ -617,6 +617,9 @@ func TestInitConfigReadOnly_BrokenFileIsQuiet(t *testing.T) {
 			}
 			realStderr := os.Stderr
 			os.Stderr = w
+			// Cleanups run last-registered first: the logger is rebuilt
+			// over the real stderr, not over the closed pipe.
+			t.Cleanup(cli.InitLogging)
 			t.Cleanup(func() { os.Stderr = realStderr })
 			cli.GetEnv().LogLevel = "warn"
 			t.Cleanup(func() { cli.GetEnv().LogLevel = "" })
