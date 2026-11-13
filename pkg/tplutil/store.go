@@ -2,6 +2,7 @@ package tplutil
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,6 +11,7 @@ import (
 	"github.com/OpenPeeDeeP/xdg"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // TemplateExt is the suffix a template file may carry. It is stripped from the
@@ -115,17 +117,28 @@ func List() ([]Template, error) {
 		if strings.HasSuffix(name, VarsFile) || isDataFile(name) {
 			continue
 		}
+		path := filepath.Join(dir, name)
+		if entry.Type()&fs.ModeSymlink != 0 {
+			// A link to a folder of the store is that folder under another
+			// name. One that leaves the store stays a file, which reading
+			// refuses.
+			target := lazypath.Canonical(path)
+			if info, err := os.Stat(target); err == nil && info.IsDir() && target != lazypath.Canonical(dir) && within(lazypath.Canonical(dir), target) {
+				templates = append(templates, Template{Name: name, Path: target, Kind: KindDir})
+				continue
+			}
+		}
 		if entry.IsDir() {
 			templates = append(templates, Template{
 				Name: name,
-				Path: filepath.Join(dir, name),
+				Path: path,
 				Kind: KindDir,
 			})
 			continue
 		}
 		templates = append(templates, Template{
 			Name: strings.TrimSuffix(name, TemplateExt),
-			Path: filepath.Join(dir, name),
+			Path: path,
 			Kind: KindFile,
 		})
 	}

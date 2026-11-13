@@ -199,3 +199,79 @@ func TestAuthorize_RefusesWhatComesFromNowhere(t *testing.T) {
 		t.Error("Authorize() with no origin = nil, want a refusal")
 	}
 }
+
+func TestTrust_AFileTemplatesManifestAndDataAreTrustedWithIt(t *testing.T) {
+	for _, changed := range []string{"conf.vars.yaml", "conf.data.yaml"} {
+		t.Run(changed, func(t *testing.T) {
+			store := useClonedStore(t)
+			answerTrust(t, false)
+			writeTemplate(t, filepath.Join(store, "conf.tmpl"), `{{ output "echo" "hi" }}`)
+			writeTemplate(t, filepath.Join(store, "conf.vars.yaml"), "vars: []\n")
+			writeTemplate(t, filepath.Join(store, "conf.data.yaml"), "who: me\n")
+
+			tpl, err := Get("conf")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := Trust(TemplateOrigin(tpl)); err != nil {
+				t.Fatalf("Trust() error = %v", err)
+			}
+
+			// A sync brings a hook, or new data, in beside the template.
+			writeTemplate(t, filepath.Join(store, changed), "after:\n  - echo pwned\n")
+			resetApproved()
+			var untrusted *UntrustedError
+			if err := renderConf(t); !errors.As(err, &untrusted) {
+				t.Errorf("Render() after changing %s error = %v, want an UntrustedError", changed, err)
+			}
+		})
+	}
+}
+
+func TestTrust_ARepositoryGitCannotReadIsNotYours(t *testing.T) {
+	store := useStore(t)
+	// A worktree whose main checkout is gone: `git remote` fails, and that
+	// says nothing about where the files came from.
+	writeTemplate(t, filepath.Join(store, ".git"), "gitdir: /nonexistent/.git/worktrees/x\n")
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	resetApproved()
+	t.Cleanup(resetApproved)
+	answerTrust(t, false)
+	writeTemplate(t, filepath.Join(store, "conf.tmpl"), `{{ output "echo" "hi" }}`)
+
+	var untrusted *UntrustedError
+	if err := renderConf(t); !errors.As(err, &untrusted) {
+		t.Errorf("Render() error = %v, want an UntrustedError", err)
+	}
+}
+
+func TestTrust_WithoutAStateDirectoryNothingIsTrusted(t *testing.T) {
+	store := useClonedStore(t)
+	answerTrust(t, false)
+	writeTemplate(t, filepath.Join(store, "conf.tmpl"), `{{ output "echo" "hi" }}`)
+	tpl, err := Get("conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum, err := TemplateOrigin(tpl).fingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// No home to keep state in: a relative trust file would be the current
+	// folder's, which a repository can ship pre-trusting itself.
+	work := t.TempDir()
+	t.Chdir(work)
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("HOME", "")
+	writeTemplate(t, filepath.Join(work, "projekt", "trust.yaml"),
+		"- key: "+tpl.Path+"\n  sha256: "+sum+"\n  trustedAt: 2026-01-01T00:00:00Z\n")
+
+	var untrusted *UntrustedError
+	if err := renderConf(t); !errors.As(err, &untrusted) {
+		t.Errorf("Render() error = %v, want an UntrustedError", err)
+	}
+	if err := Trust(TemplateOrigin(tpl)); err == nil {
+		t.Error("Trust() error = nil, want a refusal to record trust nowhere")
+	}
+}

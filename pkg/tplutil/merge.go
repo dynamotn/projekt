@@ -97,34 +97,12 @@ func splitKeep(content []byte) []string {
 // lcsPairs matches the lines of a to the lines of b along their longest common
 // subsequence, as a map from an index in a to the index in b it pairs with.
 func lcsPairs(a, b []string) map[int]int {
-	lengths := make([][]int, len(a)+1)
-	for i := range lengths {
-		lengths[i] = make([]int, len(b)+1)
-	}
-	for i := len(a) - 1; i >= 0; i-- {
-		for j := len(b) - 1; j >= 0; j-- {
-			if a[i] == b[j] {
-				lengths[i][j] = lengths[i+1][j+1] + 1
-				continue
-			}
-			lengths[i][j] = max(lengths[i+1][j], lengths[i][j+1])
-		}
-	}
-
 	pairs := make(map[int]int)
-	i, j := 0, 0
-	for i < len(a) && j < len(b) {
-		switch {
-		case a[i] == b[j]:
+	lcsWalk(a, b, func(sign byte, i, j int) {
+		if sign == ' ' {
 			pairs[i] = j
-			i++
-			j++
-		case lengths[i+1][j] >= lengths[i][j+1]:
-			i++
-		default:
-			j++
 		}
-	}
+	})
 	return pairs
 }
 

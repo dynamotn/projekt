@@ -163,7 +163,8 @@ func withManifestName(o RenderOptions) (RenderOptions, error) {
 		withValues.Values = values
 	}
 
-	rendered, err := executeWith(TemplateOrigin(o.Template), manifest.delims(), "name:"+o.Template.Name, manifest.Name, context(withValues, ""))
+	// A check or a dry run works the name out without running its commands.
+	rendered, err := executeMode(TemplateOrigin(o.Template), manifest.delims(), "name:"+o.Template.Name, manifest.Name, context(withValues, ""), o.lenient || o.DryRun)
 	if err != nil {
 		return o, fmt.Errorf("name of %s: %w", o.Template.Name, err)
 	}
@@ -338,6 +339,14 @@ func collectDir(e *engine, o RenderOptions) ([]Rendered, error) {
 		if err != nil {
 			return err
 		}
+		if attrs.Symlink {
+			// What a link points at, spelled the way currentOf reads it back,
+			// so a link is not a change for want of a final newline.
+			content = append(bytes.TrimSpace(content), '\n')
+		} else if info, err := os.Stat(path); err == nil && info.Mode()&0o111 != 0 {
+			// A gradlew or a run.sh runs because of its mode, not its name.
+			attrs.Executable = true
+		}
 		files = append(files, Rendered{Rel: rendered, Content: content, Attrs: attrs})
 		return nil
 	})
@@ -448,10 +457,20 @@ func nameOf(o RenderOptions) string {
 // means skipping a whole folder.
 func isReserved(entry fs.DirEntry, relative string) (skip, dir bool) {
 	name := entry.Name()
+	// Repository metadata, at any depth: a folder, or the file a worktree or
+	// a submodule has instead.
+	if name == ".git" {
+		return true, entry.IsDir()
+	}
+	// The rest describes the template only where the template keeps it, at
+	// its root; deeper down it is a file of the project like any other.
+	if relative != name {
+		return false, false
+	}
 	if entry.IsDir() {
-		// Repository metadata, and the folder of shared pieces, which are
-		// rendered by the files that call them rather than on their own.
-		return name == ".git" || name == PartialsDir, true
+		// The folder of shared pieces, which are rendered by the files that
+		// call them rather than on their own.
+		return name == PartialsDir, true
 	}
 	// The manifest, the data file and the ignore list describe the template;
 	// they are not part of the output.

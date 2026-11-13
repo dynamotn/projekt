@@ -3,6 +3,7 @@ package tplutil
 import (
 	"math/rand"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -175,5 +176,27 @@ func TestUnifiedDiff_MissingFinalNewline(t *testing.T) {
 	got := UnifiedDiff("f", []byte("a"), []byte("a\n"), 3)
 	if !strings.Contains(got, "No newline at end of file") {
 		t.Errorf("UnifiedDiff() = %q, want the missing newline reported", got)
+	}
+}
+
+func TestUnifiedDiff_ALongFileWithOneChangeStaysSmall(t *testing.T) {
+	lines := make([]string, 5000)
+	for i := range lines {
+		lines[i] = "line " + strconv.Itoa(i) + "\n"
+	}
+	before := strings.Join(lines, "")
+	lines[2500] = "changed\n"
+	after := strings.Join(lines, "")
+
+	var start, end runtime.MemStats
+	runtime.ReadMemStats(&start)
+	diff := UnifiedDiff("f", []byte(before), []byte(after), 3)
+	runtime.ReadMemStats(&end)
+
+	if edits(diff) != 2 {
+		t.Errorf("UnifiedDiff() = %d edits, want 2:\n%s", edits(diff), diff)
+	}
+	if got := end.TotalAlloc - start.TotalAlloc; got > 16<<20 {
+		t.Errorf("UnifiedDiff() allocated %d MiB for a one-line change, want the table limited to what changed", got>>20)
 	}
 }

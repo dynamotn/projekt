@@ -3,6 +3,9 @@ package tplutil
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -168,5 +171,29 @@ func TestApply_PruneForgetsTheBase(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dest, RecordDir, BaseDir, "ci")); !os.IsNotExist(err) {
 		t.Errorf("Stat(base/ci) error = %v, want it gone with the file", err)
+	}
+}
+
+func TestMerge3_ALongFileStaysSmall(t *testing.T) {
+	lines := make([]string, 5000)
+	for i := range lines {
+		lines[i] = "line " + strconv.Itoa(i) + "\n"
+	}
+	base := strings.Join(lines, "")
+	lines[10] = "ours\n"
+	ours := strings.Join(lines, "")
+	lines[10], lines[4990] = "line 10\n", "theirs\n"
+	theirs := strings.Join(lines, "")
+
+	var start, end runtime.MemStats
+	runtime.ReadMemStats(&start)
+	merged, ok := merge3([]byte(base), []byte(ours), []byte(theirs))
+	runtime.ReadMemStats(&end)
+
+	if !ok || !strings.Contains(string(merged), "ours\n") || !strings.Contains(string(merged), "theirs\n") {
+		t.Fatalf("merge3() = %v, want both edits merged", ok)
+	}
+	if got := end.TotalAlloc - start.TotalAlloc; got > 16<<20 {
+		t.Errorf("merge3() allocated %d MiB, want the table limited to what changed", got>>20)
 	}
 }

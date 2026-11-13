@@ -140,13 +140,43 @@ func span(start, count int) string {
 // editScript is the shortest way to read the old lines as the new ones, found
 // through the longest common subsequence of the two.
 func editScript(oldLines, newLines []string) []edit {
-	lengths := make([][]int, len(oldLines)+1)
-	for i := range lengths {
-		lengths[i] = make([]int, len(newLines)+1)
+	var edits []edit
+	lcsWalk(oldLines, newLines, func(sign byte, i, j int) {
+		if sign == '+' {
+			edits = append(edits, edit{sign, newLines[j]})
+			return
+		}
+		edits = append(edits, edit{sign, oldLines[i]})
+	})
+	return edits
+}
+
+// lcsWalk walks a and b along their longest common subsequence, calling step
+// in order with ' ' for a line both have, '-' for one only a has and '+' for
+// one only b has, and the index of the line in each.
+//
+// The lines the two share at the start and at the end are matched before the
+// table is built, so it is the size of what changed rather than of the whole
+// file: a one-line change to a 5000-line file is not a 200 MB table.
+func lcsWalk(a, b []string, step func(sign byte, i, j int)) {
+	head := 0
+	for head < len(a) && head < len(b) && a[head] == b[head] {
+		step(' ', head, head)
+		head++
 	}
-	for i := len(oldLines) - 1; i >= 0; i-- {
-		for j := len(newLines) - 1; j >= 0; j-- {
-			if oldLines[i] == newLines[j] {
+	tail := 0
+	for tail < len(a)-head && tail < len(b)-head && a[len(a)-1-tail] == b[len(b)-1-tail] {
+		tail++
+	}
+	ma, mb := a[head:len(a)-tail], b[head:len(b)-tail]
+
+	lengths := make([][]int, len(ma)+1)
+	for i := range lengths {
+		lengths[i] = make([]int, len(mb)+1)
+	}
+	for i := len(ma) - 1; i >= 0; i-- {
+		for j := len(mb) - 1; j >= 0; j-- {
+			if ma[i] == mb[j] {
 				lengths[i][j] = lengths[i+1][j+1] + 1
 				continue
 			}
@@ -154,27 +184,28 @@ func editScript(oldLines, newLines []string) []edit {
 		}
 	}
 
-	var edits []edit
 	i, j := 0, 0
-	for i < len(oldLines) && j < len(newLines) {
+	for i < len(ma) && j < len(mb) {
 		switch {
-		case oldLines[i] == newLines[j]:
-			edits = append(edits, edit{' ', oldLines[i]})
+		case ma[i] == mb[j]:
+			step(' ', head+i, head+j)
 			i++
 			j++
 		case lengths[i+1][j] >= lengths[i][j+1]:
-			edits = append(edits, edit{'-', oldLines[i]})
+			step('-', head+i, head+j)
 			i++
 		default:
-			edits = append(edits, edit{'+', newLines[j]})
+			step('+', head+i, head+j)
 			j++
 		}
 	}
-	for ; i < len(oldLines); i++ {
-		edits = append(edits, edit{'-', oldLines[i]})
+	for ; i < len(ma); i++ {
+		step('-', head+i, head+j)
 	}
-	for ; j < len(newLines); j++ {
-		edits = append(edits, edit{'+', newLines[j]})
+	for ; j < len(mb); j++ {
+		step('+', head+i, head+j)
 	}
-	return edits
+	for k := tail; k > 0; k-- {
+		step(' ', len(a)-k, len(b)-k)
+	}
 }

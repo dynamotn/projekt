@@ -193,3 +193,16 @@ func mustParse(t *testing.T, arguments ...string) []Replacement {
 	}
 	return replacements
 }
+
+func TestApply_NeverRewritesAnActionItInserted(t *testing.T) {
+	replacements := mustParse(t, "my-service=Values.service", "service=Values.kind")
+
+	got, count := apply(replacements, "name: my-service\nkind: service\n")
+	want := "name: {{ .Values.service }}\nkind: {{ .Values.kind }}\n"
+	if got != want {
+		t.Errorf("apply() = %q, want %q", got, want)
+	}
+	if count != 2 {
+		t.Errorf("apply() count = %d, want 2", count)
+	}
+}

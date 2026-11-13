@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 // AddOptions drives `t add`, which copies an existing file or folder into the
@@ -79,6 +81,16 @@ func Add(o AddOptions) (Added, error) {
 	if !info.IsDir() {
 		target += TemplateExt
 	}
+	// Checked before anything is replaced: --force on the template itself
+	// would delete what it is about to copy, and a store inside the source,
+	// or the source inside the store, would be copied into itself.
+	canonical, store := lazypath.Canonical(source), lazypath.Canonical(dir)
+	if within(lazypath.Canonical(target), canonical) {
+		return Added{}, fmt.Errorf("cannot add %s: it is the template %q itself", source, name)
+	}
+	if info.IsDir() && (within(store, canonical) || within(canonical, store)) {
+		return Added{}, fmt.Errorf("cannot add %s: it and the template folder %s are inside one another", source, dir)
+	}
 	if _, err := os.Stat(target); err == nil {
 		if !o.Force {
 			return Added{}, fmt.Errorf("template %q already exists at %s, use --force to replace it", name, target)
@@ -92,10 +104,6 @@ func Add(o AddOptions) (Added, error) {
 
 	added := Added{Path: target}
 	if info.IsDir() {
-		// Importing the store into itself would recurse forever.
-		if source == dir || strings.HasPrefix(source+string(os.PathSeparator), dir+string(os.PathSeparator)) {
-			return Added{}, fmt.Errorf("cannot add %s: it is inside the template folder %s", source, dir)
-		}
 		files, substitutions, err := copyTree(source, target, o.Replace)
 		if err != nil {
 			return Added{}, err
@@ -162,6 +170,12 @@ func ShowTemplate(out io.Writer, tpl Template) error {
 		if err != nil {
 			return err
 		}
+		if entry.Name() == ".git" && path != tpl.Path {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
 		if entry.IsDir() {
 			return nil
 		}
@@ -211,11 +225,15 @@ func copyTree(source, target string, replacements []Replacement) (files, substit
 		renamed, renames := applyToPath(replacements, relative)
 		destination := filepath.Join(target, renamed)
 
-		if entry.IsDir() {
-			// A .git folder is repository state, never part of a template.
-			if relative != "." && entry.Name() == ".git" {
+		// A .git folder, or the .git file of a worktree or a submodule, is
+		// repository state, never part of a template.
+		if relative != "." && entry.Name() == ".git" {
+			if entry.IsDir() {
 				return fs.SkipDir
 			}
+			return nil
+		}
+		if entry.IsDir() {
 			substitutions += renames
 			return os.MkdirAll(destination, 0o755)
 		}

@@ -158,3 +158,26 @@ func TestGet_Errors(t *testing.T) {
 		}
 	}
 }
+
+func TestList_ALinkToAFolderOfTheStoreIsAFolderTemplate(t *testing.T) {
+	dir := useStore(t)
+	writeTemplate(t, filepath.Join(dir, ".shared", "go", "main.go.tmpl"), "package main\n")
+	if err := os.Symlink(filepath.Join(dir, ".shared", "go"), filepath.Join(dir, "go-cli")); err != nil {
+		t.Skipf("cannot create a symbolic link here: %v", err)
+	}
+
+	tpl, err := Get("go-cli")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if tpl.Kind != KindDir {
+		t.Fatalf("Get().Kind = %v, want %v", tpl.Kind, KindDir)
+	}
+	dest := t.TempDir()
+	if _, err := Render(RenderOptions{Template: tpl, Dest: dest, Name: "x"}); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "main.go")); err != nil {
+		t.Errorf("Stat(main.go) error = %v, want the linked folder rendered", err)
+	}
+}

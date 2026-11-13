@@ -218,3 +218,53 @@ func TestListTemplates_Empty(t *testing.T) {
 		t.Errorf("ListTemplates() = %q, want nothing on an empty store", buf.String())
 	}
 }
+
+func TestAdd_ForceNeverDestroysTheTemplateItIsGiven(t *testing.T) {
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "doc.tmpl"), "keep\n")
+	writeTemplate(t, filepath.Join(store, "app", "main.go.tmpl"), "package main\n")
+
+	if _, err := Add(AddOptions{Source: filepath.Join(store, "doc.tmpl"), Force: true}); err == nil {
+		t.Error("Add() of a template onto itself error = nil, want a refusal")
+	}
+	if got := readFile(t, filepath.Join(store, "doc.tmpl")); got != "keep\n" {
+		t.Errorf("doc.tmpl = %q, want it untouched", got)
+	}
+	if _, err := Add(AddOptions{Source: filepath.Join(store, "app"), Force: true}); err == nil {
+		t.Error("Add() of a folder template onto itself error = nil, want a refusal")
+	}
+	if got := readFile(t, filepath.Join(store, "app", "main.go.tmpl")); got != "package main\n" {
+		t.Errorf("app/main.go.tmpl = %q, want it untouched", got)
+	}
+}
+
+func TestAdd_RefusesAFolderThatHoldsTheStore(t *testing.T) {
+	home := t.TempDir()
+	useStore(t)
+	TemplateDir = filepath.Join(home, ".local", "share", "templates")
+	writeTemplate(t, filepath.Join(home, "notes.txt"), "x\n")
+
+	if _, err := Add(AddOptions{Source: home, Name: "home"}); err == nil {
+		t.Error("Add() of a folder holding the store error = nil, want a refusal")
+	}
+	if _, err := os.Stat(filepath.Join(TemplateDir, "home")); !os.IsNotExist(err) {
+		t.Errorf("Add() wrote the template anyway: %v", err)
+	}
+}
+
+func TestAdd_LeavesAWorktreesGitFileOut(t *testing.T) {
+	store := useStore(t)
+	source := filepath.Join(t.TempDir(), "project")
+	writeTemplate(t, filepath.Join(source, "main.go"), "package main\n")
+	writeTemplate(t, filepath.Join(source, ".git"), "gitdir: /elsewhere/.git/worktrees/project\n")
+	writeTemplate(t, filepath.Join(source, "vendor", "lib", ".git"), "gitdir: ../../.git/modules/lib\n")
+
+	if _, err := Add(AddOptions{Source: source, Name: "proj"}); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	for _, rel := range []string{".git", filepath.Join("vendor", "lib", ".git")} {
+		if _, err := os.Stat(filepath.Join(store, "proj", rel)); !os.IsNotExist(err) {
+			t.Errorf("Add() copied %s of the source", rel)
+		}
+	}
+}

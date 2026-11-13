@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -361,5 +362,109 @@ func TestLoadManifest_NameMustBeOneSegment(t *testing.T) {
 	}
 	if _, err := LoadManifest(tpl); err == nil {
 		t.Error("LoadManifest() error = nil, want a path to be refused")
+	}
+}
+
+func TestRender_LeavesAGitFileOut(t *testing.T) {
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "app", "main.txt.tmpl"), "x\n")
+	writeTemplate(t, filepath.Join(store, "app", ".git"), "gitdir: /elsewhere\n")
+	writeTemplate(t, filepath.Join(store, "app", "sub", ".git"), "gitdir: /elsewhere\n")
+
+	tpl, err := Get("app")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	dest := t.TempDir()
+	if _, err := Render(RenderOptions{Template: tpl, Dest: dest, Name: "app"}); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	for _, rel := range []string{".git", filepath.Join("sub", ".git")} {
+		if _, err := os.Stat(filepath.Join(dest, rel)); !os.IsNotExist(err) {
+			t.Errorf("Render() wrote %s", rel)
+		}
+	}
+
+	var out bytes.Buffer
+	if err := ShowTemplate(&out, tpl); err != nil {
+		t.Fatalf("ShowTemplate() error = %v", err)
+	}
+	if strings.Contains(out.String(), "gitdir") {
+		t.Errorf("ShowTemplate() = %q, want the .git file left out", out.String())
+	}
+}
+
+func TestRender_ReservesTemplateFilesOnlyAtTheRoot(t *testing.T) {
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "app", DataFile), "x: 1\n")
+	writeTemplate(t, filepath.Join(store, "app", "testdata", "sample.data.json"), "{}\n")
+	writeTemplate(t, filepath.Join(store, "app", "testdata", VarsFile), "fixture\n")
+	writeTemplate(t, filepath.Join(store, "app", "testdata", IgnoreFile), "fixture\n")
+
+	tpl, err := Get("app")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	dest := t.TempDir()
+	if _, err := Render(RenderOptions{Template: tpl, Dest: dest, Name: "app"}); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	for _, rel := range []string{"sample.data.json", VarsFile, IgnoreFile} {
+		if _, err := os.Stat(filepath.Join(dest, "testdata", rel)); err != nil {
+			t.Errorf("Stat(testdata/%s) error = %v, want a nested file rendered", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dest, DataFile)); !os.IsNotExist(err) {
+		t.Errorf("the template's own %s was rendered", DataFile)
+	}
+}
+
+func TestRender_KeepsTheExecutableBitOfATemplateFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes are a POSIX matter")
+	}
+	store := useStore(t)
+	script := filepath.Join(store, "app", "gradlew")
+	writeTemplate(t, script, "#!/bin/sh\n")
+	if err := os.Chmod(script, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	tpl, err := Get("app")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	dest := t.TempDir()
+	if _, err := Render(RenderOptions{Template: tpl, Dest: dest, Name: "app"}); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	info, err := os.Stat(filepath.Join(dest, "gradlew"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		t.Errorf("mode of gradlew = %o, want it runnable like its template", info.Mode().Perm())
+	}
+}
+
+func TestRender_DryRunRunsNoCommandForTheManifestName(t *testing.T) {
+	store := useStore(t)
+	// The name is one path segment, so the command writes where it runs.
+	work := t.TempDir()
+	t.Chdir(work)
+	marker := filepath.Join(work, "ran")
+	writeTemplate(t, filepath.Join(store, "app", VarsFile), "name: '{{ output \"touch\" \"ran\" }}x'\n")
+	writeTemplate(t, filepath.Join(store, "app", "main.txt.tmpl"), "x\n")
+
+	tpl, err := Get("app")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	var out bytes.Buffer
+	if _, err := Render(RenderOptions{Template: tpl, Dest: t.TempDir(), DryRun: true, Out: &out}); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Error("a dry run ran the command in the manifest's name")
 	}
 }

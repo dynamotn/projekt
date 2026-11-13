@@ -3,6 +3,7 @@ package tplutil
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -342,5 +343,83 @@ func TestApply_AppliesEveryRecordedTemplate(t *testing.T) {
 	}
 	if got := readFile(t, filepath.Join(dest, "pipeline.yml")); got != "on: [push, pull_request]\n" {
 		t.Errorf("pipeline.yml = %q", got)
+	}
+}
+
+func TestApply_RefusesARecordThatNamesAFileOutsideTheProject(t *testing.T) {
+	for _, name := range []string{"dotdot", "absolute", "link"} {
+		t.Run(name, func(t *testing.T) {
+			applyStore(t)
+			parent := t.TempDir()
+			dest := filepath.Join(parent, "proj")
+			tpl := create(t, dest, Values{"ci": true})
+			victim := filepath.Join(parent, "victim.txt")
+			writeTemplate(t, victim, "mine\n")
+
+			// The record is committed with the project, so it is somebody
+			// else's text: it can name any path at all.
+			path := map[string]string{
+				"dotdot":   "../victim.txt",
+				"absolute": filepath.ToSlash(victim),
+				"link":     "out/victim.txt",
+			}[name]
+			if name == "link" {
+				mustSymlink(t, parent, filepath.Join(dest, "out"))
+			}
+			record, err := LoadRecord(dest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			record.Renders[0].Files[path] = hashOf([]byte("mine\n"))
+			if err := SaveRecord(dest, record); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := Apply(ApplyOptions{Templates: []Template{tpl}, Dest: dest, Force: true, Prune: true}); err == nil {
+				t.Errorf("Apply() error = nil, want the record entry %q refused", path)
+			}
+			if got := readFile(t, victim); got != "mine\n" {
+				t.Errorf("victim = %q, want it untouched", got)
+			}
+		})
+	}
+}
+
+func TestPlanApply_ASymlinkWithoutAFinalNewlineIsUnchanged(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symbolic links are a POSIX matter")
+	}
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "app", "symlink_current.tmpl"), "{{ .Name }}.sh")
+	dest := t.TempDir()
+	tpl := create(t, dest, nil)
+
+	changes, err := PlanApply(ApplyOptions{Templates: []Template{tpl}, Dest: dest})
+	if err != nil {
+		t.Fatalf("PlanApply() error = %v", err)
+	}
+	if got := statuses(changes)["current"]; got != ChangeUnchanged {
+		t.Errorf("status of current = %v, want unchanged right after it was written", got)
+	}
+}
+
+func TestRemove_SaysWhenAnEmptyFolderCannotBeRemoved(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Getuid() == 0 {
+		t.Skip("needs a folder this user cannot write to")
+	}
+	root := t.TempDir()
+	target := filepath.Join(root, "a", "b", "file.txt")
+	writeTemplate(t, target, "x\n")
+	// b ends up empty, but a will not let it go.
+	if err := os.Chmod(filepath.Join(root, "a"), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Join(root, "a"), 0o755) })
+	if err := os.Chmod(filepath.Join(root, "a", "b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := remove(root, target); err == nil {
+		t.Error("remove() error = nil, want the folder it could not remove reported")
 	}
 }

@@ -275,7 +275,7 @@ func (c *checker) checkRender(manifest Manifest) {
 func (c *checker) defaults(manifest Manifest) Values {
 	values := Values{}
 	base := map[string]any{"Name": "example", "User": "example", "Values": map[string]any{}}
-	prompter := Prompter{Delims: manifest.delims(), Origin: TemplateOrigin(c.tpl)}
+	prompter := Prompter{Delims: manifest.delims(), Origin: TemplateOrigin(c.tpl), noExec: true}
 
 	for _, v := range manifest.Vars {
 		rendered, err := prompter.renderDefault(v, base)

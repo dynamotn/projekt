@@ -1,6 +1,7 @@
 package tplutil
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -181,5 +182,18 @@ func TestCheckAll_CoversTheStore(t *testing.T) {
 	}
 	if total != 1 {
 		t.Errorf("CheckAll() found %d errors, want the one broken template", total)
+	}
+}
+
+func TestCheck_RunsNoCommandInADefault(t *testing.T) {
+	store := useStore(t)
+	marker := filepath.Join(t.TempDir(), "ran")
+	writeTemplate(t, filepath.Join(store, "app", VarsFile),
+		"vars:\n  - name: who\n    default: '{{ output \"touch\" \""+marker+"\" }}me'\n")
+	writeTemplate(t, filepath.Join(store, "app", "main.txt.tmpl"), "{{ .Values.who }}\n")
+
+	checkTemplate(t, "app")
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Error("Check() ran the command in a default")
 	}
 }

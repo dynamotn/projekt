@@ -64,17 +64,30 @@ func ParseReplacements(arguments []string) ([]Replacement, error) {
 }
 
 // apply rewrites one piece of text and reports how many substitutions it made.
+//
+// It is one pass over the original text, trying the literals in order at each
+// position: replacing them one after the other would let a later literal
+// match inside an action an earlier one inserted.
 func apply(replacements []Replacement, text string) (string, int) {
+	var out strings.Builder
 	count := 0
-	for _, replacement := range replacements {
-		occurrences := strings.Count(text, replacement.Literal)
-		if occurrences == 0 {
-			continue
+	for i := 0; i < len(text); {
+		matched := false
+		for _, replacement := range replacements {
+			if strings.HasPrefix(text[i:], replacement.Literal) {
+				out.WriteString(replacement.Action())
+				i += len(replacement.Literal)
+				count++
+				matched = true
+				break
+			}
 		}
-		text = strings.ReplaceAll(text, replacement.Literal, replacement.Action())
-		count += occurrences
+		if !matched {
+			out.WriteByte(text[i])
+			i++
+		}
 	}
-	return text, count
+	return out.String(), count
 }
 
 // isText reports whether content can be rewritten safely.

@@ -54,6 +54,15 @@ func TemplateOrigin(tpl Template) Origin {
 	if dir, err := Dir(); err == nil {
 		paths = append(paths, filepath.Join(dir, PartialsDir))
 	}
+	if !tpl.IsDir() {
+		// A file template's manifest and data sit beside it rather than in
+		// it, and the manifest holds its `after` hooks.
+		paths = append(paths, varsPath(tpl))
+		stem := strings.TrimSuffix(dataPath(tpl), filepath.Ext(DataFile))
+		for _, ext := range dataExtensions {
+			paths = append(paths, stem+ext)
+		}
+	}
 	return Origin{Kind: "template", Name: tpl.Name, Key: tpl.Path, Paths: paths, Hint: "t trust " + tpl.Name}
 }
 
@@ -215,11 +224,33 @@ func (o Origin) fromRemote() bool {
 			dir = filepath.Dir(path)
 		}
 		out, err := cli.Command("git", "-C", dir, "remote").Output()
-		if err == nil && strings.TrimSpace(string(out)) != "" {
+		if err != nil {
+			// git could not say. Outside any repository that is the answer;
+			// inside one — a broken worktree, no git installed — it is not,
+			// and not knowing is no reason to run something.
+			if inRepository(dir) {
+				return true
+			}
+			continue
+		}
+		if strings.TrimSpace(string(out)) != "" {
 			return true
 		}
 	}
 	return false
+}
+
+// inRepository reports whether dir or a folder above it has a .git: the
+// folder of a clone, or the file of a worktree or a submodule.
+func inRepository(dir string) bool {
+	for dir = lazypath.Canonical(dir); ; dir = filepath.Dir(dir) {
+		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
+			return true
+		}
+		if filepath.Dir(dir) == dir {
+			return false
+		}
+	}
 }
 
 // fingerprint hashes everything the origin holds, so that trust given to one
@@ -308,11 +339,22 @@ type trustRecord struct {
 
 // TrustFile is where trust decisions are kept: state, not configuration, so
 // it stays out of the dotfiles the configuration lives in.
+//
+// It is "" when there is no state directory: a path relative to the current
+// folder would let a repository ship a file that trusts its own commands.
 func TrustFile() string {
-	return filepath.Join(lazypath.StateHome(), "projekt", "trust.yaml")
+	state := lazypath.StateHome()
+	if state == "" {
+		return ""
+	}
+	return filepath.Join(state, "projekt", "trust.yaml")
 }
 
 func readTrust() ([]trustRecord, error) {
+	if TrustFile() == "" {
+		// Nothing was ever trusted where it cannot be kept.
+		return nil, nil
+	}
 	data, err := os.ReadFile(TrustFile())
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -360,6 +402,9 @@ func recordTrust(key, sum string) error {
 		return err
 	}
 	path := TrustFile()
+	if path == "" {
+		return errors.New("cannot record trust: there is no state directory (set HOME or XDG_STATE_HOME)")
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}

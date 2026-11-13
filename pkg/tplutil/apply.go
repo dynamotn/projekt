@@ -240,7 +240,16 @@ func planOne(o ApplyOptions, root string, template Template) ([]Change, RenderRe
 		if rendered[path] {
 			continue
 		}
+		// The record is committed with the project, so its paths are text
+		// anybody could have written: one that leaves the project, by name or
+		// through a link on disk, is never read or deleted.
+		if !filepath.IsLocal(filepath.FromSlash(path)) {
+			return nil, RenderRecord{}, fmt.Errorf("%s records %q, which is not a path inside the project", recordPath(root), path)
+		}
 		target := filepath.Join(root, filepath.FromSlash(path))
+		if err := confinedTarget(root, filepath.Dir(target)); err != nil {
+			return nil, RenderRecord{}, err
+		}
 		before, err := currentOf(target, Attributes{})
 		if err != nil {
 			return nil, RenderRecord{}, err
@@ -464,6 +473,11 @@ func remember(record RenderRecord, change Change) {
 // It stops at the project: emptying a project is not the same as removing a
 // file from it, and `t apply --prune` was never asked to do the first.
 func remove(root, target string) error {
+	// The folder, not the file: a link the template wrote may point anywhere,
+	// and it is the link that goes.
+	if err := confinedTarget(root, filepath.Dir(target)); err != nil {
+		return err
+	}
 	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("cannot remove %s: %w", target, err)
 	}
@@ -471,7 +485,10 @@ func remove(root, target string) error {
 	// is somebody's, and Remove refuses it of its own accord.
 	for dir := filepath.Dir(target); dir != root && strings.HasPrefix(dir, root+string(filepath.Separator)); dir = filepath.Dir(dir) {
 		if err := os.Remove(dir); err != nil {
-			return nil
+			if entries, readErr := os.ReadDir(dir); os.IsNotExist(err) || (readErr == nil && len(entries) > 0) {
+				return nil
+			}
+			return fmt.Errorf("cannot remove %s: %w", dir, err)
 		}
 	}
 	return nil

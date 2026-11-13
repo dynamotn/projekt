@@ -65,6 +65,26 @@
 
 ### Fixed
 
+- **t add**: `t add <store>/x.tmpl --force` refuses instead of deleting the
+  template, and a folder that holds the template store, such as `t add ~`, is
+  refused instead of copied into itself
+- **t add**, **t new**: the `.git` file of a worktree or a submodule is left
+  out, as a `.git` folder already was, so a new project no longer points at
+  the original repository
+- **t**: files named like `.vars.yaml`, `.ignore` or `*.data.json` in a
+  subfolder of a folder template are rendered like any other file; only the
+  ones at the template's root describe the template
+- **t**: a template file that is executable, such as `gradlew` or `run.sh`,
+  renders executable
+- **t add --replace**: a replacement no longer rewrites inside an action an
+  earlier one inserted, so `my-service=Values.service` with
+  `service=Values.kind` gives a working template
+- **t**: a `symlink_` file with no final newline no longer shows as a
+  conflict in `t diff` and `t apply` forever
+- **t**: a link in the store to a folder inside the store is listed and
+  rendered as a folder template
+- **t apply --prune**: says when it cannot remove a folder it emptied,
+  instead of nothing
 - **config**: writing the configuration — `folder add`, `folder tag`,
   `folder describe`, prune, `b new` — keeps the keys projekt does not know: a
   key of your own, one from a newer release, a YAML merge key `<<: *anchor`
@@ -153,6 +173,8 @@
 
 ### Performance
 
+- **t diff**, **t apply**: a large file with a small change is compared in a
+  few MB instead of hundreds, the common start and end being matched first
 - **folder sync --pull**: a repository is fetched once, and its working trees
   fast-forwarded from that fetch, instead of fetched again for every tree
 - **pj**, completion: the workspace regex is compiled once per pattern per
@@ -164,6 +186,21 @@
 
 ### Security
 
+- **t apply**: `--force` and `--prune` no longer delete, and `t diff` no
+  longer reads, a file outside the project that a committed
+  `.projekt/template.yaml` names through `..`, an absolute path or a link; the
+  apply stops and names the entry
+- **t trust**: trusting a file template covers the `x.vars.yaml` and
+  `x.data.yaml` beside it, so a `t sync` that adds an `after:` hook there asks
+  again before it runs
+- **t**, **b**: a template in a repository git cannot read — a worktree whose
+  main checkout is gone, a `safe.directory` refusal, git missing — is treated
+  as coming from a remote and asks before running a command, instead of being
+  trusted as your own
+- **t**, **b**: with no home directory, trust is neither read nor written,
+  instead of going to `projekt/trust.yaml` under the current folder
+- **t check**, **t new --dry-run**: the `output` commands in a manifest's
+  defaults and in its `name:` are no longer run
 - **config trust**: `projekt config trust` accepts any spelling of an
   included file — relative, through a link — and trusts the file its hooks
   are checked against; a path the configuration does not include is refused.
