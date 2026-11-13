@@ -275,3 +275,20 @@ func TestTrust_WithoutAStateDirectoryNothingIsTrusted(t *testing.T) {
 		t.Error("Trust() error = nil, want a refusal to record trust nowhere")
 	}
 }
+
+func TestTrust_AnInheritedGitDirDoesNotVouchForAStore(t *testing.T) {
+	store := useClonedStore(t)
+	answerTrust(t, false)
+	writeTemplate(t, filepath.Join(store, "conf.tmpl"), `{{ output "echo" "hi" }}`)
+
+	// Run from a git hook of a repository of your own, with no remote.
+	local := t.TempDir()
+	if out, err := exec.Command("git", "-C", local, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	t.Setenv("GIT_DIR", filepath.Join(local, ".git"))
+
+	if err := renderConf(t); err == nil {
+		t.Error("Render() error = nil, want the cloned store still asked about")
+	}
+}

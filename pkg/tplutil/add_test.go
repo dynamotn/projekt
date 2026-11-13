@@ -236,6 +236,14 @@ func TestAdd_ForceNeverDestroysTheTemplateItIsGiven(t *testing.T) {
 	if got := readFile(t, filepath.Join(store, "app", "main.go.tmpl")); got != "package main\n" {
 		t.Errorf("app/main.go.tmpl = %q, want it untouched", got)
 	}
+	// A file of a folder template, added under the name that folder has.
+	writeTemplate(t, filepath.Join(store, "lib.tmpl", "x"), "inner\n")
+	if _, err := Add(AddOptions{Source: filepath.Join(store, "lib.tmpl", "x"), Name: "lib", Force: true}); err == nil {
+		t.Error("Add() of a file onto the folder holding it error = nil, want a refusal")
+	}
+	if got := readFile(t, filepath.Join(store, "lib.tmpl", "x")); got != "inner\n" {
+		t.Errorf("lib.tmpl/x = %q, want it untouched", got)
+	}
 }
 
 func TestAdd_RefusesAFolderThatHoldsTheStore(t *testing.T) {

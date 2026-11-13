@@ -216,3 +216,39 @@ func TestDiscoverRemoteRepos_SkipsNamesThatLeaveTheFolder(t *testing.T) {
 		t.Errorf("Repos = %+v, want %+v", got.Repos, want)
 	}
 }
+
+func TestRemoteToken_EnterpriseNeedsItsHostNamed(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("GH_ENTERPRISE_TOKEN", "corp")
+	t.Setenv("GH_HOST", "")
+	// Any server an included file declares would otherwise receive it.
+	if got := remoteToken(lazypath.GitServer{Type: "github", HTTPS: "https://evil.example"}); got != "" {
+		t.Errorf("remoteToken() = %q, want nothing without GH_HOST naming the server", got)
+	}
+}
+
+func TestSameOriginRedirect(t *testing.T) {
+	from, _ := http.NewRequest(http.MethodGet, "https://lab.example/api/v4/groups/x", nil)
+	for target, ok := range map[string]bool{
+		"https://lab.example/api/v4/groups/y": true,
+		"http://lab.example/api/v4/groups/x":  false,
+		"https://evil.example/collect":        false,
+		"https://sub.lab.example/x":           false,
+	} {
+		to, _ := http.NewRequest(http.MethodGet, target, nil)
+		if err := sameOriginRedirect(to, []*http.Request{from}); (err == nil) != ok {
+			t.Errorf("sameOriginRedirect(%s) error = %v, want followed %v", target, err, ok)
+		}
+	}
+}
+
+func TestSafeRepoName(t *testing.T) {
+	for name, ok := range map[string]bool{
+		"api": true, "sub/web": true, "..": false, "a/../b": false, "/etc": false,
+		".git": false, "sub/.GIT": false, "a\nb": false, "": false, "a//b": false,
+	} {
+		if got := safeRepoName(name); got != ok {
+			t.Errorf("safeRepoName(%q) = %v, want %v", name, got, ok)
+		}
+	}
+}

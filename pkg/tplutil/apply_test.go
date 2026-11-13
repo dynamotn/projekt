@@ -423,3 +423,86 @@ func TestRemove_SaysWhenAnEmptyFolderCannotBeRemoved(t *testing.T) {
 		t.Error("remove() error = nil, want the folder it could not remove reported")
 	}
 }
+
+func TestApply_ALinkedBaseCannotCarryAPruneOutside(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symbolic links are a POSIX matter")
+	}
+	applyStore(t)
+	dest := filepath.Join(t.TempDir(), "proj")
+	tpl := create(t, dest, Values{"ci": true})
+
+	// A committed `.projekt/base` link and a record entry whose hash matches
+	// the project's copy: pruning that entry would remove its base too.
+	victim := t.TempDir()
+	writeTemplate(t, filepath.Join(victim, ".bashrc"), "mine\n")
+	writeTemplate(t, filepath.Join(dest, ".bashrc"), "mine\n")
+	base := filepath.Join(dest, RecordDir, BaseDir)
+	if err := os.RemoveAll(base); err != nil {
+		t.Fatal(err)
+	}
+	mustSymlink(t, victim, base)
+	record, err := LoadRecord(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.Renders[0].Files[".bashrc"] = hashOf([]byte("mine\n"))
+	if err := SaveRecord(dest, record); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _ = Apply(ApplyOptions{Templates: []Template{tpl}, Dest: dest, Force: true, Prune: true})
+	if _, err := os.Stat(filepath.Join(victim, ".bashrc")); err != nil {
+		t.Errorf("the file behind the linked base is gone: %v", err)
+	}
+}
+
+func TestPlanApply_ARecordedLinkIsNotFollowed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symbolic links are a POSIX matter")
+	}
+	applyStore(t)
+	dest := filepath.Join(t.TempDir(), "proj")
+	tpl := create(t, dest, Values{"ci": true})
+	secret := filepath.Join(t.TempDir(), "id_ed25519")
+	writeTemplate(t, secret, "TOPSECRET\n")
+	mustSymlink(t, secret, filepath.Join(dest, "leak"))
+	record, err := LoadRecord(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.Renders[0].Files["leak"] = hashOf([]byte("x\n"))
+	if err := SaveRecord(dest, record); err != nil {
+		t.Fatal(err)
+	}
+
+	changes, err := PlanApply(ApplyOptions{Templates: []Template{tpl}, Dest: dest})
+	if err != nil {
+		t.Fatalf("PlanApply() error = %v", err)
+	}
+	for _, change := range changes {
+		if strings.Contains(string(change.Before), "TOPSECRET") {
+			t.Errorf("%s shows the file behind the link: %q", change.Path, change.Before)
+		}
+	}
+}
+
+func TestSaveRecord_NeverWritesThroughALink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symbolic links are a POSIX matter")
+	}
+	project := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "elsewhere.yaml")
+	if err := os.MkdirAll(filepath.Join(project, RecordDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Dangling: it resolves to its own name, which is inside the project.
+	mustSymlink(t, outside, recordPath(project))
+
+	if err := SaveRecord(project, Record{}); err == nil {
+		t.Error("SaveRecord() error = nil, want a linked record refused")
+	}
+	if _, err := os.Stat(outside); !os.IsNotExist(err) {
+		t.Errorf("SaveRecord() wrote %s through the link", outside)
+	}
+}
