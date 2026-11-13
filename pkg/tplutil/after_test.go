@@ -179,3 +179,16 @@ func TestRunAfter_RunsWithShAndPassesValuesAsWords(t *testing.T) {
 		t.Error("a value ran as a command")
 	}
 }
+
+func TestShquoteAndValueEnv_Edges(t *testing.T) {
+	if got := shquote(nil); got != "''" {
+		t.Errorf("shquote(nil) = %q, want an empty word", got)
+	}
+	if got := shquote(`it's`); got != `'it'\''s'` {
+		t.Errorf("shquote(it's) = %q", got)
+	}
+	env := ValueEnv(Values{"bad": "a\x00b", "ok": "fine"})
+	if len(env) != 1 || env[0] != "PROJEKT_VALUE_OK=fine" {
+		t.Errorf("ValueEnv() = %q, want the NUL value left out and the rest kept", env)
+	}
+}

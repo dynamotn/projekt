@@ -422,3 +422,17 @@ func TestSaveConfig_EnvironmentOverrideSurvivesAWrite(t *testing.T) {
 		t.Errorf("the override was written to the file:\n%s", data)
 	}
 }
+
+func TestSaveConfig_NothingToWriteStillCatchesUp(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	loadedConfig(t, path, commentedConfig)
+
+	// Somebody else removed every folder while this process ran.
+	if err := os.WriteFile(path, []byte("folders: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_ = RemoveFromConfig("/work/api")
+	if got := OwnConfig().Folders; len(got) != 0 {
+		t.Errorf("in-memory folders = %v, want what the file now says", got)
+	}
+}

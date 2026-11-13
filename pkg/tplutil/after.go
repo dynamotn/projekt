@@ -142,6 +142,11 @@ func ValueEnv(values Values) []string {
 			}
 			text = string(data)
 		}
+		if strings.ContainsRune(text, 0) {
+			// The environment cannot hold it, and one such value would stop
+			// every hook, the ones that never use it too.
+			continue
+		}
 		env = append(env, "PROJEKT_VALUE_"+key+"="+text)
 	}
 	return env

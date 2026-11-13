@@ -38,10 +38,10 @@ var errNoChange = errors.New("nothing to change")
 // written exactly as it was read. A command that adds one folder produces a
 // diff of one folder.
 func updateConfig(change func(*Config) error, sections ...string) error {
+	unmarshalConfig()
 	if loadErr != nil {
 		return fmt.Errorf("not writing the configuration: %w", loadErr)
 	}
-	unmarshalConfig()
 	path := ConfigFile()
 	if path == "" {
 		return errors.New("no config file to write")
@@ -78,6 +78,9 @@ func updateConfig(change func(*Config) error, sections ...string) error {
 
 	if err := change(&next); err != nil {
 		if errors.Is(err, errNoChange) {
+			// The file already says it, maybe because somebody else wrote
+			// it: catch up with what it says.
+			reloadConfig(next)
 			return nil
 		}
 		return err
@@ -91,20 +94,24 @@ func updateConfig(change func(*Config) error, sections ...string) error {
 		return err
 	}
 
-	// Read back the way a command starts, so a later read in this process
-	// sees what was just written with the PROJEKT_ overrides still on top;
-	// next is the file alone, which is what had to be written.
+	reloadConfig(next)
+	return nil
+}
+
+// reloadConfig reads the file back the way a command starts, so a later read
+// in this process sees what is on disk with the PROJEKT_ overrides still on
+// top. written is the file alone, used when there is nothing to read back.
+func reloadConfig(written Config) {
 	if err := viper.ReadInConfig(); err != nil || pinned {
 		if err != nil {
-			cli.Debug("Cannot re-read %s: %v", path, err)
+			cli.Debug("Cannot re-read %s: %v", ConfigFile(), err)
 		}
-		c = next
+		c = written
 		refreshEffective()
-		return nil
+		return
 	}
 	c, loaded = Config{}, false
 	unmarshalConfig()
-	return nil
 }
 
 // lockConfig takes an exclusive lock on the configuration file at path,

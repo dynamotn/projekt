@@ -356,5 +356,9 @@ func (e *engine) read(v Var, fallback string) (any, error) {
 // is shell code, and `{{ .Values.module | shquote }}` keeps a value from
 // becoming part of it. sprig's squote only wraps, so a quote inside escapes.
 func shquote(value any) string {
+	if value == nil {
+		// An unset value is no word at all, not the word "<nil>".
+		return "''"
+	}
 	return "'" + strings.ReplaceAll(fmt.Sprint(value), "'", `'\''`) + "'"
 }
