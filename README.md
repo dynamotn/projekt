@@ -609,11 +609,18 @@ tool you name. Set `ai.command` in your configuration (for example
 projekt folder describe billing --generate               # draft, show, ask
 projekt folder describe billing --generate --yes         # keep without asking
 projekt folder describe billing --generate --show-prompt # print what is sent
+t add ./billing --suggest                                # which literals become values?
+t add ./billing --suggest --yes                          # ... and add without asking
 ```
 
 The prompt holds the short name, a list of the project's paths and the start
-of its README. It never holds a secret file, a git-ignored file, a big file
-or a link that leaves the project, and nothing is written without a yes. The
+of its README; for `t add --suggest` it holds the paths and the start of the
+manifests (`go.mod`, `package.json` and the like) instead. `--suggest` keeps
+only the pairs whose literal really occurs there and whose key is a plain
+name, prints them with the matching `--replace` line, and adds the template
+on a yes or with `--yes`. A prompt never holds a secret file, a git-ignored
+file, a big file or a link that leaves the project, and nothing is written
+without a yes. The
 answer is only text: projekt never runs it. The AI tool itself can still read
 whatever its own permissions allow, so a print-only invocation is the safe
 choice.

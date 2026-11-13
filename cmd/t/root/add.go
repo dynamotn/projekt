@@ -1,9 +1,14 @@
 package root
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
@@ -28,10 +33,16 @@ Examples:
   t add ./myapp --name go-cli \
     --replace myapp=Name \
     --replace example.com/myapp=Values.module \
-    --replace 'Jane Doe=Values.author'`
+    --replace 'Jane Doe=Values.author'
+
+--suggest asks the AI command you name in ai.command (or PROJEKT_AI) which
+literals of the project should become values. Each pair is checked, printed
+with the matching --replace line, and the template is added only on a yes at
+a terminal or with --yes. --show-prompt prints what would be sent.`
 
 func NewTemplateAddCmd(out io.Writer) *cobra.Command {
 	var replace []string
+	var suggest, yes, showPrompt bool
 	o := tplutil.AddOptions{}
 
 	cmd := &cobra.Command{
@@ -41,9 +52,39 @@ func NewTemplateAddCmd(out io.Writer) *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 		Aliases: []string{"a", "import"},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if showPrompt && !suggest {
+				return errors.New("--show-prompt needs --suggest")
+			}
 			replacements, err := tplutil.ParseReplacements(replace)
 			if err != nil {
 				return err
+			}
+			if suggest {
+				suggested, err := tplutil.SuggestReplacements(args[0], tplutil.SuggestOptions{
+					ShowPrompt: showPrompt, Yes: yes, In: cmd.InOrStdin(), Out: out, Err: cmd.ErrOrStderr(),
+				})
+				if err != nil || showPrompt || len(suggested) == 0 {
+					return err
+				}
+				// What was typed wins over what was suggested for one literal.
+				given := map[string]bool{}
+				for _, r := range replacements {
+					given[r.Literal] = true
+				}
+				for _, r := range suggested {
+					if !given[r.Literal] {
+						replace = append(replace, r.Literal+"="+r.Expr)
+					}
+				}
+				if replacements, err = tplutil.ParseReplacements(replace); err != nil {
+					return err
+				}
+				if !yes {
+					// Without a person to ask, the suggestion is only shown.
+					if ok, err := confirm(cmd, "Add the template with these replacements? [y/N] "); err != nil || !ok {
+						return err
+					}
+				}
 			}
 			o.Source, o.Replace = args[0], replacements
 
@@ -72,5 +113,25 @@ func NewTemplateAddCmd(out io.Writer) *cobra.Command {
 	f.StringArrayVarP(&replace, "replace", "r", nil, "Turn a literal into a template expression, like -r myapp=Name (repeatable)")
 	f.BoolVarP(&o.Force, "force", "F", false, "Overwrite a template that already exists")
 
+	f.BoolVar(&suggest, "suggest", false, "Ask the AI command which literals should become values, then add on a yes")
+	f.BoolVarP(&yes, "yes", "y", false, "With --suggest, add without asking")
+	f.BoolVar(&showPrompt, "show-prompt", false, "With --suggest, print the prompt and stop")
+
 	return cmd
+}
+
+// confirm asks a yes/no question, and answers no when the input is not a
+// terminal.
+func confirm(cmd *cobra.Command, question string) (bool, error) {
+	f, ok := cmd.InOrStdin().(*os.File)
+	if !ok || !(isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())) {
+		return false, nil
+	}
+	fmt.Fprint(cmd.ErrOrStderr(), question)
+	line, err := bufio.NewReader(f).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+	reply := strings.ToLower(strings.TrimSpace(line))
+	return reply == "y" || reply == "yes", nil
 }

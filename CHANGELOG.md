@@ -4,6 +4,10 @@
 
 ### Added
 
+- **t add**: `--suggest` asks the AI command which literals of a project
+  should become values, checks that each one really occurs and each key is a
+  plain name, prints them with the matching `--replace` line, and adds the
+  template only on a yes or with `--yes`
 - **folder describe**: `--generate` drafts the description with the AI
   command you name in `ai.command` (or `PROJEKT_AI`), shows it, and keeps it
   on a yes or with `--yes`; `--show-prompt` prints what would be sent.

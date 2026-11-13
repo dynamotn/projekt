@@ -240,3 +240,49 @@ func TestRootCmd_BrokenConfigDoesNotStopT(t *testing.T) {
 		t.Errorf("t list with a broken config: %v", err)
 	}
 }
+
+// suggestFixture is a project that says "billing" and a fake AI that names it.
+func suggestFixture(t *testing.T) (src, store string) {
+	t.Helper()
+	src = filepath.Join(t.TempDir(), "billing")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("# billing\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ai := filepath.Join(t.TempDir(), "ai.sh")
+	if err := os.WriteFile(ai, []byte("#!/bin/sh\ncat >/dev/null\necho 'billing: name'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PROJEKT_AI", ai)
+	return src, t.TempDir()
+}
+
+func TestAddCmd_SuggestWritesNothingWithoutYes(t *testing.T) {
+	src, store := suggestFixture(t)
+	if err := runT(t, "--template-dir", store, "add", src, "--suggest"); err != nil {
+		t.Fatalf("t add --suggest: %v", err)
+	}
+	if entries, _ := os.ReadDir(store); len(entries) != 0 {
+		t.Errorf("the store holds %v, want nothing", entries)
+	}
+}
+
+func TestAddCmd_SuggestWithYesAdds(t *testing.T) {
+	src, store := suggestFixture(t)
+	if err := runT(t, "--template-dir", store, "add", src, "--suggest", "--yes"); err != nil {
+		t.Fatalf("t add --suggest --yes: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(store, "billing", "README.md"))
+	if err != nil || !strings.Contains(string(got), "{{ .Values.name }}") {
+		t.Errorf("README = %q, %v, want {{ .Values.name }}", got, err)
+	}
+}
+
+func TestAddCmd_ShowPromptNeedsSuggest(t *testing.T) {
+	src, store := suggestFixture(t)
+	if err := runT(t, "--template-dir", store, "add", src, "--show-prompt"); err == nil {
+		t.Error("--show-prompt without --suggest = nil, want an error")
+	}
+}
