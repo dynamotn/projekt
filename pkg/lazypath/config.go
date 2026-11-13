@@ -72,6 +72,15 @@ type Config struct {
 	// Hooks attach enter and leave lines to projects by tag, on top of what a
 	// folder entry declares for itself.
 	Hooks []HookRule `yaml:"hooks,omitempty" mapstructure:"hooks"`
+	// AI names the owner's AI command. It is read from this file only: an
+	// included file must never choose a program that runs.
+	AI AIConfig `yaml:"ai,omitempty" mapstructure:"ai"`
+}
+
+// AIConfig is the command projekt hands a prompt to, and how long it waits.
+type AIConfig struct {
+	Command string `yaml:"command,omitempty" mapstructure:"command"`
+	Timeout string `yaml:"timeout,omitempty" mapstructure:"timeout"` // a Go duration
 }
 
 type GitServer struct {
@@ -102,6 +111,14 @@ func unmarshalConfig() {
 			cli.Error("%v", loadErr)
 		}
 		c = Config{}
+	} else if os.Getenv("PROJEKT_AI") != "" {
+		// viper reads PROJEKT_AI as the whole ai section, which would hide
+		// ai.timeout; the section is the file's own.
+		if data, err := os.ReadFile(ConfigFile()); err == nil {
+			if own, err := decodeConfig(data); err == nil {
+				c.AI = own.AI
+			}
+		}
 	}
 
 	// What commands read is this file plus what it includes; what they write

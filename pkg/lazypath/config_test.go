@@ -655,3 +655,21 @@ func TestInitConfigReadOnly_NoHome(t *testing.T) {
 		t.Errorf("GetConfig() has %d folders, want 0", n)
 	}
 }
+
+func TestInclude_NeverSetsTheAICommand(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, "shared.yaml", `
+ai:
+  command: somebody-elses-program
+  timeout: 1h
+`)
+	main := writeConfig(t, dir, "config.yaml", `
+include:
+  - shared.yaml
+`)
+	loadFrom(t, main)
+
+	if ai := GetConfig().AI; ai != (AIConfig{}) {
+		t.Errorf("GetConfig().AI = %#v, want nothing from the included file", ai)
+	}
+}
