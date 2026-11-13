@@ -23,6 +23,9 @@ func basePath(project, rel string) string {
 // loadBase returns what the template last rendered for a path, or nil when
 // the project does not remember — one created before there was a base.
 func loadBase(project, rel string) ([]byte, error) {
+	if err := confinedFile(project, basePath(project, rel)); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(basePath(project, rel))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -36,7 +39,7 @@ func loadBase(project, rel string) ([]byte, error) {
 // saveBase remembers what the template rendered for a path.
 func saveBase(project, rel string, content []byte) error {
 	target := basePath(project, rel)
-	if err := confinedTarget(project, target); err != nil {
+	if err := confinedFile(project, target); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
@@ -62,7 +65,14 @@ func ensureBase(project, rel string, content []byte) error {
 }
 
 // removeBase forgets a path the template no longer writes.
+//
+// remove confines to the folder it is given, which is the base folder here:
+// that folder must itself be checked against the project, or a committed
+// `.projekt/base` link would carry the removal anywhere.
 func removeBase(project, rel string) error {
 	root := filepath.Join(project, RecordDir, BaseDir)
+	if err := confinedTarget(project, filepath.Dir(basePath(project, rel))); err != nil {
+		return err
+	}
 	return remove(root, basePath(project, rel))
 }

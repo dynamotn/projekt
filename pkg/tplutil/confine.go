@@ -68,3 +68,17 @@ func confinedTarget(root, target string) error {
 	}
 	return nil
 }
+
+// confinedFile reports whether a file projekt keeps for itself — a record, a
+// base, a manifest — may be read or written at path: its folder must stay
+// inside root and the file must not be a link, since a dangling one resolves
+// to its own name and would pass confinedTarget while writing elsewhere.
+func confinedFile(root, path string) error {
+	if err := confinedTarget(root, filepath.Dir(path)); err != nil {
+		return err
+	}
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to use %s: it is a symbolic link", path)
+	}
+	return nil
+}

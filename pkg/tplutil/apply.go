@@ -250,7 +250,13 @@ func planOne(o ApplyOptions, root string, template Template) ([]Change, RenderRe
 		if err := confinedTarget(root, filepath.Dir(target)); err != nil {
 			return nil, RenderRecord{}, err
 		}
-		before, err := currentOf(target, Attributes{})
+		// A link is read as the link, never followed: its target may be any
+		// file of this machine, and only the link itself is ever removed.
+		var attrs Attributes
+		if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			attrs.Symlink = true
+		}
+		before, err := currentOf(target, attrs)
 		if err != nil {
 			return nil, RenderRecord{}, err
 		}

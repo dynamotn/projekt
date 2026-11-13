@@ -73,7 +73,7 @@ func DiscoverRemoteRepos(servers []lazypath.GitServer, o RemoteDiscoverOptions) 
 
 	client := o.Client
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = &http.Client{Timeout: 30 * time.Second, CheckRedirect: sameOriginRedirect}
 	}
 	token := o.Token
 	if token == "" {
@@ -179,11 +179,11 @@ func nameFilters(include, exclude string) (in, out *regexp.Regexp, err error) {
 // safeRepoName reports whether a name from the server stays a relative path
 // of plain segments, with no way out of the folder it is joined to.
 func safeRepoName(name string) bool {
-	if name == "" || strings.HasPrefix(name, "/") || strings.Contains(name, "\\") {
+	if name == "" || strings.HasPrefix(name, "/") || strings.ContainsAny(name, "\\\x00\n\r\t") {
 		return false
 	}
 	for _, part := range strings.Split(name, "/") {
-		if part == "" || part == "." || part == ".." {
+		if part == "" || part == "." || part == ".." || strings.EqualFold(part, ".git") {
 			return false
 		}
 	}
@@ -206,16 +206,19 @@ func remoteToken(server lazypath.GitServer) string {
 	host := apiHost(server)
 	switch strings.ToLower(server.Type) {
 	case "gitlab":
-		if host == "gitlab.com" || host == gitlabHost() {
+		if host == "gitlab.com" || host == hostOf(os.Getenv("GITLAB_HOST")) {
 			if value := firstEnv("GITLAB_TOKEN", "GL_TOKEN"); value != "" {
 				return value
 			}
 		}
 		return toolOutput("glab", "config", "get", "token", "--host", host)
 	case "github":
-		names := []string{"GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"}
-		if host == "github.com" {
+		var names []string
+		switch host {
+		case "github.com":
 			names = []string{"GITHUB_TOKEN", "GH_TOKEN"}
+		case hostOf(os.Getenv("GH_HOST")):
+			names = []string{"GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"}
 		}
 		if value := firstEnv(names...); value != "" {
 			return value
@@ -225,13 +228,29 @@ func remoteToken(server lazypath.GitServer) string {
 	return ""
 }
 
-// gitlabHost is the host GITLAB_HOST names, which may be a URL or a bare host.
-func gitlabHost() string {
-	value := strings.TrimSpace(os.Getenv("GITLAB_HOST"))
+// hostOf is the host a GITLAB_HOST or GH_HOST names, as a URL or a bare host.
+// Unset names no host, so it matches none.
+func hostOf(value string) string {
+	value = strings.TrimSpace(value)
 	if parsed, err := url.Parse(value); err == nil && parsed.Host != "" {
 		return parsed.Hostname()
 	}
+	if value == "" {
+		return "\x00"
+	}
 	return value
+}
+
+// sameOriginRedirect follows a redirect only to the same scheme and host, so
+// the token on the request never reaches another server or plain http.
+func sameOriginRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return fmt.Errorf("stopped after %d redirects", len(via))
+	}
+	if first := via[0].URL; req.URL.Scheme != first.Scheme || req.URL.Host != first.Host {
+		return fmt.Errorf("refusing a redirect from %s to %s", first.Host, req.URL.Redacted())
+	}
+	return nil
 }
 
 func firstEnv(names ...string) string {

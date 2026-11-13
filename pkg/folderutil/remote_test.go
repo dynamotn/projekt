@@ -166,6 +166,7 @@ func TestRemoteToken_StaysWithItsHost(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("GITHUB_TOKEN", "public")
 	t.Setenv("GH_ENTERPRISE_TOKEN", "corp")
+	t.Setenv("GH_HOST", "git.corp.example")
 	t.Setenv("GITLAB_TOKEN", "lab")
 	t.Setenv("GITLAB_HOST", "https://lab.corp.example")
 

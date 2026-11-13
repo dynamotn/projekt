@@ -81,6 +81,9 @@ func recordPath(project string) string {
 // there was one, and comes back empty rather than as an error.
 func LoadRecord(project string) (Record, error) {
 	path := recordPath(project)
+	if err := confinedFile(project, path); err != nil {
+		return Record{}, err
+	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -116,6 +119,9 @@ func SaveRecord(project string, record Record) error {
 	}
 
 	path := recordPath(project)
+	if err := confinedFile(project, path); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("cannot create %s: %w", filepath.Dir(path), err)
 	}

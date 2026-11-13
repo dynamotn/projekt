@@ -223,7 +223,9 @@ func (o Origin) fromRemote() bool {
 		if !info.IsDir() {
 			dir = filepath.Dir(path)
 		}
-		out, err := cli.Command("git", "-C", dir, "remote").Output()
+		cmd := cli.Command("git", "-C", dir, "remote")
+		cmd.Env = withoutRepoEnv(os.Environ())
+		out, err := cmd.Output()
 		if err != nil {
 			// git could not say. Outside any repository that is the answer;
 			// inside one — a broken worktree, no git installed — it is not,
@@ -443,4 +445,23 @@ func askOnTerminal(origin Origin, command string) (bool, error) {
 	}
 	answer := strings.ToLower(strings.TrimSpace(line))
 	return answer == "y" || answer == "yes", nil
+}
+
+// withoutRepoEnv drops the variables that point git at a repository other
+// than the folder it is run in. Inherited from a git hook or alias, GIT_DIR
+// would answer for that repository, and one with no remote would vouch for a
+// cloned store.
+func withoutRepoEnv(env []string) []string {
+	kept := make([]string, 0, len(env))
+	for _, entry := range env {
+		name, _, _ := strings.Cut(entry, "=")
+		switch name {
+		case "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+			"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+			"GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM", "GIT_NAMESPACE":
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return kept
 }

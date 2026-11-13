@@ -186,6 +186,14 @@
 
 ### Security
 
+- **t**, **b**: the record, the base copies under `.projekt/base` and a
+  template's manifest are never read or written through a link, and a
+  record entry that is a link is read as the link; a committed
+  `.projekt/base` link can no longer carry `t apply --prune` outside the
+  project. An inherited `GIT_DIR` no longer decides whether a store is yours
+- **folder add --from-remote**: `GH_ENTERPRISE_TOKEN` goes only to the
+  `GH_HOST` it names, a redirect to another host or to plain http is refused,
+  and a repository name holding a `.git` segment is skipped
 - **t apply**: `--force` and `--prune` no longer delete, and `t diff` no
   longer reads, a file outside the project that a committed
   `.projekt/template.yaml` names through `..`, an absolute path or a link; the

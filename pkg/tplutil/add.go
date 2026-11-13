@@ -126,6 +126,9 @@ func Add(o AddOptions) (Added, error) {
 		if !info.IsDir() {
 			path = filepath.Join(dir, name+VarsFile)
 		}
+		if err := confinedFile(dir, path); err != nil {
+			return Added{}, err
+		}
 		if err := writeManifest(path, manifest, o.Force); err != nil {
 			return Added{}, err
 		}
