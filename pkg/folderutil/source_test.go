@@ -64,8 +64,12 @@ func TestIsRepoRoot(t *testing.T) {
 	if IsRepoRoot(nested) {
 		t.Error("IsRepoRoot(nested) = true, want a folder inside a repository to be told apart from one")
 	}
-	if !IsGitRepo(nested) {
-		t.Error("IsGitRepo(nested) = false, want it still to be inside a repository")
+	// Acting on a folder inside a checkout must not reach the checkout.
+	if err := InitRepo(nested, "main"); err != nil {
+		t.Fatalf("InitRepo(nested) error = %v", err)
+	}
+	if !IsRepoRoot(nested) {
+		t.Error("InitRepo(nested) left it inside the outer repository, want a repository of its own")
 	}
 	if IsRepoRoot(t.TempDir()) {
 		t.Error("IsRepoRoot(plain folder) = true")

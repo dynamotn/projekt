@@ -636,8 +636,8 @@ func TestRunSyncJobs_ExistingReposRunConcurrently(t *testing.T) {
 	for i := range 12 {
 		name := fmt.Sprintf("repo%d", i)
 		repoPath := filepath.Join(tempDir, name)
-		if err := os.MkdirAll(repoPath, 0o755); err != nil {
-			t.Fatalf("failed to create %s: %v", repoPath, err)
+		if out, err := exec.Command("git", "init", "-q", repoPath).CombinedOutput(); err != nil {
+			t.Fatalf("git init %s: %v\n%s", repoPath, err, out)
 		}
 		jobs = append(jobs, syncJob{
 			group:    "test/group",
@@ -1073,4 +1073,20 @@ func gitOutputForTest(repoPath string, args ...string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func TestCloneIfMissing_RefusesAFolderInsideAnotherRepository(t *testing.T) {
+	outer := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", outer).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	inner := filepath.Join(outer, "inner")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Syncing it would set remotes and add worktrees on the outer repository.
+	if _, err := cloneIfMissing(syncJob{repo: lazypath.GitRepo{Name: "inner"}, repoPath: inner}, false); err == nil {
+		t.Error("cloneIfMissing() error = nil, want a folder that is not a repository refused")
+	}
 }

@@ -95,6 +95,12 @@
   the top of the changelog; `make lint` fails on unformatted files
 - **t**, **b**, **folder**: a user name and password in a git URL are hidden
   in every message that prints the URL
+- **folder**, **b**: a folder that merely sits inside another repository is
+  no longer taken for a repository. `b new` initialises the new project
+  instead of rewriting the outer repository's `origin`; `folder sync` refuses
+  an existing folder that is not a repository instead of adding remotes,
+  worktrees and pulls to the one around it; `folder status`, `folder archive`
+  and `worktree prune` stop reporting on or pruning the outer repository
 
 ### Performance
 

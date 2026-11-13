@@ -85,7 +85,7 @@ func PruneWorktrees(out io.Writer, o PruneWorktreeOptions) error {
 
 	var pruned int
 	for _, path := range sortedPaths(projects) {
-		if !IsGitRepo(path) {
+		if !IsRepoRoot(path) {
 			continue
 		}
 		if err := runGit(path, "worktree", "prune"); err != nil {

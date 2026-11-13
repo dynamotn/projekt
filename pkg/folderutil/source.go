@@ -150,7 +150,7 @@ func CloneWithFallback(primary, fallback, ref, target string) error {
 
 // InitRepo makes a folder a git repository when it is not one yet.
 func InitRepo(path, branch string) error {
-	if IsGitRepo(path) {
+	if IsRepoRoot(path) {
 		return nil
 	}
 

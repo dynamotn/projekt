@@ -248,6 +248,11 @@ func cloneIfMissing(job syncJob, dryRun bool) (existed bool, err error) {
 			return true, nil
 		}
 
+		if !IsRepoRoot(job.repoPath) {
+			// Remotes, worktrees and pulls would land on whatever repository
+			// encloses this folder.
+			return true, fmt.Errorf("%s exists but is not a git repository", job.repoPath)
+		}
 		cli.Debug("Repository %s already exists at %s", job.repo.Name, job.repoPath)
 		return true, nil
 	}

@@ -141,7 +141,7 @@ func moveFolder(from, to string) error {
 // Archiving a project with work nobody else has is the one mistake this
 // command can make that cannot be undone by moving the folder back.
 func unfinished(path string) string {
-	if !IsGitRepo(path) {
+	if !IsRepoRoot(path) {
 		// Not a repository: there is no way to tell what is finished, so it is
 		// not this command's place to guess.
 		return ""

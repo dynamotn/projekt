@@ -67,7 +67,7 @@ func AddWorktree(out io.Writer, o AddWorktreeOptions) (lazypath.Worktree, error)
 		// itself derived, and `git worktree add` wants the repository anyway.
 		return lazypath.Worktree{}, fmt.Errorf("%s is a worktree; add the new one to its project instead", o.Project)
 	}
-	if !IsGitRepo(project.Path) {
+	if !IsRepoRoot(project.Path) {
 		return lazypath.Worktree{}, fmt.Errorf("%s is not a git repository: %s", o.Project, project.Path)
 	}
 
@@ -161,11 +161,6 @@ func WorktreeNameFromBranch(branch string) string {
 	name = unsafeInName.ReplaceAllString(name, "-")
 	name = strings.Trim(name, "-.")
 	return name
-}
-
-// IsGitRepo reports whether a folder is a git repository, or sits inside one.
-func IsGitRepo(path string) bool {
-	return runGit(path, "rev-parse", "--git-dir") == nil
 }
 
 // IsRepoRoot reports whether a folder is a repository in its own right,

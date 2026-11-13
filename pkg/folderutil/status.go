@@ -261,7 +261,7 @@ func readStatus(folder ParsedFolder) FolderStatus {
 		status.State = statusMissing
 		return status
 	}
-	if !IsGitRepo(folder.Path) {
+	if !IsRepoRoot(folder.Path) {
 		status.State = statusNoRepo
 		return status
 	}
