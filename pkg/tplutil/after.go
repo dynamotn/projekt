@@ -1,11 +1,15 @@
 package tplutil
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
+	"sort"
 	"strings"
+	"unicode"
+
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // HookOptions drives the commands a template runs once its files are there.
@@ -76,29 +80,69 @@ func RunAfter(o HookOptions) error {
 }
 
 // run runs one command through a shell, in the folder the template wrote.
-//
-// Through a shell because a hook that cannot use a pipe or an && is not much
-// of a hook, and because that is what the line in the manifest looks like.
 func (o HookOptions) run(command string) error {
 	if err := Authorize(TemplateOrigin(o.Template), command); err != nil {
 		return err
 	}
-	shell := strings.TrimSpace(os.Getenv("SHELL"))
-	if shell == "" {
-		shell = "/bin/sh"
-	}
-
-	cmd := exec.Command(shell, "-c", command)
-	cmd.Dir = o.Dir
-	cmd.Env = append(os.Environ(),
-		"PROJEKT_TEMPLATE="+o.Template.Name,
-		"PROJEKT_PATH="+o.Dir,
-	)
+	env := []string{"PROJEKT_TEMPLATE=" + o.Template.Name, "PROJEKT_PATH=" + o.Dir}
 	if name, ok := o.Context["Name"].(string); ok {
-		cmd.Env = append(cmd.Env, "PROJEKT_NAME="+name)
+		env = append(env, "PROJEKT_NAME="+name)
 	}
-	cmd.Stdin = o.In
-	cmd.Stdout = o.Out
-	cmd.Stderr = o.Err
+	values, _ := o.Context["Values"].(map[string]any)
+	return RunShell(command, o.Dir, append(env, ValueEnv(values)...), o.In, o.Out, o.Err)
+}
+
+// RunShell runs one hook line with sh -c in dir, with env added to the
+// environment.
+//
+// Through a shell because a hook that cannot use a pipe or an && is not much
+// of a hook, and because that is what the line looks like. Always sh, never
+// the login shell: the line is POSIX, and a recipe shared between people must
+// not mean something else under fish or nu.
+func RunShell(command, dir string, env []string, in io.Reader, out, errOut io.Writer) error {
+	cmd := cli.Command("sh", "-c", command)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Stdin = in
+	cmd.Stdout = out
+	cmd.Stderr = errOut
 	return cmd.Run()
+}
+
+// ValueEnv passes each value to a hook as PROJEKT_VALUE_<NAME>, name in upper
+// case with anything but letters and digits made an underscore.
+//
+// A value written into the line itself is shell code, and a project's record
+// is text anybody could have committed; "$PROJEKT_VALUE_MODULE" is only ever
+// a word. A list or a map is passed as JSON.
+func ValueEnv(values Values) []string {
+	names := make([]string, 0, len(values))
+	for name := range values {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	env := make([]string, 0, len(names))
+	for _, name := range names {
+		key := strings.Map(func(r rune) rune {
+			if r < unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r)) {
+				return unicode.ToUpper(r)
+			}
+			return '_'
+		}, name)
+		var text string
+		switch value := values[name].(type) {
+		case nil:
+		case string, bool, int, int64, float64:
+			text = fmt.Sprint(value)
+		default:
+			data, err := json.Marshal(value)
+			if err != nil {
+				continue
+			}
+			text = string(data)
+		}
+		env = append(env, "PROJEKT_VALUE_"+key+"="+text)
+	}
+	return env
 }

@@ -4,6 +4,9 @@
 
 ### Added
 
+- **t**, **b**: every value reaches an `after:` line as
+  `PROJEKT_VALUE_<NAME>`, and the template function `shquote` makes a value
+  one shell word, so a line can use a value without the value becoming code
 - **folder**: `folder sync --pull` fetches the repositories that are already
   on disk, configured working trees included, and fast-forwards each clean
   branch onto its upstream. A tree with uncommitted changes, a detached HEAD,
@@ -47,6 +50,9 @@
 
 ### Changed
 
+- **t**, **b**: `after:` lines run with `sh -c`, `sh` found on `PATH`, instead
+  of your login shell, so a POSIX line means the same under fish, nu or none;
+  this works on Termux too, where `/usr/bin/env` does not exist
 - **t**: `t update` runs `t apply`, as its help says, instead of pulling the
   template store; `t sync` and `t pull` still pull it
 - **t**: a dry run, `t check` and `b check` no longer run anything: `output`

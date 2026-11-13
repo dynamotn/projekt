@@ -30,6 +30,7 @@ func (e *engine) funcs() template.FuncMap {
 		"lookPath":        lookPath,
 		"stat":            stat,
 		"joinPath":        path.Join,
+		"shquote":         shquote,
 		"toYaml":          toYaml,
 		"fromYaml":        fromYaml,
 		"promptString":    e.promptString,
@@ -349,4 +350,11 @@ func (e *engine) read(v Var, fallback string) (any, error) {
 		}
 		_, _ = fmt.Fprintf(e.out, "    %v\n", err)
 	}
+}
+
+// shquote makes a value one shell word, whatever it holds: an `after:` line
+// is shell code, and `{{ .Values.module | shquote }}` keeps a value from
+// becoming part of it. sprig's squote only wraps, so a quote inside escapes.
+func shquote(value any) string {
+	return "'" + strings.ReplaceAll(fmt.Sprint(value), "'", `'\''`) + "'"
 }

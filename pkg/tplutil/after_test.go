@@ -146,3 +146,36 @@ func TestRunAfter_NothingToRunIsNotAnError(t *testing.T) {
 		t.Errorf("RunAfter() error = %v, want a template without commands to be fine", err)
 	}
 }
+
+func TestRunAfter_RunsWithShAndPassesValuesAsWords(t *testing.T) {
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "app", ".vars.yaml"),
+		"after:\n  - 'printf %s \"$PROJEKT_VALUE_GO_MODULE\" > env.txt'\n  - 'printf %s {{ index .Values \"go-module\" | shquote }} > quoted.txt'\n")
+	writeTemplate(t, filepath.Join(store, "app", "main.txt.tmpl"), "x\n")
+	// A login shell that is not sh — fish, nu, or none at all — must not
+	// change what a POSIX line means.
+	t.Setenv("SHELL", "/nonexistent/fish")
+
+	tpl, err := Get("app")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	dest := t.TempDir()
+	hostile := `x'; touch pwned; echo '`
+	o := RenderOptions{Template: tpl, Dest: dest, Name: "myapp", Values: Values{"go-module": hostile}}
+	if _, err := Render(o); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if err := runHooks(t, tpl, o, &bytes.Buffer{}); err != nil {
+		t.Fatalf("RunAfter() error = %v", err)
+	}
+
+	for _, file := range []string{"env.txt", "quoted.txt"} {
+		if got := readFile(t, filepath.Join(dest, file)); got != hostile {
+			t.Errorf("%s = %q, want the value as one word", file, got)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dest, "pwned")); err == nil {
+		t.Error("a value ran as a command")
+	}
+}

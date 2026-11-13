@@ -3,8 +3,6 @@ package bplutil
 import (
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
 	"strings"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
@@ -48,7 +46,7 @@ func RunAfter(out io.Writer, plan Plan, values tplutil.Values, o CreateOptions) 
 		if _, err := fmt.Fprintf(out, "Running: %s\n", rendered); err != nil {
 			return err
 		}
-		if err := runCommand(plan, rendered, o); err != nil {
+		if err := runCommand(plan, rendered, values, o); err != nil {
 			return fmt.Errorf("%s: %w", rendered, err)
 		}
 	}
@@ -71,30 +69,16 @@ func renderCommand(recipe Recipe, index int, command string, base map[string]any
 }
 
 // runCommand runs one command through a shell, in the new project.
-//
-// Through a shell because a hook that cannot use a pipe or an && is not much
-// of a hook, and because that is what the line in the recipe looks like.
-func runCommand(plan Plan, command string, o CreateOptions) error {
+func runCommand(plan Plan, command string, values tplutil.Values, o CreateOptions) error {
 	if err := tplutil.Authorize(TrustOrigin(plan.Recipe), command); err != nil {
 		return err
 	}
-	shell := strings.TrimSpace(os.Getenv("SHELL"))
-	if shell == "" {
-		shell = "/bin/sh"
-	}
-
-	cmd := exec.Command(shell, "-c", command)
-	cmd.Dir = plan.Path
-	cmd.Env = append(os.Environ(),
-		"PROJEKT_NAME="+plan.Name,
-		"PROJEKT_PATH="+plan.Path,
-		"PROJEKT_BOILERPLATE="+plan.Recipe.Name,
-	)
-	cmd.Stdin = o.In
-	cmd.Stdout = o.HookOut
-	cmd.Stderr = o.HookErr
-
-	return cmd.Run()
+	env := append([]string{
+		"PROJEKT_NAME=" + plan.Name,
+		"PROJEKT_PATH=" + plan.Path,
+		"PROJEKT_BOILERPLATE=" + plan.Recipe.Name,
+	}, tplutil.ValueEnv(values)...)
+	return tplutil.RunShell(command, plan.Path, env, o.In, o.HookOut, o.HookErr)
 }
 
 // SetUpRemote makes the new project a repository and points it at one.

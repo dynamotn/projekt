@@ -96,11 +96,16 @@ after:
   - git add -A && git commit -q -m "Start {{ .Name }}"
 ```
 
-Each line runs in the new project, through your shell, so pipes and `&&` work.
-Each one is **rendered first**, so it can use the values, and **printed before
-it runs** — a recipe that runs commands should never do so out of sight.
-`PROJEKT_NAME`, `PROJEKT_PATH` and `PROJEKT_BOILERPLATE` are in the
-environment.
+Each line runs in the new project with `sh -c` — always `sh`, found on `PATH`,
+whatever your login shell is — so pipes and `&&` work. Each one is **rendered
+first**, so it can use the values, and **printed before it runs** — a recipe
+that runs commands should never do so out of sight. `PROJEKT_NAME`,
+`PROJEKT_PATH` and `PROJEKT_BOILERPLATE` are in the environment, and every
+value as `PROJEKT_VALUE_<NAME>`.
+
+A value written into a line is shell code, and `b apply` replays values from
+the project's committed record: use `"$PROJEKT_VALUE_MODULE"` or
+`{{ .Values.module | shquote }}` rather than a bare `{{ .Values.module }}`.
 
 The first failure stops the rest, because the second command of a recipe
 usually assumes the first one worked. The files stay: only the hook failed.

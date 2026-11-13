@@ -58,7 +58,7 @@ runs a command only once you have trusted it:
 ```bash
 t show go-cli                     # read it first
 git -C "$(t path)" log -p         # or what the last sync brought
-t trust go-cli                    # then allow it — or `t trust` for the store
+t trust go-cli                    # then allow it — or `t trust --all` for the store
 ```
 
 Trust is given to the template **as it is now**: its files, and the shared
@@ -271,8 +271,20 @@ after:
 
 Each line is rendered with the values first, so a command can ask whether it is
 worth running, and a line that renders empty is skipped rather than run. They
-go through a shell, so a pipe or an `&&` works, and they run with
-`PROJEKT_NAME`, `PROJEKT_PATH` and `PROJEKT_TEMPLATE` in the environment.
+go through `sh -c` — always `sh`, found on `PATH`, whatever your login shell
+is — so a pipe or an `&&` works, and they run with `PROJEKT_NAME`,
+`PROJEKT_PATH` and `PROJEKT_TEMPLATE` in the environment.
+
+A value written into a line becomes shell code, and the values `t apply`
+replays come from the project's committed record. Use each one as a word:
+`"$PROJEKT_VALUE_MODULE"` (every value is in the environment, its name in
+upper case with anything but letters and digits made `_`), or
+`{{ .Values.module | shquote }}`:
+
+```yaml
+after:
+  - 'go mod init "$PROJEKT_VALUE_MODULE"'
+```
 
 Each command is printed before it runs — a hook that runs out of sight is one
 nobody can debug — and the first failure stops the rest, because the second

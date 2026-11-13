@@ -7,9 +7,12 @@ import (
 )
 
 // tools are the programs projekt runs on its own account. Anything else — an
-// editor, a picker, a template's hook — is named by the user and runs through
-// its own code path; this one only ever starts a program from this list.
-var tools = map[string]bool{"git": true, "cp": true}
+// editor, a picker — is named by the user and runs through its own code path;
+// this one only ever starts a program from this list. sh runs the `after:`
+// lines of templates and recipes, found on PATH the way `/usr/bin/env sh`
+// would find it: a static binary cannot rely on /usr/bin/env, which Termux,
+// for one, does not have.
+var tools = map[string]bool{"git": true, "cp": true, "sh": true}
 
 // Command builds the command for one of projekt's tools, resolved to the
 // absolute path it has on PATH before anything runs.
