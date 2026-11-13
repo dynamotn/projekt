@@ -223,14 +223,23 @@ func (f *Folder) AddToConfig() error {
 		return nil
 	}
 
-	c.Folders = append(c.Folders, *f)
-	err := saveConfig("folders")
+	err := updateConfig(func(config *Config) error {
+		if _, _, found := config.findFolder(f.Path); found {
+			isExisted = true
+			return errNoChange
+		}
+		config.Folders = append(config.Folders, *f)
+		return nil
+	}, "folders")
 	if err != nil {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}
-	refreshEffective()
 
+	if isExisted {
+		cli.Info("%s is already existed!", f.Path)
+		return nil
+	}
 	cli.Info("Added %s to config", f.Path)
 	return nil
 }
@@ -242,21 +251,25 @@ func RemoveFromConfig(path string) error {
 	}
 	unmarshalConfig()
 
-	_, index, isExisted := FindOwnFolder(path)
+	isExisted := true
+	err := updateConfig(func(config *Config) error {
+		_, index, found := config.findFolder(path)
+		if !found {
+			isExisted = false
+			return errNoChange
+		}
+		config.Folders = append(config.Folders[:index], config.Folders[index+1:]...)
+		return nil
+	}, "folders")
+	if err != nil {
+		cli.Error("Failed to write config %v", err)
+		return err
+	}
 
 	if !isExisted {
 		cli.Info("%s wasn't added as project!", path)
 		return nil
 	}
-
-	c.Folders = append(c.Folders[:index], c.Folders[index+1:]...)
-	err := saveConfig("folders")
-	if err != nil {
-		cli.Error("Failed to write config %v", err)
-		return err
-	}
-	refreshEffective()
-
 	cli.Info("Removed %s from config", path)
 	return nil
 }

@@ -94,36 +94,39 @@ func PruneStale() ([]Stale, error) {
 	}
 
 	var removed []Stale
-	folders := make([]Folder, 0, len(c.Folders))
-	for _, folder := range c.Folders {
-		if entry, drop := gone[Canonical(folder.Path)]; drop {
-			removed = append(removed, entry)
-			continue
-		}
-		folders = append(folders, folder)
-	}
-
-	worktrees := make([]Worktree, 0, len(c.Worktrees))
-	for _, worktree := range c.Worktrees {
-		if entry, drop := gone[Canonical(worktree.Path)]; drop {
-			removed = append(removed, entry)
-			continue
-		}
-		worktrees = append(worktrees, worktree)
-	}
-
-	if len(removed) == 0 {
-		return nil, nil
-	}
-	c.Folders = folders
-	c.Worktrees = worktrees
 	// One write for the whole lot: a prune that failed halfway would leave a
 	// configuration nobody asked for.
-	if err := saveConfig("folders", "worktrees"); err != nil {
+	err := updateConfig(func(config *Config) error {
+		removed = nil
+		folders := make([]Folder, 0, len(config.Folders))
+		for _, folder := range config.Folders {
+			if entry, drop := gone[Canonical(folder.Path)]; drop {
+				removed = append(removed, entry)
+				continue
+			}
+			folders = append(folders, folder)
+		}
+
+		worktrees := make([]Worktree, 0, len(config.Worktrees))
+		for _, worktree := range config.Worktrees {
+			if entry, drop := gone[Canonical(worktree.Path)]; drop {
+				removed = append(removed, entry)
+				continue
+			}
+			worktrees = append(worktrees, worktree)
+		}
+
+		if len(removed) == 0 {
+			return errNoChange
+		}
+		config.Folders = folders
+		config.Worktrees = worktrees
+		return nil
+	}, "folders", "worktrees")
+	if err != nil {
 		cli.Error("Failed to write config %v", err)
 		return nil, fmt.Errorf("cannot write the configuration: %w", err)
 	}
-	refreshEffective()
 
 	return removed, nil
 }

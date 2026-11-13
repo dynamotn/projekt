@@ -51,8 +51,12 @@ func SplitWorktreeName(name string) (project, worktree string, ok bool) {
 // FindWorktree returns the configured working tree with this project and name.
 func FindWorktree(project, name string) (Worktree, int, bool) {
 	unmarshalConfig()
+	return c.findWorktree(project, name)
+}
 
-	return lo.FindIndexOf(c.Worktrees, func(w Worktree) bool {
+// findWorktree returns the working tree of config with this project and name.
+func (config *Config) findWorktree(project, name string) (Worktree, int, bool) {
+	return lo.FindIndexOf(config.Worktrees, func(w Worktree) bool {
 		return w.Project == project && w.Name == name
 	})
 }
@@ -86,16 +90,17 @@ func (w *Worktree) AddToConfig() error {
 	}
 	unmarshalConfig()
 
-	if _, _, found := FindWorktree(w.Project, w.Name); found {
-		return fmt.Errorf("%s is already in the configuration", w.ShortName())
-	}
-
-	c.Worktrees = append(c.Worktrees, *w)
-	if err := saveConfig("worktrees"); err != nil {
+	err := updateConfig(func(config *Config) error {
+		if _, _, found := config.findWorktree(w.Project, w.Name); found {
+			return fmt.Errorf("%s is already in the configuration", w.ShortName())
+		}
+		config.Worktrees = append(config.Worktrees, *w)
+		return nil
+	}, "worktrees")
+	if err != nil {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}
-	refreshEffective()
 
 	cli.Info("Added worktree %s to config", w.ShortName())
 	return nil
@@ -108,17 +113,18 @@ func RemoveWorktreeFromConfig(project, name string) error {
 	}
 	unmarshalConfig()
 
-	_, index, found := FindWorktree(project, name)
-	if !found {
-		return fmt.Errorf("worktree %s%s%s is not in the configuration", project, WorktreeSeparator, name)
-	}
-
-	c.Worktrees = append(c.Worktrees[:index], c.Worktrees[index+1:]...)
-	if err := saveConfig("worktrees"); err != nil {
+	err := updateConfig(func(config *Config) error {
+		_, index, found := config.findWorktree(project, name)
+		if !found {
+			return fmt.Errorf("worktree %s%s%s is not in the configuration", project, WorktreeSeparator, name)
+		}
+		config.Worktrees = append(config.Worktrees[:index], config.Worktrees[index+1:]...)
+		return nil
+	}, "worktrees")
+	if err != nil {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}
-	refreshEffective()
 
 	cli.Info("Removed worktree %s%s%s from config", project, WorktreeSeparator, name)
 	return nil

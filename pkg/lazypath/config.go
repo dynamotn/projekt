@@ -31,6 +31,9 @@ var (
 	// must refuse to run, and above all refuse to write, while it is set:
 	// writing would replace the unreadable file with the empty in-memory config.
 	loadErr error
+	// pinned says c was set directly rather than read from the file, so it,
+	// not the file, is what a write starts from.
+	pinned bool
 )
 
 // LoadError returns the error that prevented the config file from being read,
@@ -301,6 +304,7 @@ func ReloadConfig() error {
 	effective = Config{}
 	loaded = false
 	loadErr = nil
+	pinned = false
 
 	if err := viper.ReadInConfig(); err != nil {
 		if !isConfigMissing(err) {
@@ -317,6 +321,7 @@ func SetTestConfig(config Config) {
 	c = config
 	effective = config
 	loaded = true
+	pinned = true
 }
 
 // ResetTestConfig resets the configuration to empty state
@@ -325,6 +330,7 @@ func ResetTestConfig() {
 	effective = Config{}
 	loaded = false
 	loadErr = nil
+	pinned = false
 }
 
 // InitConfig initializes the configuration from file or creates a new one

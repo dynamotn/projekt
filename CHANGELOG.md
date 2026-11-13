@@ -74,6 +74,11 @@
 
 ### Fixed
 
+- **config**: two commands that write the configuration at the same time, or
+  a long `folder sync` or `b new` while you edit the file, no longer drop each
+  other's changes — a write locks the file, re-reads it and applies only its
+  own change — and a write that fails leaves the configuration as it was. A
+  `PROJEKT_` override is never written into the file
 - **folder add --from-remote**: on GitHub, your own user lists your private
   repositories too when the token is yours; the public listing GitHub gives
   for a user name left them out

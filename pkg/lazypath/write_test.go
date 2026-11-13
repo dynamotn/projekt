@@ -1,10 +1,16 @@
 package lazypath
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -235,5 +241,184 @@ func TestSaveConfig_ReadBackInTheSameProcess(t *testing.T) {
 	}
 	if got := strings.Join(paths, ","); got != "/work/api,/work/web,/work/new" {
 		t.Errorf("folders read back = %s", got)
+	}
+}
+
+// loadedConfig points the package at a configuration file holding content and
+// reads it, the way a command does when it starts.
+func loadedConfig(t *testing.T, path, content string) {
+	t.Helper()
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	previous := CfgFile
+	CfgFile = path
+	ResetTestConfig()
+	InitConfig()
+	t.Cleanup(func() {
+		CfgFile = previous
+		ResetTestConfig()
+		viper.Reset()
+	})
+	OwnConfig()
+}
+
+func TestSaveConfig_KeepsAChangeMadeAfterLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	loadedConfig(t, path, commentedConfig)
+
+	// Another `projekt folder add`, or the user in an editor, while this
+	// process was busy.
+	if err := os.WriteFile(path, []byte(commentedConfig+"  - path: /work/other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&Folder{Path: "/work/new"}).AddToConfig(); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := commentedConfig + "  - path: /work/other\n  - path: /work/new\n"; string(data) != want {
+		t.Errorf("file:\n%s\nwant both additions:\n%s", data, want)
+	}
+	if got := len(OwnConfig().Folders); got != 4 {
+		t.Errorf("in-memory folders = %d, want 4", got)
+	}
+}
+
+func TestSaveConfig_FailedSaveLeavesTheConfigAlone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	loadedConfig(t, path, commentedConfig)
+	before := OwnConfig()
+
+	if err := os.WriteFile(path, []byte("folders: [\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&Folder{Path: "/work/new"}).AddToConfig(); err == nil {
+		t.Fatal("saving over an unreadable file succeeded")
+	}
+	if err := RemoveFromConfig("/work/api"); err == nil {
+		t.Fatal("saving over an unreadable file succeeded")
+	}
+
+	if after := OwnConfig(); !reflect.DeepEqual(after, before) {
+		t.Errorf("in-memory config changed by failed saves:\n%+v\nwant:\n%+v", after, before)
+	}
+	if data, _ := os.ReadFile(path); string(data) != "folders: [\n" {
+		t.Errorf("file was rewritten:\n%s", data)
+	}
+}
+
+func TestSaveConfig_WaitsForTheLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	loadedConfig(t, path, commentedConfig)
+
+	unlock, err := lockConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- (&Folder{Path: "/work/new"}).AddToConfig() }()
+
+	select {
+	case err := <-done:
+		unlock()
+		t.Fatalf("saved while another holder had the lock (err %v)", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	// What the other holder wrote under the lock is what the save starts from.
+	if err := os.WriteFile(path, []byte(commentedConfig+"  - path: /work/other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("save still waiting after the lock was released")
+	}
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), "/work/other") || !strings.Contains(string(data), "/work/new") {
+		t.Errorf("file lost a change:\n%s", data)
+	}
+}
+
+// TestSaveConfig_ConcurrentProcesses runs several copies of this test binary
+// that each add a folder to the same file at once: every one must be kept.
+func TestSaveConfig_ConcurrentProcesses(t *testing.T) {
+	if os.Getenv("LAZYPATH_TEST_ADD") != "" {
+		CfgFile = os.Getenv("LAZYPATH_TEST_CONFIG")
+		InitConfig()
+		OwnConfig()
+		// Widen the window between load and save.
+		time.Sleep(100 * time.Millisecond)
+		if err := (&Folder{Path: os.Getenv("LAZYPATH_TEST_ADD")}).AddToConfig(); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(commentedConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	const n = 6
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cmd := exec.Command(os.Args[0], "-test.run=^TestSaveConfig_ConcurrentProcesses$")
+			cmd.Env = append(os.Environ(),
+				"LAZYPATH_TEST_CONFIG="+path,
+				"LAZYPATH_TEST_ADD=/work/p"+strconv.Itoa(i))
+			if out, err := cmd.CombinedOutput(); err != nil {
+				errs[i] = fmt.Errorf("%v: %s", err, out)
+			}
+		}()
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range n {
+		if !strings.Contains(string(data), "- path: /work/p"+strconv.Itoa(i)+"\n") {
+			t.Errorf("folder /work/p%d was lost:\n%s", i, data)
+		}
+	}
+}
+
+func TestSaveConfig_EnvironmentOverrideSurvivesAWrite(t *testing.T) {
+	extra := filepath.Join(t.TempDir(), "extra.yaml")
+	t.Setenv("PROJEKT_INCLUDE", extra)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	loadedConfig(t, path, "include:\n  - /from/file.yaml\n"+commentedConfig)
+	if got := OwnConfig().Include; len(got) != 1 || got[0] != extra {
+		t.Fatalf("Include before = %v, want the override", got)
+	}
+
+	if err := (&Folder{Path: "/work/new"}).AddToConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if got := OwnConfig().Include; len(got) != 1 || got[0] != extra {
+		t.Errorf("Include after a write = %v, want the override still on top", got)
+	}
+	if data, _ := os.ReadFile(path); strings.Contains(string(data), extra) {
+		t.Errorf("the override was written to the file:\n%s", data)
 	}
 }

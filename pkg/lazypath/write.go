@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 
 	"github.com/spf13/viper"
 	yaml "go.yaml.in/yaml/v3"
@@ -18,22 +19,42 @@ import (
 // defaultIndent is what a file with nothing indented in it yet is written with.
 const defaultIndent = 2
 
-// saveConfig writes the named top-level sections of this machine's
-// configuration back to its file, and leaves everything else in it alone.
+// errNoChange is what a change returns when what is on disk already says
+// what it was going to: nothing is written, and that is not a failure.
+var errNoChange = errors.New("nothing to change")
+
+// updateConfig applies change to what this machine's configuration file holds
+// right now, and writes the named top-level sections of the result back.
+//
+// The change is applied under an exclusive lock to the file as it is on disk,
+// not to what this process read when it started: two commands writing at once,
+// or a long `folder sync` while the file is open in an editor, each keep what
+// the other wrote. The in-memory configuration is replaced only once the write
+// succeeded, so a failed one leaves it as it was.
 //
 // The file is someone's dotfile, usually under version control, so it is
 // merged into rather than regenerated: comments, key order, quoting and the
 // sections no command writes survive, and an entry that did not change is
 // written exactly as it was read. A command that adds one folder produces a
 // diff of one folder.
-func saveConfig(sections ...string) error {
+func updateConfig(change func(*Config) error, sections ...string) error {
 	if loadErr != nil {
 		return fmt.Errorf("not writing the configuration: %w", loadErr)
 	}
+	unmarshalConfig()
 	path := ConfigFile()
 	if path == "" {
 		return errors.New("no config file to write")
 	}
+
+	// Beside the path as configured rather than the file it links to, so the
+	// lock does not land in somebody's dotfiles repository.
+	unlock, err := lockConfig(path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
 	// A dotfiles manager may link the file from elsewhere; replacing the link
 	// with a regular file would quietly take it out of that repository.
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
@@ -45,15 +66,108 @@ func saveConfig(sections ...string) error {
 		return err
 	}
 
+	var next Config
+	if pinned {
+		next, err = copyConfig(c)
+	} else {
+		next, err = decodeConfig(data)
+	}
+	if err != nil {
+		return fmt.Errorf("cannot read %s: %w", path, err)
+	}
+
+	if err := change(&next); err != nil {
+		if errors.Is(err, errNoChange) {
+			return nil
+		}
+		return err
+	}
+
+	out, err := renderConfig(data, &next, sections)
+	if err != nil {
+		return fmt.Errorf("cannot parse %s: %w", path, err)
+	}
+	if err := replaceFile(path, out); err != nil {
+		return err
+	}
+
+	// Read back the way a command starts, so a later read in this process
+	// sees what was just written with the PROJEKT_ overrides still on top;
+	// next is the file alone, which is what had to be written.
+	if err := viper.ReadInConfig(); err != nil || pinned {
+		if err != nil {
+			cli.Debug("Cannot re-read %s: %v", path, err)
+		}
+		c = next
+		refreshEffective()
+		return nil
+	}
+	c, loaded = Config{}, false
+	unmarshalConfig()
+	return nil
+}
+
+// lockConfig takes an exclusive lock on the configuration file at path,
+// waiting for whoever holds it, and returns what releases it. The lock lives
+// in a file of its own, since the configuration itself is replaced by rename
+// on every write. Closing the descriptor releases it, also when the process
+// dies.
+func lockConfig(path string) (func(), error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	file, err := os.OpenFile(path+".lock", os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	for {
+		err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
+		if !errors.Is(err, syscall.EINTR) {
+			break
+		}
+	}
+	if err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("cannot lock %s: %w", file.Name(), err)
+	}
+	return func() { _ = file.Close() }, nil
+}
+
+// decodeConfig reads a configuration file the way loading it does, through
+// viper, so that a key spelt in another case means the same thing here.
+func decodeConfig(data []byte) (Config, error) {
+	var config Config
+	v := viper.New()
+	v.SetConfigType("yaml")
+	if err := v.ReadConfig(bytes.NewReader(data)); err != nil {
+		return config, err
+	}
+	err := v.Unmarshal(&config)
+	return config, err
+}
+
+// copyConfig returns a copy of config that shares nothing with it.
+func copyConfig(config Config) (Config, error) {
+	var out Config
+	data, err := yaml.Marshal(config)
+	if err == nil {
+		err = yaml.Unmarshal(data, &out)
+	}
+	return out, err
+}
+
+// renderConfig returns data, the file as it is, with the named sections
+// replaced by what want holds.
+func renderConfig(data []byte, want *Config, sections []string) ([]byte, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return fmt.Errorf("cannot parse %s: %w", path, err)
+		return nil, err
 	}
 	root := documentRoot(&doc)
 
 	var wanted yaml.Node
-	if err := wanted.Encode(c); err != nil {
-		return err
+	if err := wanted.Encode(want); err != nil {
+		return nil, err
 	}
 
 	for _, section := range sections {
@@ -66,7 +180,7 @@ func saveConfig(sections ...string) error {
 		case value == nil:
 		case index >= 0:
 			root.Content[index].Value = section
-			typ, _ := fieldType(reflect.TypeOf(c), section)
+			typ, _ := fieldType(reflect.TypeOf(want), section)
 			root.Content[index+1] = mergeNode(root.Content[index+1], value, typ)
 		default:
 			root.Content = append(root.Content,
@@ -79,21 +193,12 @@ func saveConfig(sections ...string) error {
 	encoder := yaml.NewEncoder(&out)
 	encoder.SetIndent(detectIndent(data))
 	if err := encoder.Encode(&doc); err != nil {
-		return err
+		return nil, err
 	}
 	if err := encoder.Close(); err != nil {
-		return err
+		return nil, err
 	}
-
-	if err := replaceFile(path, restoreBlankLines(data, out.Bytes())); err != nil {
-		return err
-	}
-	// Keep what viper holds in step with the file, so a later read in this
-	// process sees what was just written.
-	if err := viper.ReadInConfig(); err != nil {
-		cli.Debug("Cannot re-read %s: %v", path, err)
-	}
-	return nil
+	return restoreBlankLines(data, out.Bytes()), nil
 }
 
 // documentRoot returns the top-level mapping of a parsed file, turning an

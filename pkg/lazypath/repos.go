@@ -19,35 +19,42 @@ func AddRepoToFolder(folderPath, repoName, repoPath string) error {
 	}
 	unmarshalConfig()
 
-	_, index, ok := FindOwnFolder(folderPath)
-	if !ok {
-		return fmt.Errorf("%s is not a folder in %s", folderPath, ConfigFile())
-	}
-	if c.Folders[index].Git == nil {
-		return fmt.Errorf("%s has no git section to add a repository to", folderPath)
-	}
-
-	for _, repo := range c.Folders[index].Git.Repos {
-		if repo.Name == repoName {
-			cli.Debug("%s already lists the repository %s", folderPath, repoName)
-			return nil
+	listed := false
+	err := updateConfig(func(config *Config) error {
+		_, index, ok := config.findFolder(folderPath)
+		if !ok {
+			return fmt.Errorf("%s is not a folder in %s", folderPath, ConfigFile())
 		}
-	}
+		git := config.Folders[index].Git
+		if git == nil {
+			return fmt.Errorf("%s has no git section to add a repository to", folderPath)
+		}
 
-	repo := GitRepo{Name: repoName}
-	// The path is only worth recording when it differs from the name, which is
-	// what `folder sync` assumes when it is absent.
-	if repoPath != "" && filepath.Base(filepath.Clean(repoPath)) != repoName {
-		repo.Path = repoPath
-	}
-	c.Folders[index].Git.Repos = append(c.Folders[index].Git.Repos, repo)
+		for _, repo := range git.Repos {
+			if repo.Name == repoName {
+				listed = true
+				return errNoChange
+			}
+		}
 
-	if err := saveConfig("folders"); err != nil {
+		repo := GitRepo{Name: repoName}
+		// The path is only worth recording when it differs from the name,
+		// which is what `folder sync` assumes when it is absent.
+		if repoPath != "" && filepath.Base(filepath.Clean(repoPath)) != repoName {
+			repo.Path = repoPath
+		}
+		git.Repos = append(git.Repos, repo)
+		return nil
+	}, "folders")
+	if err != nil {
 		cli.Error("Failed to write config %v", err)
 		return err
 	}
-	refreshEffective()
 
+	if listed {
+		cli.Debug("%s already lists the repository %s", folderPath, repoName)
+		return nil
+	}
 	cli.Info("Added repository %s to %s in config", repoName, folderPath)
 	return nil
 }
