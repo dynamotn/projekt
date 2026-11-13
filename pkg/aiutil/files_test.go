@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // secretNames are the files of project that must never reach a prompt.
@@ -128,5 +130,132 @@ func TestTree_SameRules(t *testing.T) {
 
 	if tree, _ := Tree(dir, 2); !slices.Equal(tree, want[:2]) {
 		t.Errorf("Tree(2) = %v, want %v", tree, want[:2])
+	}
+}
+
+func gitInit(t *testing.T, dir string) {
+	t.Helper()
+	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+}
+
+// linkedRepository is a repository holding sub/a.md and docs -> sub.
+func linkedRepository(t *testing.T, gitignore string) string {
+	t.Helper()
+	dir := t.TempDir()
+	gitInit(t, dir)
+	write(t, filepath.Join(dir, "sub", "a.md"), "a\n")
+	write(t, filepath.Join(dir, ".gitignore"), gitignore)
+	if err := os.Symlink("sub", filepath.Join(dir, "docs")); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestFiles_LinkToAFolderInside(t *testing.T) {
+	dir := linkedRepository(t, "")
+
+	files, err := Files(dir, "docs/a.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(files); !slices.Equal(got, []string{"docs/a.md"}) {
+		t.Errorf("Files() = %v, want docs/a.md", got)
+	}
+	tree, err := Tree(dir, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{".gitignore", "docs/", "sub/", "sub/a.md"}; !slices.Equal(tree, want) {
+		t.Errorf("Tree() = %v, want %v", tree, want)
+	}
+}
+
+func TestFiles_LinkIsJudgedByItsTarget(t *testing.T) {
+	dir := linkedRepository(t, "sub/\n")
+
+	files, err := Files(dir, "docs/a.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Errorf("Files() = %v, want nothing: sub/ is ignored", paths(files))
+	}
+	tree, err := Tree(dir, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{".gitignore"}; !slices.Equal(tree, want) {
+		t.Errorf("Tree() = %v, want %v", tree, want)
+	}
+}
+
+func TestFiles_ProjectInsideARepository(t *testing.T) {
+	repo := t.TempDir()
+	gitInit(t, repo)
+	write(t, filepath.Join(repo, ".gitignore"), "services/api/config.local.yaml\n")
+	project := filepath.Join(repo, "services", "api")
+	write(t, filepath.Join(project, "README.md"), "# API\n")
+	write(t, filepath.Join(project, "config.local.yaml"), "password: x\n")
+
+	files, err := Files(project, "config.local.yaml", "README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := paths(files); !slices.Equal(got, []string{"README.md"}) {
+		t.Errorf("Files() = %v, want only README.md", got)
+	}
+	tree, err := Tree(project, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"README.md"}; !slices.Equal(tree, want) {
+		t.Errorf("Tree() = %v, want %v", tree, want)
+	}
+}
+
+func TestFiles_RefusesAFIFO(t *testing.T) {
+	dir := t.TempDir()
+	if err := syscall.Mkfifo(filepath.Join(dir, "README.md"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan []File, 1)
+	go func() {
+		files, err := Files(dir, "README.md")
+		if err != nil {
+			t.Error(err)
+		}
+		done <- files
+	}()
+	select {
+	case files := <-done:
+		if len(files) != 0 {
+			t.Errorf("Files() = %v, want the FIFO refused", paths(files))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Files() blocked on a FIFO")
+	}
+}
+
+func TestTree_SkipsAnUnreadableFolder(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads every folder")
+	}
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "README.md"), "# Project\n")
+	locked := filepath.Join(dir, "locked")
+	if err := os.Mkdir(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+
+	tree, err := Tree(dir, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(tree, "README.md") {
+		t.Errorf("Tree() = %v, want README.md", tree)
 	}
 }

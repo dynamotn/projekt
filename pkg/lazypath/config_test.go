@@ -673,3 +673,13 @@ include:
 		t.Errorf("GetConfig().AI = %#v, want nothing from the included file", ai)
 	}
 }
+
+func TestUnmarshalConfig_PROJEKT_AIKeepsTheAISection(t *testing.T) {
+	t.Setenv("PROJEKT_AI", "from-env")
+	main := writeConfig(t, t.TempDir(), "config.yaml", "ai:\n  timeout: 5s\n")
+	loadFrom(t, main)
+
+	if got := OwnConfig().AI.Timeout; got != "5s" {
+		t.Errorf("OwnConfig().AI.Timeout = %q, want 5s", got)
+	}
+}
