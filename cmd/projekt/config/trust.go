@@ -48,6 +48,12 @@ Trust covers the exact content: a later change to the file asks again.`,
 				_, err := fmt.Fprintln(out, "No included configuration file to trust")
 				return err
 			}
+			// Every name is checked first, so a typo trusts none of them.
+			for _, file := range files {
+				if _, err := hookutil.IncludedSource(file); err != nil {
+					return err
+				}
+			}
 			for _, file := range files {
 				if err := hookutil.TrustSource(file); err != nil {
 					return fmt.Errorf("trust %s: %w", file, err)

@@ -165,16 +165,26 @@ func sourceOrigin(source string) tplutil.Origin {
 // A file the configuration does not include is refused: trusting it would
 // let nothing run, and is most likely a typo.
 func TrustSource(source string) error {
-	abs, err := filepath.Abs(source)
+	included, err := IncludedSource(source)
 	if err != nil {
 		return err
 	}
+	return tplutil.Trust(sourceOrigin(included))
+}
+
+// IncludedSource returns the included configuration file that source names, or an
+// error when the configuration does not include it.
+func IncludedSource(source string) (string, error) {
+	abs, err := filepath.Abs(source)
+	if err != nil {
+		return "", err
+	}
 	for _, included := range lazypath.IncludedFiles() {
 		if lazypath.SamePath(abs, included) {
-			return tplutil.Trust(sourceOrigin(included))
+			return included, nil
 		}
 	}
-	return fmt.Errorf("%s is not a file the configuration includes", source)
+	return "", fmt.Errorf("%s is not a file the configuration includes", source)
 }
 
 // Show prints the hooks of a project, with where each one comes from.

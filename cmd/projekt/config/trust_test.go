@@ -88,3 +88,18 @@ func TestConfigTrust_NamesWithAllIsAnError(t *testing.T) {
 		t.Errorf("config trust <file> --all trusted something: %q", out)
 	}
 }
+
+func TestConfigTrust_ANameThatIsNotIncludedTrustsNone(t *testing.T) {
+	included := includingConfig(t)
+
+	out, err := runTrust(included, filepath.Join(t.TempDir(), "other.yaml"))
+	if err == nil || !strings.Contains(err.Error(), "not a file the configuration includes") {
+		t.Fatalf("config trust <file> <stranger>: error = %v, want a refusal", err)
+	}
+	if strings.Contains(out, "Trusted") {
+		t.Errorf("config trust trusted something: %q", out)
+	}
+	if _, err := os.Stat(tplutil.TrustFile()); !os.IsNotExist(err) {
+		t.Errorf("config trust wrote the trust file: %v", err)
+	}
+}
