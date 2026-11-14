@@ -150,7 +150,37 @@ func decodeConfig(data []byte) (Config, error) {
 		return config, err
 	}
 	err := v.Unmarshal(&config)
+	restoreRemoteCase(data, &config)
 	return config, err
+}
+
+// restoreRemoteCase gives each remotes map the spelling its keys have in the
+// file: viper lowercases every map key, but git remote names are case
+// sensitive, so `Upstream` has to stay `Upstream`.
+func restoreRemoteCase(data []byte, config *Config) {
+	var own Config
+	if yaml.Unmarshal(data, &own) != nil {
+		return
+	}
+	for i, folder := range config.Folders {
+		if folder.Git == nil || i >= len(own.Folders) || own.Folders[i].Git == nil {
+			continue
+		}
+		for j, repo := range folder.Git.Repos {
+			if j >= len(own.Folders[i].Git.Repos) {
+				break
+			}
+			fileRemotes := own.Folders[i].Git.Repos[j].Remotes
+			for name, url := range repo.Remotes {
+				for spelt := range fileRemotes {
+					if spelt != name && strings.ToLower(spelt) == name {
+						delete(repo.Remotes, name)
+						repo.Remotes[spelt] = url
+					}
+				}
+			}
+		}
+	}
 }
 
 // copyConfig returns a copy of config that shares nothing with it.

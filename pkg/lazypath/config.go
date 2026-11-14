@@ -124,7 +124,13 @@ func unmarshalConfig() {
 	}
 	loaded = true
 
-	if err := viper.Unmarshal(&c); err != nil {
+	err := viper.Unmarshal(&c)
+	if err == nil {
+		if data, readErr := os.ReadFile(ConfigFile()); readErr == nil {
+			restoreRemoteCase(data, &c)
+		}
+	}
+	if err != nil {
 		// A file that parses but does not decode must not be written back:
 		// what was decoded is a fragment, and saving it would replace the
 		// whole file with the fragment.

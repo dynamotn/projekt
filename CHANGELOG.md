@@ -132,6 +132,7 @@
 
 ### Fixed
 
+- **config**: a remote named `Upstream` keeps its capital letter instead of becoming `upstream`
 - **config trust**: names that are not all included files trust none of them
 - **t add**: `--force` replaces a template only once the new copy is complete
 - **doctor**: no longer creates the configuration file it is checking

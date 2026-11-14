@@ -436,3 +436,32 @@ func TestSaveConfig_NothingToWriteStillCatchesUp(t *testing.T) {
 		t.Errorf("in-memory folders = %v, want what the file now says", got)
 	}
 }
+
+const upstreamConfig = `folders:
+  - path: /work/app
+    git:
+      host: example.com
+      repos:
+        - name: app
+          path: app
+          remotes:
+            Upstream: https://example.com/up/app.git
+`
+
+func TestRemoteNames_KeepTheirCase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	got := savedConfig(t, path, upstreamConfig, func() error {
+		remotes := GetConfig().Folders[0].Git.Repos[0].Remotes
+		if _, ok := remotes["Upstream"]; !ok || len(remotes) != 1 {
+			t.Errorf("remotes = %v, want the key Upstream", remotes)
+		}
+		return (&Folder{Path: "/work/other"}).AddToConfig()
+	})
+
+	if !strings.Contains(got, "Upstream: https://example.com/up/app.git") {
+		t.Errorf("file lost the case of Upstream:\n%s", got)
+	}
+	if strings.Contains(got, "upstream:") {
+		t.Errorf("file gained a lowercase upstream:\n%s", got)
+	}
+}
