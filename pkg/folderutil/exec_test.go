@@ -207,6 +207,9 @@ func TestExecInFolders_JSON(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("got %d objects, want 3: %v", len(got), got)
 	}
+	if got[2]["exit"] != float64(-1) || got[2]["output"] != "missing" {
+		t.Errorf("missing folder object = %v, want exit -1 and output missing", got[2])
+	}
 	for i, want := range []struct {
 		name, path string
 		exit       float64
@@ -262,5 +265,33 @@ func TestExecInFolders_JSONEmptySelectionAndFlags(t *testing.T) {
 		if err := ExecInFolders(&out, o); err == nil {
 			t.Errorf("%s: error = nil, want one", name)
 		}
+	}
+}
+
+func TestExecInFolders_JSONDryRunAndEscaping(t *testing.T) {
+	a, _ := execFolders(t)
+
+	var out bytes.Buffer
+	err := ExecInFolders(&out, ExecOptions{Command: []string{"touch", "ran"}, Tags: []string{"oss"}, DryRun: true, Output: cli.OutputJSON})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("output %q is not JSON: %v", out.String(), err)
+	}
+	if len(got) != 1 || len(got[0]) != 5 || got[0]["exit"] != float64(0) || got[0]["output"] != "" || got[0]["seconds"] != float64(0) {
+		t.Errorf("got %v, want one five-key object with exit 0, no output, 0 seconds", got)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(a), "beta", "ran")); err == nil {
+		t.Error("the command ran during a dry run")
+	}
+
+	out.Reset()
+	if err := ExecInFolders(&out, ExecOptions{Command: []string{"echo", "<b>&"}, Tags: []string{"oss"}, Output: cli.OutputJSON}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"<b>&\n"`) {
+		t.Errorf("output = %q, want <b>& unescaped", out.String())
 	}
 }

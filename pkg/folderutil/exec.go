@@ -89,6 +89,14 @@ func ExecInFolders(out io.Writer, o ExecOptions) error {
 		return nil
 	}
 
+	if o.DryRun && o.Output == cli.OutputJSON {
+		// Nothing but the array on stdout, so a script can still parse it.
+		results := make([]execResult, len(folders))
+		for i, folder := range folders {
+			results[i] = execResult{folder: folder}
+		}
+		return printExecJSON(out, results)
+	}
 	if o.DryRun {
 		for _, folder := range folders {
 			if _, err := fmt.Fprintf(out, "[DRY RUN] %s: %s\n", folder.ShortName, strings.Join(o.Command, " ")); err != nil {
@@ -208,6 +216,7 @@ func printExecJSON(out io.Writer, results []execResult) error {
 	}
 
 	enc := json.NewEncoder(out)
+	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 	return enc.Encode(records)
 }
