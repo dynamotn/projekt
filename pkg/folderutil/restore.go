@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"go.yaml.in/yaml/v3"
 
@@ -26,6 +27,10 @@ type RestoreOptions struct {
 	// In and Err are where that question is read and asked.
 	In  io.Reader
 	Err io.Writer
+}
+
+func hasControl(s string) bool {
+	return strings.IndexFunc(s, unicode.IsControl) >= 0
 }
 
 // insideDir reports whether path is dir or lies below it.
@@ -67,6 +72,17 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 		return fmt.Errorf("cannot read the record of %s: %w", name, err)
 	}
 
+	// What the record says is printed and written to the configuration: a
+	// control character could redraw the terminal or hide in a field.
+	if record != nil && record.Entry != nil {
+		e := record.Entry
+		for _, v := range append([]string{e.Name, e.Prefix, e.Description, e.RegexMatch}, e.Tags...) {
+			if hasControl(v) {
+				return fmt.Errorf("the record of %s has a control character in %q; edit or delete the record", name, v)
+			}
+		}
+	}
+
 	target := strings.TrimSpace(o.To)
 	fromRecord := target == ""
 	if !fromRecord {
@@ -77,6 +93,9 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 		switch {
 		case record == nil:
 			return fmt.Errorf("%s has no record of where it came from; say where with --to", name)
+		case hasControl(record.Original):
+			return fmt.Errorf("the record of %s names the path %q, which has a control character; say where with --to",
+				name, record.Original)
 		case record.Original == "" || !filepath.IsAbs(record.Original) || insideDir(record.Original, root):
 			return fmt.Errorf("the record of %s does not name a usable original path (%q); say where with --to",
 				name, record.Original)
@@ -129,24 +148,24 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 		// Where the record says decides where the files land, so its parent must
 		// already be there and the target is confirmed.
 		if info, err := os.Stat(filepath.Dir(target)); err != nil || !info.IsDir() {
-			return fmt.Errorf("%s does not exist; the record names %s: say where with --to", filepath.Dir(target), target)
+			return fmt.Errorf("%q does not exist; the record names %q: say where with --to", filepath.Dir(target), target)
 		}
 	}
 	if o.DryRun {
-		if err := say("[DRY RUN] Would move %s to %s and add it to the configuration\n", source, target); err != nil {
+		if err := say("[DRY RUN] Would move %s to %q and add it to the configuration\n", source, target); err != nil {
 			return err
 		}
 		return notRestored()
 	}
 	if fromRecord && !o.Yes {
-		if err := say("The record says %s came from %s\n", name, target); err != nil {
+		if err := say("The record says %s came from %q\n", name, target); err != nil {
 			return err
 		}
 		errOut := o.Err
 		if errOut == nil {
 			errOut = io.Discard
 		}
-		if ok, err := cli.Confirm(o.In, errOut, fmt.Sprintf("Restore it to %s? [y/N] ", target)); err != nil || !ok {
+		if ok, err := cli.Confirm(o.In, errOut, fmt.Sprintf("Restore it to %q? [y/N] ", target)); err != nil || !ok {
 			return fmt.Errorf("nothing was restored; confirm %s, or use --yes, or restore elsewhere with --to", target)
 		}
 	}

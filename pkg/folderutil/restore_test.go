@@ -240,7 +240,7 @@ func TestRestoreFolder_DoesNotRestoreWhatRuns(t *testing.T) {
 	if got.Name != "svc" || got.Description != "kept" || len(got.Tags) != 1 {
 		t.Errorf("entry = %#v, want the plain fields back", got)
 	}
-	if own := lazypath.OwnConfig().Folders; len(own) == 1 && (own[0].Hooks != nil || own[0].Git != nil) {
+	if own := lazypath.OwnConfig().Folders; len(own) != 1 || own[0].Hooks != nil || own[0].Git != nil {
 		t.Errorf("own config = %#v, want no hooks or git", own)
 	}
 }
@@ -275,5 +275,32 @@ func TestRestoreFolder_RecordTargetWithoutYesChangesNothing(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(archive, "old-service", RecordFile)); statErr != nil {
 		t.Errorf("the archive changed: %v", statErr)
+	}
+}
+
+func TestRestoreFolder_RefusesControlCharactersInARecord(t *testing.T) {
+	_, archive := archivable(t)
+	base := t.TempDir()
+	cases := map[string]ArchiveRecord{
+		"original": {Original: base + "/x\x1b[2K\rSAFE"},
+		"name":     {Original: base + "/y", Entry: &lazypath.Folder{Name: "a\x1bb"}},
+		"tags":     {Original: base + "/z", Entry: &lazypath.Folder{Tags: []string{"a\x07"}}},
+	}
+	for name, record := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := filepath.Join(archive, name)
+			writeArchiveRecord(t, dir, record)
+
+			err := RestoreFolder(&bytes.Buffer{}, name, RestoreOptions{Yes: true})
+			if err == nil {
+				t.Fatal("a record with a control character was accepted")
+			}
+			if strings.ContainsAny(err.Error(), "\x1b\x07\r") {
+				t.Errorf("error = %q, want no raw control character", err)
+			}
+			if _, statErr := os.Stat(dir); statErr != nil {
+				t.Errorf("the folder was moved: %v", statErr)
+			}
+		})
 	}
 }
