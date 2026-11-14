@@ -300,8 +300,13 @@ func TestArchiveFolder_RefusesWorktrees(t *testing.T) {
 	for _, configured := range []bool{true, false} {
 		project, archive := archivable(t)
 		tree := filepath.Join(filepath.Dir(project), "tree")
-		mustGit(t, project, "worktree", "add", "-b", "side", tree)
-		if configured {
+		if !configured {
+			mustGit(t, project, "worktree", "add", "-b", "side", tree)
+		} else {
+			// Only the configuration knows this tree: git does not.
+			if err := os.Mkdir(tree, 0o755); err != nil {
+				t.Fatal(err)
+			}
 			lazypath.SetTestConfig(lazypath.Config{
 				Folders:   []lazypath.Folder{{Path: project}},
 				Worktrees: []lazypath.Worktree{{Project: "old-service", Name: "side", Branch: "side", Path: tree}},
@@ -318,6 +323,36 @@ func TestArchiveFolder_RefusesWorktrees(t *testing.T) {
 		if _, statErr := os.Stat(archive); !os.IsNotExist(statErr) {
 			t.Errorf("configured=%v: the archive was created", configured)
 		}
+	}
+}
+
+func TestArchiveFolder_PrunableTreeSaysPrune(t *testing.T) {
+	project, _ := archivable(t)
+	tree := filepath.Join(filepath.Dir(project), "tree")
+	mustGit(t, project, "worktree", "add", "-b", "side", tree)
+	if err := os.RemoveAll(tree); err != nil {
+		t.Fatal(err)
+	}
+
+	err := ArchiveFolder(&bytes.Buffer{}, "old-service", ArchiveOptions{Force: true})
+	if err == nil || !strings.Contains(err.Error(), "worktree prune") {
+		t.Fatalf("error = %v, want the prune hint", err)
+	}
+}
+
+func TestArchiveFolder_RefusesAProjectAlsoDeclaredInAnIncludedFile(t *testing.T) {
+	project, _ := archivable(t)
+	lazypath.SetTestConfig(lazypath.Config{Folders: []lazypath.Folder{
+		{Path: project},
+		{Path: project, Source: "/etc/team.yaml"},
+	}})
+
+	err := ArchiveFolder(&bytes.Buffer{}, "old-service", ArchiveOptions{Force: true})
+	if err == nil || !strings.Contains(err.Error(), "declared in /etc/team.yaml") {
+		t.Fatalf("error = %v, want a refusal naming the file", err)
+	}
+	if _, statErr := os.Stat(project); statErr != nil {
+		t.Errorf("the project was moved: %v", statErr)
 	}
 }
 

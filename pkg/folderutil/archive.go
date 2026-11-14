@@ -91,24 +91,41 @@ func ListArchive(o ArchiveOptions) ([]ArchivedFolder, error) {
 // file that is not this machine's own. Neither is overridden by --force: the
 // first would leave trees pointing into a moved repository, the second would
 // leave an entry that comes back on the next read.
-func refuseBlockers(shortName string, folder ParsedFolder, entry *lazypath.Folder) error {
-	if entry != nil && entry.Source != "" {
-		return fmt.Errorf("%s is declared in %s; archive it there", shortName, entry.Source)
-	}
-	blocked := false
-	for _, w := range lazypath.GetConfig().Worktrees {
-		if w.Project == folder.ShortName {
-			blocked = true
+func refuseBlockers(shortName string, folder ParsedFolder) error {
+	key := lazypath.Canonical(folder.Path)
+	for _, f := range lazypath.GetConfig().Folders {
+		// Any entry for the path counts: one in the own file does not hide the
+		// included one that would come back.
+		if f.Source != "" && lazypath.Canonical(f.Path) == key {
+			return fmt.Errorf("%s is declared in %s; archive it there", shortName, f.Source)
 		}
 	}
-	if listing, err := gitOutput(folder.Path, "worktree", "list", "--porcelain"); err == nil && len(listedWorktrees(listing)) > 1 {
-		blocked = true
+
+	var trees []string
+	for _, w := range lazypath.GetConfig().Worktrees {
+		if w.Project == folder.ShortName {
+			trees = append(trees, w.Path)
+		}
 	}
-	if blocked {
-		return fmt.Errorf("%s has working trees; remove its working trees first (projekt worktree remove %s@…)",
-			shortName, shortName)
+	listing, err := gitOutput(folder.Path, "worktree", "list", "--porcelain")
+	if err != nil {
+		cli.Debug("Cannot list the working trees of %s: %v", folder.Path, err)
+	} else if listed := listedWorktrees(listing); len(listed) > 1 {
+		trees = append(trees, listed[1:]...)
 	}
-	return nil
+	if len(trees) == 0 {
+		return nil
+	}
+
+	// A tree whose folder is gone is not removed, it is pruned.
+	for _, tree := range trees {
+		if _, err := os.Stat(tree); err != nil {
+			return fmt.Errorf("%s has working trees, and %s is gone; run projekt worktree prune, then archive it",
+				shortName, tree)
+		}
+	}
+	return fmt.Errorf("%s has working trees; remove its working trees first (projekt worktree remove %s@…)",
+		shortName, shortName)
 }
 
 // configuredEntry returns the configuration entry of a path, nil when it has
@@ -188,7 +205,7 @@ func ArchiveFolder(out io.Writer, shortName string, o ArchiveOptions) error {
 	}
 
 	entry := configuredEntry(folder.Path)
-	if err := refuseBlockers(shortName, folder, entry); err != nil {
+	if err := refuseBlockers(shortName, folder); err != nil {
 		return err
 	}
 	// Refused now rather than after the move, when it could only be reported.
