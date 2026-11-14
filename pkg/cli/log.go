@@ -3,13 +3,17 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 var (
-	logger *zap.SugaredLogger
+	// loggerMu guards logger and loggerLevel: concurrent sync workers may be
+	// the first to log.
+	loggerMu sync.Mutex
+	logger   *zap.SugaredLogger
 	// loggerLevel is the level the current logger was built with, so that a
 	// level set after initialization (e.g. by the --verbose flag, parsed after
 	// main() called InitLogging) rebuilds the logger instead of being ignored.
@@ -37,6 +41,13 @@ var levelHierarchy = map[string]int{
 }
 
 func InitLogging() {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
+	initLogging()
+}
+
+// initLogging builds the logger; the caller holds loggerMu.
+func initLogging() {
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 
@@ -71,8 +82,10 @@ func InitLogging() {
 
 // getLogger returns a logger matching the currently configured level.
 func getLogger() *zap.SugaredLogger {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
 	if logger == nil || loggerLevel != strings.ToLower(GetEnv().LogLevel) {
-		InitLogging()
+		initLogging()
 	}
 	return logger
 }

@@ -53,7 +53,8 @@ type execResult struct {
 	// skipped says the folder was not there to run in.
 	skipped bool
 	// notStarted says the run stopped, at a failure or an interrupt, before
-	// this folder's turn.
+	// this folder's turn. An interrupt also sets err, so that it counts as
+	// failed.
 	notStarted bool
 	// took is how long the command ran.
 	took time.Duration
@@ -117,7 +118,11 @@ func ExecInFolders(out io.Writer, o ExecOptions) error {
 		return nil
 	}
 
-	results := runInFolders(folders, o)
+	// Only a command with a timeout runs in a group of its own, out of reach
+	// of the terminal's Ctrl-C.
+	ctx, stop := interruptible(o.Timeout > 0)
+	defer stop()
+	results := runInFolders(ctx, folders, o)
 
 	var failed int
 	for _, result := range results {
@@ -146,17 +151,8 @@ func ExecInFolders(out io.Writer, o ExecOptions) error {
 // runInFolders runs the command everywhere, with at most Forks at a time, and
 // returns the results in the order the folders were given. The folders start
 // in that order too, so that --fail-fast stops at a predictable place.
-func runInFolders(folders []ParsedFolder, o ExecOptions) []execResult {
+func runInFolders(ctx context.Context, folders []ParsedFolder, o ExecOptions) []execResult {
 	results := make([]execResult, len(folders))
-
-	ctx := context.Background()
-	if o.Timeout > 0 {
-		// Only a command with a timeout runs in a group of its own, out of
-		// reach of the terminal's Ctrl-C.
-		var stop context.CancelFunc
-		ctx, stop = interruptible()
-		defer stop()
-	}
 
 	var failed atomic.Bool
 	next := make(chan int)
@@ -164,7 +160,12 @@ func runInFolders(folders []ParsedFolder, o ExecOptions) []execResult {
 	for range execForks(o.Forks, len(folders)) {
 		wg.Go(func() {
 			for i := range next {
-				if ctx.Err() != nil || o.FailFast && failed.Load() {
+				if ctx.Err() != nil {
+					// Interrupted: a folder never looked at is not a success.
+					results[i] = execResult{folder: folders[i], notStarted: true, err: errInterrupted}
+					continue
+				}
+				if o.FailFast && failed.Load() {
 					results[i] = execResult{folder: folders[i], notStarted: true}
 					continue
 				}

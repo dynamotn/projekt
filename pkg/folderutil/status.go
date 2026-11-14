@@ -123,7 +123,8 @@ func StatusFolders(out io.Writer, o *StatusOptions) error {
 	}
 	folders = FilterByTags(folders, o.Tags)
 
-	ctx, stop := interruptible()
+	// Only gh and glab run in a group of their own.
+	ctx, stop := interruptible(o.Requests)
 	defer stop()
 	statuses := readStatuses(ctx, folders, o)
 	if ctx.Err() != nil {

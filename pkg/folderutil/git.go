@@ -157,7 +157,8 @@ func SyncGitRepos(opts SyncOptions) error {
 		collected = &syncRows{}
 	}
 
-	ctx, stop := interruptible()
+	// A dry run starts nothing to stop.
+	ctx, stop := interruptible(!opts.DryRun)
 	defer stop()
 
 	var errs []error
@@ -857,7 +858,6 @@ func getGitURLs(server *lazypath.GitServer, group string, repoName string) (prim
 
 func cloneRepoWithFallback(job syncJob) error {
 	primaryURL, fallbackURL := getGitURLs(job.server, job.group, job.repo.Name)
-	targetPath := job.repoPath
 
 	// Try primary URL
 	cli.Debug("Attempting to clone from: %s", cli.RedactURL(primaryURL))
@@ -867,15 +867,8 @@ func cloneRepoWithFallback(job syncJob) error {
 	}
 
 	// If primary failed and we have fallback, try it. Not after a timeout or
-	// an interrupt: the user's limit is spent, and what the stopped clone
-	// left behind would only make the retry fail on it.
+	// an interrupt: the user's limit is spent.
 	if fallbackURL != "" && !errors.Is(err, errTimedOut) && !errors.Is(err, errInterrupted) {
-		// A failed clone can leave an empty directory behind, which would make
-		// the retry fail with "destination path already exists".
-		if entries, readErr := os.ReadDir(targetPath); readErr == nil && len(entries) == 0 {
-			_ = os.Remove(targetPath)
-		}
-
 		cli.Warn("Failed to clone via %s, trying fallback %s",
 			getURLType(primaryURL), getURLType(fallbackURL))
 		cli.Debug("Attempting to clone from: %s", cli.RedactURL(fallbackURL))
@@ -896,10 +889,30 @@ func getURLType(url string) string {
 // timeout. Four clones at once cannot share one terminal: a password or a
 // host-key question from one of them, with its text hidden in the buffer,
 // would hang the whole run, so a batch job is told not to ask.
+//
+// git clones into a hidden sibling, renamed onto the target only once the
+// clone is complete: a git killed half-way leaves a .git that the next sync
+// would take for a finished clone, so the target only ever holds one.
 func cloneRepo(job syncJob, gitURL string) error {
+	parent := filepath.Dir(job.repoPath)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return err
+	}
+	prefix := "." + filepath.Base(job.repoPath) + ".projekt-clone-"
+	tmp, err := os.MkdirTemp(parent, prefix)
+	if err != nil {
+		return fmt.Errorf("cannot make a folder to clone into: %w", err)
+	}
+	defer func() {
+		// Only the sibling made above: after the rename there is nothing left.
+		if tmp != "" && filepath.Dir(tmp) == parent && strings.HasPrefix(filepath.Base(tmp), prefix) {
+			_ = os.RemoveAll(tmp)
+		}
+	}()
+
 	ctx, cancel := limit(job.ctx, job.timeout)
 	defer cancel()
-	cmd := networkGit(ctx, job.batch, "clone", "--", gitURL, job.repoPath)
+	cmd := networkGit(ctx, job.batch, "clone", "--", gitURL, tmp)
 	// Concurrent clones would interleave git's progress output line by line on
 	// the shared streams, so buffer it per clone and surface it as a whole:
 	// attached to the error when the clone fails, and only at debug level when
@@ -912,10 +925,14 @@ func cloneRepo(job syncJob, gitURL string) error {
 		if err := stopped(ctx, nil); err != nil {
 			return err
 		}
-		if text := strings.TrimSpace(output.String()); text != "" {
+		// git names the folder it was given; the user knows the target.
+		if text := strings.TrimSpace(strings.ReplaceAll(output.String(), tmp, job.repoPath)); text != "" {
 			return fmt.Errorf("%w: %s", err, text)
 		}
 		return err
+	}
+	if err := os.Rename(tmp, job.repoPath); err != nil {
+		return fmt.Errorf("cannot move the clone into place: %w", err)
 	}
 
 	cli.Debug("git clone %s:\n%s", cli.RedactURL(gitURL), strings.TrimSpace(output.String()))

@@ -16,11 +16,16 @@ var (
 	errInterrupted = errors.New("interrupted")
 )
 
-// interruptible ends on Ctrl-C or SIGTERM. A command in a process group of
-// its own never sees the terminal's Ctrl-C, so projekt takes it, and the
-// context ending stops the group.
-func interruptible() (context.Context, context.CancelFunc) {
-	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+// interruptible ends on Ctrl-C, SIGTERM or SIGHUP (the terminal closed) when on says a command will run in
+// a process group of its own: such a group never sees the terminal's Ctrl-C,
+// so projekt takes it, and the context ending stops the group. Off, it
+// catches nothing, so a caller that lives on — the MCP server — keeps its own
+// signals.
+func interruptible(on bool) (context.Context, context.CancelFunc) {
+	if !on {
+		return context.WithCancel(context.Background())
+	}
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 }
 
 // limit bounds one call by timeout; zero or less means no limit.

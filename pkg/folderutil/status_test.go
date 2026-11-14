@@ -3,9 +3,14 @@ package folderutil
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -230,5 +235,44 @@ func TestStatusFolders_RequestsTimeout(t *testing.T) {
 	}
 	if rows["clone"]["requests"] != requestsTimeout {
 		t.Errorf("requests = %v, want %q", rows["clone"]["requests"], requestsTimeout)
+	}
+}
+
+// hangupFromGit puts a git on PATH that sends SIGHUP to projekt before it
+// does its work, and catches SIGHUP in the test so the binary lives on. It
+// returns the channel the test's own handler receives on.
+func hangupFromGit(t *testing.T) chan os.Signal {
+	t.Helper()
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	caught := make(chan os.Signal, 64)
+	signal.Notify(caught, syscall.SIGHUP)
+	t.Cleanup(func() { signal.Stop(caught) })
+
+	bin := t.TempDir()
+	script := fmt.Sprintf("#!/bin/sh\nkill -HUP $PPID\nexec %q \"$@\"\n", real)
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return caught
+}
+
+func TestStatusFolders_KeepsTheCallersSignals(t *testing.T) {
+	clean, _ := statusFolders(t)
+	lazypath.SetTestConfig(lazypath.Config{Folders: []lazypath.Folder{{Path: clean}}})
+	hangupFromGit(t)
+
+	// Nothing runs in a group of its own: a signal is the caller's — the MCP
+	// server's — not a reason to stop this listing.
+	if err := StatusFolders(&bytes.Buffer{}, &StatusOptions{}); err != nil {
+		t.Errorf("StatusFolders() error = %v, want the signal left to the caller", err)
+	}
+	// With --requests gh runs in a group of its own, and a hangup stops it.
+	err := StatusFolders(&bytes.Buffer{}, &StatusOptions{Requests: true, Timeout: time.Second})
+	if !errors.Is(err, errInterrupted) {
+		t.Errorf("StatusFolders(Requests) error = %v, want it interrupted", err)
 	}
 }

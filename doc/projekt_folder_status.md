@@ -52,7 +52,7 @@ projekt folder status [flags]
       --requests           Add the open merge or pull requests of the branch, counted through glab or gh
       --since string       Keep only the folders with a commit or a jump this recent: 12h, 7d, 2w, 3mo
   -t, --tags strings       Only report on folders carrying all of these tags
-      --timeout duration   Stop each glab or gh call after this long, 0 for no limit; below 0 uses the configuration's timeout, 2m unless set (default -1ns)
+      --timeout duration   Stop each glab or gh call after this long, 0 for no limit; below 0 uses the configuration's timeout, 2m unless set. A timeout reads timeout in the column and does not fail the command (default -1ns)
 ```
 
 ### Options inherited from parent commands

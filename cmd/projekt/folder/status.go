@@ -77,7 +77,7 @@ func NewFolderStatusCmd(out io.Writer) *cobra.Command {
 	f.StringVar(&since, "since", "", "Keep only the folders with a commit or a jump this recent: 12h, 7d, 2w, 3mo")
 	f.BoolVar(&o.Branches, "branches", false, "Add the default branch, how far behind it the branch is, and how old the branch is")
 	f.BoolVar(&o.Requests, "requests", false, "Add the open merge or pull requests of the branch, counted through glab or gh")
-	f.DurationVar(&timeout, "timeout", timeout, "Stop each glab or gh call after this long, 0 for no limit; below 0 uses the configuration's timeout, 2m unless set")
+	f.DurationVar(&timeout, "timeout", timeout, "Stop each glab or gh call after this long, 0 for no limit; below 0 uses the configuration's timeout, 2m unless set. A timeout reads timeout in the column and does not fail the command")
 	f.IntVar(&o.Forks, "forks", folderutil.DefaultSyncForks, "How many folders to read at once")
 	f.BoolVar(&o.NoHeaders, "no-headers", false, "Don't print headers")
 	f.BoolVar(&o.NoColor, "no-color", false, "Don't use color")

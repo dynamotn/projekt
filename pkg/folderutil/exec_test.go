@@ -2,6 +2,7 @@ package folderutil
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -375,6 +376,21 @@ func TestExecInFolders_FailFast(t *testing.T) {
 	for _, want := range []string{"first: exit 1", "second: not started", "third: not started"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output = %q, want it to contain %q", out.String(), want)
+		}
+	}
+}
+
+func TestRunInFolders_InterruptedFoldersCountAsFailed(t *testing.T) {
+	a, b := execFolders(t)
+	folders := []ParsedFolder{{ShortName: "alpha", Path: a}, {ShortName: "beta", Path: b}}
+
+	// Interrupted before any folder's turn: nothing runs, and the exit code
+	// must not say everything went well.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, result := range runInFolders(ctx, folders, ExecOptions{Command: []string{"true"}, Forks: 1}) {
+		if !result.notStarted || result.err == nil {
+			t.Errorf("%s: notStarted = %v, err = %v, want not started and counted as failed", result.folder.ShortName, result.notStarted, result.err)
 		}
 	}
 }
