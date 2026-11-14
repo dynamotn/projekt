@@ -1,9 +1,7 @@
 package folder
 
 import (
-	"fmt"
 	"io"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -51,15 +49,7 @@ func NewFolderShowCmd(out io.Writer) *cobra.Command {
 	f.BoolVar(&o.NoStatus, "no-status", false, "Skip the git state")
 	f.BoolVar(&o.NoHeaders, "no-headers", false, "Don't print headers")
 	f.BoolVar(&o.NoColor, "no-color", false, "Don't use color")
-	f.StringVarP(&output, "output", "o", output,
-		fmt.Sprintf("Output format, one of: %s", strings.Join(cli.OutputFormats, ", ")))
-
-	if err := cmd.RegisterFlagCompletionFunc("output",
-		func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-			return cli.OutputFormats, cobra.ShellCompDirectiveNoFileComp
-		}); err != nil {
-		cli.Warn("Cannot register completion for --output: %v", err)
-	}
+	cli.AddOutputFlag(cmd, &output, output)
 
 	return cmd
 }

@@ -10,7 +10,8 @@ This command will verify:
 - Whether they are valid Git repositories
 - Whether remote URLs match configuration
 
-Use --tags to check only part of the configuration.
+Use --tags to check only part of the configuration. With --output, the
+findings are printed on stdout as one row each, instead of being logged.
 
 ```
 projekt folder check [flags]
@@ -19,8 +20,9 @@ projekt folder check [flags]
 ### Options
 
 ```
-  -h, --help           help for check
-  -t, --tags strings   Only check folders carrying all of these tags
+  -h, --help            help for check
+  -o, --output string   Output format, one of: table, json, tsv
+  -t, --tags strings    Only check folders carrying all of these tags
 ```
 
 ### Options inherited from parent commands

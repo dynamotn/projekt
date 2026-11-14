@@ -4,6 +4,9 @@
 
 ### Added
 
+- **folder check**: `-o json` and `-o tsv` print one row per finding
+  (repository, remote, worktree or server) with its state, on stdout, for a
+  script to read
 - **t add**: `--suggest` asks the AI command which literals of a project
   should become values, checks that each one really occurs and each key is a
   plain name, prints them with the matching `--replace` line, and adds the

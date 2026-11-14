@@ -1,9 +1,7 @@
 package worktree
 
 import (
-	"fmt"
 	"io"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -59,17 +57,10 @@ func NewWorktreeListCmd(out io.Writer) *cobra.Command {
 	f.BoolVar(&o.NoStatus, "no-status", false, "Don't ask git about each working tree")
 	f.BoolVar(&o.NoHeaders, "no-headers", false, "Don't print headers")
 	f.BoolVar(&o.NoColor, "no-color", false, "Don't use color")
-	f.StringVarP(&output, "output", "o", output,
-		fmt.Sprintf("Output format, one of: %s", strings.Join(cli.OutputFormats, ", ")))
+	cli.AddOutputFlag(cmd, &output, output)
 	f.StringSliceVarP(&o.Tags, "tags", "t", nil,
 		"Only list working trees whose project carries all of these tags")
 
-	if err := cmd.RegisterFlagCompletionFunc("output",
-		func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-			return cli.OutputFormats, cobra.ShellCompDirectiveNoFileComp
-		}); err != nil {
-		cli.Warn("Cannot register completion for --output: %v", err)
-	}
 	if err := cmd.RegisterFlagCompletionFunc("tags",
 		func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			return folder.CompleteTags(toComplete)

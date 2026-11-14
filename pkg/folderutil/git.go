@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -376,11 +377,39 @@ type CheckOptions struct {
 	// Tags checks only the folders carrying every one of these tags. Empty
 	// checks everything.
 	Tags []string
+	// Output, when set, prints the findings as rows to Out instead of logging
+	// them.
+	Output cli.OutputFormat
+	// Out receives the rows; nil means standard output.
+	Out io.Writer
+}
+
+// checkRow is one finding of a check: a repository, a remote, a worktree, or
+// the server a folder names.
+type checkRow struct {
+	folder, repo, kind, name, state, detail string
+}
+
+// findings collects checkRows. A nil *findings means the check logs instead.
+type findings struct{ rows []checkRow }
+
+// add records a finding, or runs log when nothing is collecting.
+func (f *findings) add(row checkRow, log func()) {
+	if f == nil {
+		log()
+		return
+	}
+	f.rows = append(f.rows, row)
 }
 
 // CheckGitReposStatus checks status of all Git repositories
 func CheckGitReposStatus(opts CheckOptions) error {
 	c := lazypath.GetConfig()
+
+	var collected *findings
+	if opts.Output != "" {
+		collected = &findings{}
+	}
 
 	var errs []error
 	for _, folder := range c.Folders {
@@ -391,8 +420,22 @@ func CheckGitReposStatus(opts CheckOptions) error {
 			continue
 		}
 
-		if err := checkFolderGitRepos(folder); err != nil {
-			cli.Error("Failed to check folder %s: %v", folder.Path, err)
+		if err := checkFolderGitRepos(folder, collected); err != nil {
+			// With rows the finding is already in the output; the error still
+			// sets the exit code.
+			if collected == nil {
+				cli.Error("Failed to check folder %s: %v", folder.Path, err)
+			}
+			errs = append(errs, err)
+		}
+	}
+
+	if collected != nil {
+		out := opts.Out
+		if out == nil {
+			out = os.Stdout
+		}
+		if err := encodeFindings(out, opts.Output, collected.rows); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -400,18 +443,33 @@ func CheckGitReposStatus(opts CheckOptions) error {
 	return errors.Join(errs...)
 }
 
-func checkFolderGitRepos(folder lazypath.Folder) error {
+func encodeFindings(out io.Writer, format cli.OutputFormat, rows []checkRow) error {
+	view := cli.ListView{Ordered: true}
+	for _, key := range []string{"folder", "repo", "kind", "name", "state", "detail"} {
+		view.Columns = append(view.Columns, cli.ListColumn{Header: strings.ToUpper(key), Key: key})
+	}
+	for _, r := range rows {
+		view.AppendRow(r.folder, r.repo, r.kind, r.name, r.state, r.detail)
+	}
+	return cli.EncodeList(out, view, cli.ListOutputOption{Output: format})
+}
+
+func checkFolderGitRepos(folder lazypath.Folder, out *findings) error {
 	if folder.Git == nil {
 		return nil
 	}
 
-	cli.Info("\nChecking folder: %s", folder.Path)
-	cli.Info("  Git Host: %s", folder.Git.Host)
-	cli.Info("  Git Group: %s", folder.Git.Group)
+	if out == nil {
+		cli.Info("\nChecking folder: %s", folder.Path)
+		cli.Info("  Git Host: %s", folder.Git.Host)
+		cli.Info("  Git Group: %s", folder.Git.Group)
+	}
 
 	gitServer := getGitServer(folder.Git.Host)
 	if gitServer == nil {
-		return fmt.Errorf("git server %q not found in configuration", folder.Git.Host)
+		err := fmt.Errorf("git server %q not found in configuration", folder.Git.Host)
+		out.add(checkRow{folder: folder.Path, kind: "server", name: folder.Git.Host, state: "unknown", detail: err.Error()}, func() {})
+		return err
 	}
 
 	// A repository not cloned yet is what sync is for, not a problem; one that
@@ -419,30 +477,35 @@ func checkFolderGitRepos(folder lazypath.Folder) error {
 	var problems int
 	for _, repo := range folder.Git.Repos {
 		repoPath := repoTargetPath(folder, repo)
+		row := checkRow{folder: folder.Path, repo: repo.Name, kind: "repository", name: repo.Name, detail: repoPath}
 
 		if _, err := os.Stat(repoPath); os.IsNotExist(err) {
-			cli.Warn("  [MISSING] %s (%s)", repo.Name, repoPath)
+			row.state = "missing"
+			out.add(row, func() { cli.Warn("  [MISSING] %s (%s)", repo.Name, repoPath) })
 			continue
 		}
 
 		// Check if it's a valid Git repository
 		gitDir := filepath.Join(repoPath, ".git")
 		if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-			cli.Warn("  [NOT GIT] %s (%s)", repo.Name, repoPath)
+			row.state = "not-git"
+			out.add(row, func() { cli.Warn("  [NOT GIT] %s (%s)", repo.Name, repoPath) })
 			problems++
 			continue
 		}
 
 		// Check remote URL
 		if err := checkGitRemote(repoPath, gitServer, folder.Git, repo); err != nil {
-			cli.Warn("  [WARNING] %s: %v", repo.Name, err)
+			row.state, row.detail = "mismatch", err.Error()
+			out.add(row, func() { cli.Warn("  [WARNING] %s: %v", repo.Name, err) })
 			problems++
 		} else {
-			cli.Info("  [OK] %s (%s)", repo.Name, repoPath)
+			row.state = "ok"
+			out.add(row, func() { cli.Info("  [OK] %s (%s)", repo.Name, repoPath) })
 		}
 
-		checkExtraRemotes(repoPath, repo)
-		checkWorktrees(folder, repo)
+		checkExtraRemotes(repoPath, folder, repo, out)
+		checkWorktrees(folder, repo, out)
 	}
 
 	if problems > 0 {
@@ -453,41 +516,52 @@ func checkFolderGitRepos(folder lazypath.Folder) error {
 
 // checkExtraRemotes reports on the remotes the configuration asks for beyond
 // the one the clone set up.
-func checkExtraRemotes(repoPath string, repo lazypath.GitRepo) {
+func checkExtraRemotes(repoPath string, folder lazypath.Folder, repo lazypath.GitRepo, out *findings) {
 	names := repo.RemoteNames()
 	if len(names) == 0 {
 		return
 	}
+	row := checkRow{folder: folder.Path, repo: repo.Name, kind: "remote"}
 
 	existing, err := gitRemotes(repoPath)
 	if err != nil {
-		cli.Warn("    [WARNING] %s: cannot read remotes: %v", repo.Name, err)
+		row.state, row.detail = "unknown", "cannot read remotes: "+err.Error()
+		out.add(row, func() { cli.Warn("    [WARNING] %s: cannot read remotes: %v", repo.Name, err) })
 		return
 	}
 
 	for _, name := range names {
 		want := repo.Remotes[name]
+		row.name = name
 		switch current, present := existing[name]; {
 		case !present:
-			cli.Warn("    [REMOTE MISSING] %s -> %s", name, cli.RedactURL(want))
+			row.state, row.detail = "missing", cli.RedactURL(want)
+			out.add(row, func() { cli.Warn("    [REMOTE MISSING] %s -> %s", name, cli.RedactURL(want)) })
 		case current != want:
-			cli.Warn("    [REMOTE MISMATCH] %s: got %s, expected %s", name, cli.RedactURL(current), cli.RedactURL(want))
+			row.state, row.detail = "mismatch", fmt.Sprintf("got %s, expected %s", cli.RedactURL(current), cli.RedactURL(want))
+			out.add(row, func() {
+				cli.Warn("    [REMOTE MISMATCH] %s: got %s, expected %s", name, cli.RedactURL(current), cli.RedactURL(want))
+			})
 		default:
-			cli.Info("    [REMOTE OK] %s -> %s", name, cli.RedactURL(want))
+			row.state, row.detail = "ok", cli.RedactURL(want)
+			out.add(row, func() { cli.Info("    [REMOTE OK] %s -> %s", name, cli.RedactURL(want)) })
 		}
 	}
 }
 
 // checkWorktrees reports which configured working trees are not on disk.
-func checkWorktrees(folder lazypath.Folder, repo lazypath.GitRepo) {
+func checkWorktrees(folder lazypath.Folder, repo lazypath.GitRepo, out *findings) {
 	for _, worktree := range repo.Worktrees {
 		path := worktreeTargetPath(folder, worktree)
+		row := checkRow{folder: folder.Path, repo: repo.Name, kind: "worktree", name: worktree.Branch, detail: path}
 
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			cli.Warn("    [WORKTREE MISSING] %s (%s)", path, worktree.Branch)
+			row.state = "missing"
+			out.add(row, func() { cli.Warn("    [WORKTREE MISSING] %s (%s)", path, worktree.Branch) })
 			continue
 		}
-		cli.Info("    [WORKTREE OK] %s (%s)", path, worktree.Branch)
+		row.state = "ok"
+		out.add(row, func() { cli.Info("    [WORKTREE OK] %s (%s)", path, worktree.Branch) })
 	}
 }
 

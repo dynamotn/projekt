@@ -1,6 +1,7 @@
 package folderutil
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
@@ -352,7 +354,7 @@ func TestCheckFolderGitRepos(t *testing.T) {
 	})
 
 	// This should not fail even if repos don't exist
-	err := checkFolderGitRepos(folder)
+	err := checkFolderGitRepos(folder, nil)
 	if err != nil {
 		t.Errorf("checkFolderGitRepos failed: %v", err)
 	}
@@ -493,7 +495,7 @@ func TestCheckFolderGitRepos_NoGitConfig(t *testing.T) {
 		Git:         nil,
 	}
 
-	err := checkFolderGitRepos(folder)
+	err := checkFolderGitRepos(folder, nil)
 	if err != nil {
 		t.Errorf("checkFolderGitRepos() with no Git config should not error, got: %v", err)
 	}
@@ -1129,12 +1131,107 @@ func TestCheckFolderGitRepos_ReportsProblems(t *testing.T) {
 	}
 
 	lazypath.SetTestConfig(lazypath.Config{})
-	if err := checkFolderGitRepos(folder); err == nil {
+	if err := checkFolderGitRepos(folder, nil); err == nil {
 		t.Error("checkFolderGitRepos() with an unknown server error = nil, want an error")
 	}
 
 	lazypath.SetTestConfig(lazypath.Config{GitServers: []lazypath.GitServer{{Name: "github", HTTPS: "https://github.com", SSH: "git@github.com"}}})
-	if err := checkFolderGitRepos(folder); err == nil {
+	if err := checkFolderGitRepos(folder, nil); err == nil {
 		t.Error("checkFolderGitRepos() with a folder that is not a repository error = nil, want an error")
+	}
+}
+
+// checkJSON runs a -o json check and decodes the rows it printed.
+func checkJSON(t *testing.T, folders ...lazypath.Folder) (rows []map[string]string, out string, err error) {
+	t.Helper()
+
+	lazypath.SetTestConfig(lazypath.Config{
+		Folders:    folders,
+		GitServers: []lazypath.GitServer{{Name: "github", HTTPS: "https://github.com", SSH: "git@github.com"}},
+	})
+	defer lazypath.ResetTestConfig()
+
+	var buf strings.Builder
+	err = CheckGitReposStatus(CheckOptions{Output: cli.OutputJSON, Out: &buf})
+	if jsonErr := json.Unmarshal([]byte(buf.String()), &rows); jsonErr != nil {
+		t.Fatalf("not a JSON array: %v\n%s", jsonErr, buf.String())
+	}
+	return rows, buf.String(), err
+}
+
+func TestCheckGitReposStatus_JSON(t *testing.T) {
+	dir := t.TempDir()
+	initRepo(t, filepath.Join(dir, "ok"))
+	mustGit(t, filepath.Join(dir, "ok"), "remote", "add", "origin", "git@github.com:org/ok.git")
+	mustGit(t, filepath.Join(dir, "ok"), "remote", "add", "other", "git@github.com:org/other.git")
+
+	folder := lazypath.Folder{
+		Path: dir,
+		Git: &lazypath.GitConfig{Host: "github", Group: "org", Repos: []lazypath.GitRepo{
+			{Name: "ok",
+				Remotes:   map[string]string{"upstream": "git@github.com:up/ok.git"},
+				Worktrees: []lazypath.GitWorktree{{Path: "ok-wt", Branch: "wt"}}},
+			{Name: "gone"},
+		}},
+	}
+
+	rows, _, err := checkJSON(t, folder)
+	if err != nil {
+		t.Fatalf("error = %v, want nil (missing is not a problem)", err)
+	}
+
+	var got []string
+	for _, row := range rows {
+		for _, key := range []string{"folder", "repo", "kind", "name", "state", "detail"} {
+			if _, ok := row[key]; !ok {
+				t.Errorf("row %v lacks key %q", row, key)
+			}
+		}
+		got = append(got, row["kind"]+":"+row["state"])
+	}
+	want := []string{"repository:ok", "remote:missing", "worktree:missing", "repository:missing"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("findings = %v, want %v", got, want)
+	}
+}
+
+func TestCheckGitReposStatus_JSONUnknownServer(t *testing.T) {
+	folder := lazypath.Folder{
+		Path: t.TempDir(),
+		Git:  &lazypath.GitConfig{Host: "nowhere", Group: "org", Repos: []lazypath.GitRepo{{Name: "api"}}},
+	}
+
+	rows, _, err := checkJSON(t, folder)
+	if err == nil {
+		t.Error("error = nil, want one for the unknown server")
+	}
+	if len(rows) != 1 || rows[0]["kind"] != "server" || rows[0]["state"] != "unknown" || rows[0]["repo"] != "" {
+		t.Errorf("rows = %v, want one server/unknown row with no repo", rows)
+	}
+}
+
+func TestCheckGitReposStatus_JSONEmpty(t *testing.T) {
+	_, out, err := checkJSON(t, lazypath.Folder{Path: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "[]\n" {
+		t.Errorf("stdout = %q, want %q", out, "[]\n")
+	}
+}
+
+func TestCheckGitReposStatus_DefaultOutputUnchanged(t *testing.T) {
+	lazypath.SetTestConfig(lazypath.Config{Folders: []lazypath.Folder{{
+		Path: t.TempDir(),
+		Git:  &lazypath.GitConfig{Host: "github", Group: "org", Repos: []lazypath.GitRepo{{Name: "gone"}}},
+	}}, GitServers: []lazypath.GitServer{{Name: "github", HTTPS: "https://github.com", SSH: "git@github.com"}}})
+	defer lazypath.ResetTestConfig()
+
+	var buf strings.Builder
+	if err := CheckGitReposStatus(CheckOptions{Out: &buf}); err != nil {
+		t.Fatal(err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("Out received %q, want nothing without Output", buf.String())
 	}
 }

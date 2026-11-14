@@ -455,3 +455,17 @@ func TestNewFolderDescribeCmd_GenerateFlags(t *testing.T) {
 		t.Errorf("--show-prompt = %q, %v, want the prompt", out, err)
 	}
 }
+
+func TestNewFolderCheckCmd_Output(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := NewFolderCmd(&buf)
+	cmd.SetArgs([]string{"check", "-o", "yaml"})
+	cmd.SilenceUsage, cmd.SilenceErrors = true, true
+	if err := cmd.Execute(); err == nil {
+		t.Error("want an error for -o yaml")
+	}
+
+	if f := NewFolderCheckCmd(&buf).Flags().ShorthandLookup("o"); f == nil || f.Name != "output" {
+		t.Error("check has no -o/--output flag")
+	}
+}

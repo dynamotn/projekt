@@ -3,7 +3,6 @@ package root
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -55,16 +54,8 @@ func NewDoctorCmd(out io.Writer) *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&strict, "strict", false, "Treat warnings as failures")
-	cmd.Flags().StringVarP(&output, "output", "o", outputText,
-		fmt.Sprintf("Output format, one of: %s", strings.Join(doctorFormats, ", ")))
+	cli.AddOutputFlag(cmd, &output, outputText, doctorFormats...)
 	cmd.Flags().BoolVar(&noColor, "no-color", false, "Don't use color")
-
-	if err := cmd.RegisterFlagCompletionFunc("output",
-		func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-			return doctorFormats, cobra.ShellCompDirectiveNoFileComp
-		}); err != nil {
-		cli.Warn("Cannot register completion for --output: %v", err)
-	}
 
 	cli.SetColorAndStyles(cmd)
 	return cmd
