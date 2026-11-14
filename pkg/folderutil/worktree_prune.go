@@ -149,7 +149,7 @@ func pruneMerged(out io.Writer, o PruneWorktreeOptions, projects []ParsedFolder)
 
 		declared := map[string]struct{}{}
 		for _, folder := range config.Folders {
-			if folder.Git != nil && lazypath.SamePath(folder.Path, project.Path) {
+			if folder.Git != nil {
 				for _, repo := range folder.Git.Repos {
 					for _, worktree := range repo.Worktrees {
 						declared[lazypath.Canonical(worktreeTargetPath(folder, worktree))] = struct{}{}
@@ -159,26 +159,44 @@ func pruneMerged(out io.Writer, o PruneWorktreeOptions, projects []ParsedFolder)
 		}
 
 		// The first entry is the main checkout, which is never removed.
-		for _, path := range listedWorktrees(listing)[1:] {
+		listed := listedWorktrees(listing)
+		if len(listed) == 0 {
+			continue
+		}
+		for _, path := range listed[1:] {
+			// Every entry that records this path: the tree is ours to remove
+			// only when no included file records it too.
 			var recorded *lazypath.Worktree
+			var theirs string
 			for i, worktree := range worktrees {
-				if worktree.Project == project.ShortName && lazypath.SamePath(worktree.Path, path) {
-					recorded = &worktrees[i]
-					break
+				if worktree.Project != project.ShortName || !lazypath.SamePath(worktree.Path, path) {
+					continue
+				}
+				if worktree.Source == "" {
+					if recorded == nil {
+						recorded = &worktrees[i]
+					}
+				} else if theirs == "" {
+					theirs = worktree.Source
+					if recorded == nil {
+						recorded = &worktrees[i]
+					}
 				}
 			}
 
 			name, reason, configured := path, "", ""
 			if recorded == nil {
 				reason = "not recorded by projekt"
-				if _, ok := declared[lazypath.Canonical(path)]; ok {
-					reason = "declared under git.repos"
-				}
 			} else {
 				name, configured = recorded.ShortName(), recorded.Branch
 				if recorded.Source != "" {
 					reason = "from " + recorded.Source
+				} else if theirs != "" {
+					reason = "also from " + theirs
 				}
+			}
+			if _, ok := declared[lazypath.Canonical(path)]; ok && (recorded == nil || reason == "") {
+				reason = "declared under git.repos"
 			}
 			if reason == "" {
 				reason = mergedBlocker(path, base, configured)

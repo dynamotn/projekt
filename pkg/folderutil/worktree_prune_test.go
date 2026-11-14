@@ -369,3 +369,59 @@ func TestPruneWorktrees_MergedLeavesOthersNamed(t *testing.T) {
 		}
 	}
 }
+
+func TestPruneWorktrees_MergedKeepsATreeAnotherFileRecords(t *testing.T) {
+	project, trees := mergedWorktrees(t)
+	root := filepath.Dir(project)
+
+	// Both files record done: the own one through a symlink to it.
+	link := filepath.Join(root, "done-link")
+	if err := os.Symlink(trees["done"], link); err != nil {
+		t.Fatal(err)
+	}
+	included := filepath.Join(root, "team.yaml")
+	body := "worktrees:\n  - {project: myapp, name: theirs, branch: done, path: " + trees["done"] + "}\n"
+	own := "include: [" + included + "]\nfolders:\n  - path: " + project + "\n" +
+		"worktrees:\n  - {project: myapp, name: mine, branch: done, path: " + link + "}\n"
+	if err := os.WriteFile(included, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lazypath.CfgFile, []byte(own), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lazypath.ResetTestConfig()
+	lazypath.InitConfig()
+
+	var out bytes.Buffer
+	if err := PruneWorktrees(&out, PruneWorktreeOptions{Merged: true}); err != nil {
+		t.Fatalf("PruneWorktrees() error = %v", err)
+	}
+	if _, err := os.Stat(trees["done"]); err != nil {
+		t.Errorf("a tree an included file records was removed: %v", err)
+	}
+	if want := "myapp@mine: also from " + included + "\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("out lacks %q:\n%s", want, out.String())
+	}
+}
+
+func TestPruneWorktrees_MergedKeepsAnOwnTreeDeclaredUnderGitRepos(t *testing.T) {
+	project, trees := mergedWorktrees(t)
+	config := lazypath.GetConfig()
+	config.Folders[0].Git = &lazypath.GitConfig{Repos: []lazypath.GitRepo{{
+		Name:      "myapp",
+		Worktrees: []lazypath.GitWorktree{{Path: trees["done"], Branch: "done"}},
+	}}}
+	lazypath.SetTestConfig(config)
+	_ = project
+
+	var out bytes.Buffer
+	if err := PruneWorktrees(&out, PruneWorktreeOptions{Merged: true}); err != nil {
+		t.Fatalf("PruneWorktrees() error = %v", err)
+	}
+	if _, err := os.Stat(trees["done"]); err != nil {
+		t.Errorf("a recorded tree declared under git.repos was removed: %v", err)
+	}
+	if want := "myapp@done: declared under git.repos\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("out lacks %q:\n%s", want, out.String())
+	}
+}
