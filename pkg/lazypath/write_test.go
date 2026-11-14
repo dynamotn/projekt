@@ -465,3 +465,17 @@ func TestRemoteNames_KeepTheirCase(t *testing.T) {
 		t.Errorf("file gained a lowercase upstream:\n%s", got)
 	}
 }
+
+func TestRemoteNames_AmbiguousSpellingIsLeftAlone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := strings.Replace(upstreamConfig,
+		"            Upstream: https://example.com/up/app.git\n",
+		"            Upstream: https://example.com/up/app.git\n            UPSTREAM: https://example.com/up/app.git\n", 1)
+	savedConfig(t, path, content, func() error {
+		remotes := GetConfig().Folders[0].Git.Repos[0].Remotes
+		if _, ok := remotes["upstream"]; !ok || len(remotes) != 1 {
+			t.Errorf("remotes = %v, want the one merged key upstream", remotes)
+		}
+		return nil
+	})
+}

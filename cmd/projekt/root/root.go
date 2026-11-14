@@ -73,7 +73,7 @@ func needsConfig(cmd *cobra.Command, exempt ...string) bool {
 func initConfigFor(root *cobra.Command, args []string) {
 	// CfgFile is only ever set by --config, which must name a real file.
 	lazypath.CfgFileFromFlag = lazypath.CfgFile != ""
-	if cmd, _, err := root.Find(args); err == nil && cmd.Name() == "doctor" {
+	if cmd, _, err := root.Find(args); err == nil && cmd.Name() == "doctor" && cmd.Parent() == root {
 		lazypath.InitConfigReadOnly()
 		return
 	}

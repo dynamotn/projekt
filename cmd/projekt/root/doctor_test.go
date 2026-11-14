@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/doctor"
@@ -105,6 +106,7 @@ func TestInitConfigFor_DoctorLeavesNoFile(t *testing.T) {
 	}{
 		{[]string{"doctor"}, false},
 		{[]string{"folder", "list"}, true},
+		{[]string{"folder", "doctor"}, true},
 	} {
 		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 		file := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "projekt", "config.yaml")
@@ -117,7 +119,11 @@ func TestInitConfigFor_DoctorLeavesNoFile(t *testing.T) {
 			lazypath.ResetTestConfig()
 		})
 
-		initConfigFor(NewRootCmd(&bytes.Buffer{}), tc.args)
+		root := NewRootCmd(&bytes.Buffer{})
+		// A doctor that is not the top-level one is an ordinary command.
+		folderCmd, _, _ := root.Find([]string{"folder"})
+		folderCmd.AddCommand(&cobra.Command{Use: "doctor"})
+		initConfigFor(root, tc.args)
 
 		_, err := os.Stat(file)
 		if got := err == nil; got != tc.created {

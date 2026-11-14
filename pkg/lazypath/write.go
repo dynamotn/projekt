@@ -171,12 +171,17 @@ func restoreRemoteCase(data []byte, config *Config) {
 				break
 			}
 			fileRemotes := own.Folders[i].Git.Repos[j].Remotes
+			spellings := map[string][]string{}
+			for spelt := range fileRemotes {
+				lower := strings.ToLower(spelt)
+				spellings[lower] = append(spellings[lower], spelt)
+			}
 			for name, url := range repo.Remotes {
-				for spelt := range fileRemotes {
-					if spelt != name && strings.ToLower(spelt) == name {
-						delete(repo.Remotes, name)
-						repo.Remotes[spelt] = url
-					}
+				// A name the file spells two ways was merged by viper: leave
+				// it as it came, rather than copy one value under both.
+				if spelt := spellings[name]; len(spelt) == 1 && spelt[0] != name {
+					delete(repo.Remotes, name)
+					repo.Remotes[spelt[0]] = url
 				}
 			}
 		}
