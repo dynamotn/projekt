@@ -242,7 +242,7 @@ func gitIgnored(root string, rels []string) (map[string]bool, error) {
 	out, err := cmd.Output()
 	// Status 1 is git's way of saying nothing is ignored.
 	var exit *exec.ExitError
-	if err != nil && !(errors.As(err, &exit) && exit.ExitCode() == 1) {
+	if err != nil && (!errors.As(err, &exit) || exit.ExitCode() != 1) {
 		// Not knowing what is ignored, nothing may be sent.
 		return nil, gitError("check-ignore", err)
 	}

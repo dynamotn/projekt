@@ -69,7 +69,13 @@ func SuggestReplacements(source string, o SuggestOptions) ([]Replacement, error)
 			keys[key] = true
 		}
 	}
-	drop := func(line, why string) { fmt.Fprintf(o.Err, "dropped %q: %s\n", line, why) }
+	var writeErr error // the first failed write; the loop goes on, the caller hears of it
+	note := func(_ int, err error) {
+		if writeErr == nil {
+			writeErr = err
+		}
+	}
+	drop := func(line, why string) { note(fmt.Fprintf(o.Err, "dropped %q: %s\n", line, why)) }
 	for _, line := range strings.Split(answer, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -108,14 +114,19 @@ func SuggestReplacements(source string, o SuggestOptions) ([]Replacement, error)
 
 	command := "t add " + shellQuote(source)
 	for _, r := range kept {
-		fmt.Fprintf(o.Out, "%s -> %s\n", r.Literal, r.Expr)
+		note(fmt.Fprintf(o.Out, "%s -> %s\n", r.Literal, r.Expr))
 		command += " --replace " + shellQuote(r.Literal+"="+r.Expr)
 	}
-	if len(kept) == 0 {
-		fmt.Fprintln(o.Err, "no suggestion held")
-		return nil, nil
+	if writeErr != nil {
+		return nil, writeErr
 	}
-	fmt.Fprintln(o.Out, command)
+	if len(kept) == 0 {
+		_, err := fmt.Fprintln(o.Err, "no suggestion held")
+		return nil, err
+	}
+	if _, err := fmt.Fprintln(o.Out, command); err != nil {
+		return nil, err
+	}
 	return kept, nil
 }
 
