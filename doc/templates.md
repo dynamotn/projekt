@@ -279,7 +279,8 @@ is — so a pipe or an `&&` works, and they run with `PROJEKT_NAME`,
 A value written into a line becomes shell code, and the values `t apply`
 replays come from the project's committed record. Use each one as a word:
 `"$PROJEKT_VALUE_MODULE"` (every value is in the environment, its name in
-upper case with anything but letters and digits made `_`), or
+upper case with anything but letters and digits made `_`, so `go-module` and
+`go_module` are the same variable: projekt warns, and the later name wins), or
 `{{ .Values.module | shquote }}`:
 
 ```yaml

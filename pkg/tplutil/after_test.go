@@ -5,8 +5,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // runHooks renders a template and then runs whatever its manifest asks for,
@@ -190,5 +193,35 @@ func TestShquoteAndValueEnv_Edges(t *testing.T) {
 	env := ValueEnv(Values{"bad": "a\x00b", "ok": "fine"})
 	if len(env) != 1 || env[0] != "PROJEKT_VALUE_OK=fine" {
 		t.Errorf("ValueEnv() = %q, want the NUL value left out and the rest kept", env)
+	}
+}
+
+func TestValueEnv_WarnsWhenTwoNamesShareAVariable(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	realStderr := os.Stderr
+	os.Stderr = w
+	// Cleanups run last-registered first: the logger goes back over the real
+	// stderr, not over the closed pipe.
+	t.Cleanup(cli.InitLogging)
+	t.Cleanup(func() { os.Stderr = realStderr })
+	cli.GetEnv().LogLevel = "warn"
+	t.Cleanup(func() { cli.GetEnv().LogLevel = "" })
+	cli.InitLogging()
+
+	env := ValueEnv(Values{"go-module": "a", "go_module": "b", "other": "c"})
+	os.Stderr = realStderr
+	_ = w.Close()
+	logged, _ := io.ReadAll(r)
+
+	for _, want := range []string{"go-module", "go_module", "PROJEKT_VALUE_GO_MODULE"} {
+		if !strings.Contains(string(logged), want) {
+			t.Errorf("warning %q does not mention %q", logged, want)
+		}
+	}
+	if !slices.Contains(env, "PROJEKT_VALUE_GO_MODULE=b") {
+		t.Errorf("ValueEnv() = %q, want the later name to win", env)
 	}
 }

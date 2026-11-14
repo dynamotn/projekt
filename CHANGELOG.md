@@ -132,6 +132,7 @@
 
 ### Fixed
 
+- **t**, **b**: values whose names differ only in punctuation, such as `go-module` and `go_module`, are reported when they land on the same `PROJEKT_VALUE_` variable
 - **config**: a remote named `Upstream` keeps its capital letter instead of becoming `upstream`
 - **config trust**: names that are not all included files trust none of them
 - **t add**: `--force` replaces a template only once the new copy is complete

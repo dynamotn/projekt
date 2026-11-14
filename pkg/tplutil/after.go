@@ -115,6 +115,9 @@ func RunShell(command, dir string, env []string, in io.Reader, out, errOut io.Wr
 // A value written into the line itself is shell code, and a project's record
 // is text anybody could have committed; "$PROJEKT_VALUE_MODULE" is only ever
 // a word. A list or a map is passed as JSON.
+//
+// Two names that differ only in punctuation or case land on one variable:
+// that is said, and the later name, in sorted order, wins.
 func ValueEnv(values Values) []string {
 	names := make([]string, 0, len(values))
 	for name := range values {
@@ -123,6 +126,7 @@ func ValueEnv(values Values) []string {
 	sort.Strings(names)
 
 	env := make([]string, 0, len(names))
+	owner := make(map[string]string, len(names))
 	for _, name := range names {
 		key := strings.Map(func(r rune) rune {
 			if r < unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r)) {
@@ -130,6 +134,10 @@ func ValueEnv(values Values) []string {
 			}
 			return '_'
 		}, name)
+		if first, taken := owner[key]; taken {
+			cli.Warn("values %q and %q are both PROJEKT_VALUE_%s: %q wins", first, name, key, name)
+		}
+		owner[key] = name
 		var text string
 		switch value := values[name].(type) {
 		case nil:
