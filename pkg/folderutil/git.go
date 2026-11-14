@@ -85,16 +85,19 @@ func (s *syncRows) add(row syncRow) {
 	s.rows = append(s.rows, row)
 }
 
-// sorted returns the rows by repository, then by the order they happened in.
+// sorted returns the rows by repository, then folder path, then by the order
+// they happened in.
 func (s *syncRows) sorted() []syncRow {
 	rows := slices.Clone(s.rows)
 	slices.SortStableFunc(rows, func(a, b syncRow) int {
-		return cmp.Or(strings.Compare(a.repo, b.repo), cmp.Compare(a.seq, b.seq))
+		return cmp.Or(strings.Compare(a.repo, b.repo), strings.Compare(a.path, b.path), cmp.Compare(a.seq, b.seq))
 	})
 	return rows
 }
 
 // report records a step of the job, or runs log when nothing is collecting.
+// A failure passes an empty log: the caller returns the error, and the
+// command's caller prints it.
 func (j syncJob) report(action, target, result, detail string, log func()) {
 	if j.rows == nil {
 		log()
@@ -156,9 +159,13 @@ func SyncGitRepos(opts SyncOptions) error {
 			continue
 		}
 
-		folderJobs, err := planFolderSync(folder)
+		folderJobs, err := planFolderSync(folder, collected)
 		if err != nil {
-			cli.Error("Failed to sync folder %s: %v", folder.Path, err)
+			if collected != nil {
+				collected.add(syncRow{path: folder.Path, action: actionSkip, result: resultFailed, detail: err.Error()})
+			} else {
+				cli.Error("Failed to sync folder %s: %v", folder.Path, err)
+			}
 			errs = append(errs, err)
 			continue
 		}
@@ -188,7 +195,7 @@ func SyncGitRepos(opts SyncOptions) error {
 // planFolderSync creates a folder and resolves the repositories to clone into
 // it. This stays sequential: it reads the configuration and creates the shared
 // parent directory, neither of which is worth doing concurrently.
-func planFolderSync(folder lazypath.Folder) ([]syncJob, error) {
+func planFolderSync(folder lazypath.Folder, rows *syncRows) ([]syncJob, error) {
 	// Ensure parent folder exists
 	if err := os.MkdirAll(folder.Path, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create folder %s: %w", folder.Path, err)
@@ -202,7 +209,11 @@ func planFolderSync(folder lazypath.Folder) ([]syncJob, error) {
 	var jobs []syncJob
 	for _, repo := range folder.Git.Repos {
 		if repo.Name == "" {
-			cli.Warn("Skipping repo with empty name in folder %s", folder.Path)
+			if rows != nil {
+				rows.add(syncRow{path: folder.Path, action: actionSkip, result: resultSkipped, detail: "repo with empty name"})
+			} else {
+				cli.Warn("Skipping repo with empty name in folder %s", folder.Path)
+			}
 			continue
 		}
 
@@ -331,20 +342,28 @@ func cloneIfMissing(job syncJob, dryRun bool) (existed bool, err error) {
 	if _, err := os.Stat(job.repoPath); err != nil && !os.IsNotExist(err) {
 		// Not there is one thing; unreadable is another, and reporting it as
 		// "already exists" would send the user looking in the wrong place.
-		return false, fmt.Errorf("cannot access %s: %w", job.repoPath, err)
+		err = fmt.Errorf("cannot access %s: %w", job.repoPath, err)
+		job.report(actionClone, job.repoPath, resultFailed, err.Error(), func() {})
+		return false, err
 	} else if err == nil {
 		// Repository exists, check if it's valid
 		if dryRun {
-			cli.Info("[DRY RUN] Would check: %s", job.repoPath)
+			job.report(actionSkip, job.repoPath, resultPlanned, "already cloned", func() {
+				cli.Info("[DRY RUN] Would check: %s", job.repoPath)
+			})
 			return true, nil
 		}
 
 		if !IsRepoRoot(job.repoPath) {
 			// Remotes, worktrees and pulls would land on whatever repository
 			// encloses this folder.
-			return true, fmt.Errorf("%s exists but is not a git repository", job.repoPath)
+			err := fmt.Errorf("%s exists but is not a git repository", job.repoPath)
+			job.report(actionClone, job.repoPath, resultFailed, err.Error(), func() {})
+			return true, err
 		}
-		cli.Debug("Repository %s already exists at %s", job.repo.Name, job.repoPath)
+		job.report(actionSkip, job.repoPath, resultSkipped, "already cloned", func() {
+			cli.Debug("Repository %s already exists at %s", job.repo.Name, job.repoPath)
+		})
 		return true, nil
 	}
 

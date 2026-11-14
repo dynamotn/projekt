@@ -295,3 +295,23 @@ func TestSyncGitRepos_PullJSON(t *testing.T) {
 		t.Errorf("dirty clone row = %v, want pull/skipped with the reason", r)
 	}
 }
+
+func TestSyncGitRepos_PullJSONUpToDate(t *testing.T) {
+	clone, _ := pullable(t)
+	folder := lazypath.Folder{Path: filepath.Dir(clone), Git: &lazypath.GitConfig{Host: "local", Group: "org",
+		Repos: []lazypath.GitRepo{{Name: filepath.Base(clone)}}}}
+
+	rows, err := syncJSON(t, SyncOptions{Pull: true}, folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pulls []map[string]string
+	for _, row := range rows {
+		if row["action"] == "pull" {
+			pulls = append(pulls, row)
+		}
+	}
+	if len(pulls) != 1 || pulls[0]["result"] != "skipped" || pulls[0]["detail"] != "up to date" {
+		t.Errorf("pull rows = %v, want one pull/skipped up to date", pulls)
+	}
+}

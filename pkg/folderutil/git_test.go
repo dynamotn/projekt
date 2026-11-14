@@ -309,7 +309,7 @@ func TestSyncFolderGitRepos_DryRun(t *testing.T) {
 		},
 	})
 
-	jobs, err := planFolderSync(folder)
+	jobs, err := planFolderSync(folder, nil)
 	if err != nil {
 		t.Fatalf("planFolderSync failed: %v", err)
 	}
@@ -1331,5 +1331,84 @@ func TestSyncGitRepos_DefaultOutputUnchanged(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Errorf("Out received %q, want nothing without Output", buf.String())
+	}
+}
+
+func TestSyncGitRepos_JSONExistingNotARepository(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "plain"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	folder := lazypath.Folder{Path: dir, Git: &lazypath.GitConfig{Host: "local", Group: "org", Repos: []lazypath.GitRepo{{Name: "plain"}}}}
+
+	rows, err := syncJSON(t, SyncOptions{}, folder)
+	if err == nil {
+		t.Error("error = nil, want one for a folder that is not a repository")
+	}
+	if len(rows) != 1 || rows[0]["action"] != "clone" || rows[0]["result"] != "failed" || !strings.Contains(rows[0]["detail"], "plain") {
+		t.Errorf("rows = %v, want one clone/failed row naming the folder", rows)
+	}
+}
+
+func TestSyncGitRepos_DryRunJSONExistingClone(t *testing.T) {
+	dir := t.TempDir()
+	initRepo(t, filepath.Join(dir, "here"))
+	folder := lazypath.Folder{Path: dir, Git: &lazypath.GitConfig{Host: "local", Group: "org", Repos: []lazypath.GitRepo{{Name: "here"}}}}
+
+	rows, err := syncJSON(t, SyncOptions{DryRun: true}, folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0]["action"] != "skip" || rows[0]["result"] != "planned" || rows[0]["detail"] != "already cloned" {
+		t.Errorf("rows = %v, want one skip/planned row", rows)
+	}
+}
+
+func TestSyncGitRepos_JSONPlanFailureAndEmptyName(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root can create folders under a read-only parent")
+	}
+	parent := t.TempDir()
+	if err := os.Chmod(parent, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+
+	blocked := lazypath.Folder{Path: filepath.Join(parent, "sub"), Git: &lazypath.GitConfig{Host: "local", Group: "org"}}
+	unnamed := lazypath.Folder{Path: t.TempDir(), Git: &lazypath.GitConfig{Host: "local", Group: "org", Repos: []lazypath.GitRepo{{}}}}
+
+	rows, err := syncJSON(t, SyncOptions{}, blocked, unnamed)
+	if err == nil {
+		t.Error("error = nil, want one for the folder that cannot be created")
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %v, want 2", rows)
+	}
+	for _, row := range rows {
+		if row["repo"] != "" || row["action"] != "skip" {
+			t.Errorf("row = %v, want repo empty and action skip", row)
+		}
+	}
+	// Both have an empty repo; the folder path orders them.
+	byPath := map[string]map[string]string{rows[0]["path"]: rows[0], rows[1]["path"]: rows[1]}
+	if r := byPath[blocked.Path]; r["result"] != "failed" || r["detail"] == "" {
+		t.Errorf("plan failure row = %v", r)
+	}
+	if r := byPath[unnamed.Path]; r["result"] != "skipped" || !strings.Contains(r["detail"], "empty name") {
+		t.Errorf("empty name row = %v", r)
+	}
+}
+
+func TestSyncRows_SortByRepoThenPathThenStep(t *testing.T) {
+	s := &syncRows{}
+	s.add(syncRow{repo: "api", path: "/b", action: "clone"})
+	s.add(syncRow{repo: "api", path: "/a", action: "clone"})
+	s.add(syncRow{repo: "api", path: "/a", action: "remote"})
+	var got []string
+	for _, r := range s.sorted() {
+		got = append(got, r.path+r.action)
+	}
+	if want := []string{"/aclone", "/aremote", "/bclone"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("sorted = %v, want %v", got, want)
 	}
 }
