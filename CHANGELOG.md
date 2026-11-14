@@ -4,6 +4,11 @@
 
 ### Added
 
+- **folder sync**, **folder status**, **folder exec**: nothing waits forever
+  any more. Every clone, fetch and `gh`/`glab` call stops after two minutes,
+  or the configuration's `timeout`, or `--timeout` (`0` for no limit);
+  `folder exec --timeout` bounds the command in each folder, and
+  `--fail-fast` starts no new folder after the first failure
 - **folder sync**: `-o json` and `-o tsv` print one row per action — clone,
   pull, remote, worktree or skip — with its result, also for `--dry-run`, on
   stdout

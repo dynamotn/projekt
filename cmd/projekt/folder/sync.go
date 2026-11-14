@@ -3,19 +3,22 @@ package folder
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 type folderSyncOptions struct {
-	dryRun bool
-	forks  int
-	pull   bool
-	tags   []string
-	output string
+	dryRun  bool
+	forks   int
+	pull    bool
+	tags    []string
+	output  string
+	timeout time.Duration
 }
 
 func NewFolderSyncCmd(out io.Writer) *cobra.Command {
@@ -42,6 +45,10 @@ and left where it was. Configured working trees are pulled the same way.
   projekt folder sync --pull          # and bring the rest up to date
   projekt folder sync --pull -t work  # only the folders tagged work
 
+Every clone and fetch stops after --timeout: by default the configuration's
+timeout, or two minutes when it sets none; 0 means no limit. A repository that
+timed out is reported as failed, and the others carry on.
+
 Use --dry-run to see what would be done without making changes. With --output,
 stdout holds one row per action (clone, pull, remote, worktree or skip) with
 its result, also for --dry-run, instead of the log.`,
@@ -54,6 +61,7 @@ its result, also for --dry-run, instead of the log.`,
 	f.BoolVar(&opts.dryRun, "dry-run", false, "Show what would be done without making changes")
 	f.IntVar(&opts.forks, "forks", folderutil.DefaultSyncForks, "Number of repositories to clone concurrently")
 	f.BoolVar(&opts.pull, "pull", false, "Fetch existing repositories and fast-forward clean branches")
+	f.DurationVar(&opts.timeout, "timeout", -1, "Stop each clone or fetch after this long, 0 for no limit; below 0 uses the configuration's timeout, 2m unless set")
 	registerTagsFlag(cmd, &opts.tags, "sync")
 	cli.AddOutputFlag(cmd, &opts.output, "")
 
@@ -78,12 +86,18 @@ func runFolderSync(opts *folderSyncOptions, out io.Writer) error {
 		cli.Info("Running in dry-run mode...")
 	}
 
+	// The configuration is read after the flags' defaults are set.
+	if opts.timeout < 0 {
+		opts.timeout = lazypath.NetworkTimeout()
+	}
+
 	return folderutil.SyncGitRepos(folderutil.SyncOptions{
-		DryRun: opts.dryRun,
-		Forks:  opts.forks,
-		Pull:   opts.pull,
-		Tags:   opts.tags,
-		Output: format,
-		Out:    out,
+		DryRun:  opts.dryRun,
+		Forks:   opts.forks,
+		Pull:    opts.pull,
+		Tags:    opts.tags,
+		Output:  format,
+		Out:     out,
+		Timeout: opts.timeout,
 	})
 }

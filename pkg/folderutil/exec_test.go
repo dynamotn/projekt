@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
@@ -293,5 +296,85 @@ func TestExecInFolders_JSONDryRunAndEscaping(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"<b>&\n"`) {
 		t.Errorf("output = %q, want <b>& unescaped", out.String())
+	}
+}
+
+func TestExecInFolders_Timeout(t *testing.T) {
+	execFolders(t)
+	pids := filepath.Join(t.TempDir(), "pids")
+	t.Cleanup(func() {
+		data, _ := os.ReadFile(pids)
+		for _, line := range strings.Fields(string(data)) {
+			if pid, err := strconv.Atoi(line); err == nil {
+				_ = syscall.Kill(-pid, syscall.SIGKILL)
+			}
+		}
+	})
+
+	var out bytes.Buffer
+	start := time.Now()
+	err := ExecInFolders(&out, ExecOptions{
+		Command: []string{"sh", "-c", `echo $$ >> "$1"; sleep 30`, "sh", pids},
+		Timeout: 200 * time.Millisecond,
+	})
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("ExecInFolders() took %s, want it stopped soon after the timeout", took)
+	}
+	if err == nil {
+		t.Error("a command that timed out must fail exec")
+	}
+	for _, want := range []string{"alpha: timed out", "beta: timed out"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output = %q, want it to contain %q", out.String(), want)
+		}
+	}
+
+	// In JSON, the output says so.
+	out.Reset()
+	_ = ExecInFolders(&out, ExecOptions{
+		Command: []string{"sh", "-c", `echo $$ >> "$1"; echo started; sleep 30`, "sh", pids},
+		Timeout: 200 * time.Millisecond, Output: cli.OutputJSON, Tags: []string{"oss"},
+	})
+	var records []execRecord
+	if err := json.Unmarshal(out.Bytes(), &records); err != nil || len(records) != 1 {
+		t.Fatalf("not one JSON record: %v\n%s", err, out.String())
+	}
+	if rec := records[0]; rec.Exit != -1 || !strings.Contains(rec.Output, "started") || !strings.Contains(rec.Output, "timed out") {
+		t.Errorf("record = %+v, want exit -1 and the output followed by timed out", rec)
+	}
+}
+
+func TestExecInFolders_FailFast(t *testing.T) {
+	root := t.TempDir()
+	var folders []lazypath.Folder
+	for _, name := range []string{"first", "second", "third"} {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		folders = append(folders, lazypath.Folder{Path: path})
+	}
+	if err := os.WriteFile(filepath.Join(root, "first", "fail"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lazypath.SetTestConfig(lazypath.Config{Folders: folders})
+	t.Cleanup(lazypath.ResetTestConfig)
+
+	var out bytes.Buffer
+	err := ExecInFolders(&out, ExecOptions{
+		Command:  []string{"sh", "-c", "touch ran; test ! -f fail"},
+		Forks:    1,
+		FailFast: true,
+	})
+	if err == nil {
+		t.Error("the first folder failed, exec must too")
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "third", "ran")); statErr == nil {
+		t.Error("third ran after the first failure")
+	}
+	for _, want := range []string{"first: exit 1", "second: not started", "third: not started"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output = %q, want it to contain %q", out.String(), want)
+		}
 	}
 }

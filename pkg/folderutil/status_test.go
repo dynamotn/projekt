@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
@@ -211,5 +212,23 @@ func TestParseAheadBehind(t *testing.T) {
 		if ahead != want[0] || behind != want[1] {
 			t.Errorf("parseAheadBehind(%q) = %d, %d, want %d, %d", value, ahead, behind, want[0], want[1])
 		}
+	}
+}
+
+func TestStatusFolders_RequestsTimeout(t *testing.T) {
+	clone, _ := pullable(t)
+	mustGit(t, clone, "remote", "set-url", "origin", "git@github.com:me/clone.git")
+	slowTool(t, "gh", "exec sleep 30")
+
+	lazypath.SetTestConfig(lazypath.Config{Folders: []lazypath.Folder{{Path: clone}}})
+	t.Cleanup(lazypath.ResetTestConfig)
+
+	start := time.Now()
+	rows := statusOf(t, &StatusOptions{Requests: true, Timeout: 300 * time.Millisecond})
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("StatusFolders() took %s, want it stopped soon after the timeout", took)
+	}
+	if rows["clone"]["requests"] != requestsTimeout {
+		t.Errorf("requests = %v, want %q", rows["clone"]["requests"], requestsTimeout)
 	}
 }

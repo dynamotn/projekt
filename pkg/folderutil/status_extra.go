@@ -1,6 +1,7 @@
 package folderutil
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -126,14 +127,16 @@ func defaultBranch(path string) string {
 const (
 	requestsNoTool   = "n/a"
 	requestsUnknown  = "?"
+	requestsTimeout  = "timeout"
 	requestsNoBranch = ""
 )
 
 // readOpenRequests counts the open merge or pull requests of the checked-out
 // branch, through the server's own command-line tool: `glab` for a GitLab
 // origin, `gh` for a GitHub one. No tool on PATH is "n/a"; a tool that fails
-// — not logged in, no network — is "?".
-func readOpenRequests(status *FolderStatus, servers []lazypath.GitServer) {
+// — not logged in, no network — is "?", and one still running when ctx ends
+// is "timeout".
+func readOpenRequests(ctx context.Context, status *FolderStatus, servers []lazypath.GitServer) {
 	if status.Branch == "" || status.Branch == "detached" {
 		status.Requests = requestsNoBranch
 		return
@@ -159,9 +162,14 @@ func readOpenRequests(status *FolderStatus, servers []lazypath.GitServer) {
 		return
 	}
 
-	cmd := exec.Command(tool[0], tool[1:]...)
+	cmd := exec.CommandContext(ctx, tool[0], tool[1:]...)
+	cli.OwnGroup(cmd)
 	cmd.Dir = status.Path
 	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		status.Requests = requestsTimeout
+		return
+	}
 	if err != nil {
 		cli.Debug("%s in %s: %v", strings.Join(tool, " "), status.Path, err)
 		status.Requests = requestsUnknown

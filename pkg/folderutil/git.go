@@ -3,6 +3,7 @@ package folderutil
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
@@ -48,6 +50,8 @@ type SyncOptions struct {
 	Output cli.OutputFormat
 	// Out receives the rows; nil means standard output.
 	Out io.Writer
+	// Timeout bounds each clone and fetch; zero means no limit.
+	Timeout time.Duration
 }
 
 // Actions and results a sync row can carry.
@@ -134,6 +138,10 @@ type syncJob struct {
 	pull bool
 	// rows collects what the job does as rows; nil means it logs.
 	rows *syncRows
+	// ctx ends when the sync is interrupted, and timeout bounds each network
+	// call of the job.
+	ctx     context.Context
+	timeout time.Duration
 }
 
 // SyncGitRepos synchronizes all Git repositories in the configuration.
@@ -148,6 +156,9 @@ func SyncGitRepos(opts SyncOptions) error {
 	if opts.Output != "" {
 		collected = &syncRows{}
 	}
+
+	ctx, stop := interruptible()
+	defer stop()
 
 	var errs []error
 	var jobs []syncJob
@@ -172,11 +183,15 @@ func SyncGitRepos(opts SyncOptions) error {
 		for i := range folderJobs {
 			folderJobs[i].pull = opts.Pull
 			folderJobs[i].rows = collected
+			folderJobs[i].ctx, folderJobs[i].timeout = ctx, opts.Timeout
 		}
 		jobs = append(jobs, folderJobs...)
 	}
 
 	errs = append(errs, runSyncJobs(jobs, opts)...)
+	if ctx.Err() != nil {
+		errs = append(errs, errInterrupted)
+	}
 
 	if collected != nil {
 		out := opts.Out
@@ -280,6 +295,9 @@ func runSyncJobsWith(jobs []syncJob, opts SyncOptions, run func(syncJob, bool) e
 		// queue on a semaphore in the order they were started, so a pool of one
 		// would still log the repositories in an arbitrary order.
 		for i, job := range jobs {
+			if interrupted(job) {
+				break
+			}
 			results[i] = run(job, opts.DryRun)
 		}
 	} else {
@@ -293,6 +311,9 @@ func runSyncJobsWith(jobs []syncJob, opts SyncOptions, run func(syncJob, bool) e
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
+				if interrupted(job) {
+					return
+				}
 				job.batch = true
 				results[i] = run(job, opts.DryRun)
 			}()
@@ -308,6 +329,11 @@ func runSyncJobsWith(jobs []syncJob, opts SyncOptions, run func(syncJob, bool) e
 	}
 
 	return errs
+}
+
+// interrupted says the sync was stopped before job could start.
+func interrupted(job syncJob) bool {
+	return job.ctx != nil && job.ctx.Err() != nil
 }
 
 // syncRepo brings one repository in line with its configuration: cloned when
@@ -357,7 +383,7 @@ func cloneIfMissing(job syncJob, dryRun bool) (existed bool, err error) {
 		if !IsRepoRoot(job.repoPath) {
 			// Remotes, worktrees and pulls would land on whatever repository
 			// encloses this folder.
-			err := fmt.Errorf("%s exists but is not a git repository", job.repoPath)
+			err := fmt.Errorf("%s exists but is not a git repository: if a clone was interrupted there, remove the folder and sync again", job.repoPath)
 			job.report(actionClone, job.repoPath, resultFailed, err.Error(), func() {})
 			return true, err
 		}
@@ -384,7 +410,7 @@ func cloneIfMissing(job syncJob, dryRun bool) (existed bool, err error) {
 	if job.rows == nil {
 		cli.Info("Cloning %s to %s", job.repo.Name, job.repoPath)
 	}
-	if err := cloneRepoWithFallback(job.server, job.group, job.repo.Name, job.repoPath, job.batch); err != nil {
+	if err := cloneRepoWithFallback(job); err != nil {
 		job.report(actionClone, target, resultFailed, err.Error(), func() {
 			cli.Error("Failed to clone %s: %v", job.repo.Name, err)
 		})
@@ -829,18 +855,21 @@ func getGitURLs(server *lazypath.GitServer, group string, repoName string) (prim
 	return httpsURL, sshURL
 }
 
-func cloneRepoWithFallback(server *lazypath.GitServer, group string, repoName string, targetPath string, batch bool) error {
-	primaryURL, fallbackURL := getGitURLs(server, group, repoName)
+func cloneRepoWithFallback(job syncJob) error {
+	primaryURL, fallbackURL := getGitURLs(job.server, job.group, job.repo.Name)
+	targetPath := job.repoPath
 
 	// Try primary URL
 	cli.Debug("Attempting to clone from: %s", cli.RedactURL(primaryURL))
-	err := cloneRepo(primaryURL, targetPath, batch)
+	err := cloneRepo(job, primaryURL)
 	if err == nil {
 		return nil
 	}
 
-	// If primary failed and we have fallback, try it
-	if fallbackURL != "" {
+	// If primary failed and we have fallback, try it. Not after a timeout or
+	// an interrupt: the user's limit is spent, and what the stopped clone
+	// left behind would only make the retry fail on it.
+	if fallbackURL != "" && !errors.Is(err, errTimedOut) && !errors.Is(err, errInterrupted) {
 		// A failed clone can leave an empty directory behind, which would make
 		// the retry fail with "destination path already exists".
 		if entries, readErr := os.ReadDir(targetPath); readErr == nil && len(entries) == 0 {
@@ -850,7 +879,7 @@ func cloneRepoWithFallback(server *lazypath.GitServer, group string, repoName st
 		cli.Warn("Failed to clone via %s, trying fallback %s",
 			getURLType(primaryURL), getURLType(fallbackURL))
 		cli.Debug("Attempting to clone from: %s", cli.RedactURL(fallbackURL))
-		return cloneRepo(fallbackURL, targetPath, batch)
+		return cloneRepo(job, fallbackURL)
 	}
 
 	return err
@@ -863,14 +892,14 @@ func getURLType(url string) string {
 	return "SSH"
 }
 
-func cloneRepo(gitURL, targetPath string, batch bool) error {
-	cmd := cli.Command("git", "clone", "--", gitURL, targetPath)
-	if batch {
-		// Four clones at once cannot share one terminal: a password or a
-		// host-key question from one of them, with its text hidden in the
-		// buffer, would hang the whole run. Better to fail and say so.
-		cmd.Env = batchEnv()
-	}
+// cloneRepo clones gitURL into the job's folder, stopped after the job's
+// timeout. Four clones at once cannot share one terminal: a password or a
+// host-key question from one of them, with its text hidden in the buffer,
+// would hang the whole run, so a batch job is told not to ask.
+func cloneRepo(job syncJob, gitURL string) error {
+	ctx, cancel := limit(job.ctx, job.timeout)
+	defer cancel()
+	cmd := networkGit(ctx, job.batch, "clone", "--", gitURL, job.repoPath)
 	// Concurrent clones would interleave git's progress output line by line on
 	// the shared streams, so buffer it per clone and surface it as a whole:
 	// attached to the error when the clone fails, and only at debug level when
@@ -880,6 +909,9 @@ func cloneRepo(gitURL, targetPath string, batch bool) error {
 	cmd.Stderr = &output
 
 	if err := cmd.Run(); err != nil {
+		if err := stopped(ctx, nil); err != nil {
+			return err
+		}
 		if text := strings.TrimSpace(output.String()); text != "" {
 			return fmt.Errorf("%w: %s", err, text)
 		}

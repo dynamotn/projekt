@@ -25,7 +25,9 @@ last commit was.
 checked-out branch has not got, and how long ago the two parted. --requests
 asks glab or gh — whichever the origin calls for — how many merge or pull
 requests the branch has open; it is the one column that goes to the network,
-so it is off unless asked for, and reads n/a without the tool.
+so it is off unless asked for, and reads n/a without the tool, or timeout when
+the tool gave no answer within --timeout (the configuration's timeout, or two
+minutes when it sets none; 0 means no limit).
 
 Unlike 'projekt folder check', which verifies the repositories your config
 declares, this looks at every folder it can reach — including the ones inside a
@@ -38,18 +40,19 @@ projekt folder status [flags]
 ### Options
 
 ```
-      --branches        Add the default branch, how far behind it the branch is, and how old the branch is
-  -d, --dirty           Show only the folders with something to attend to
-      --forks int       How many folders to read at once (default 4)
-  -h, --help            help for status
-  -n, --names-only      Show only the names
-      --no-color        Don't use color
-      --no-headers      Don't print headers
-      --notes           Add the first line of each project's note (see folder note)
-  -o, --output string   Output format, one of: table, json, tsv (default "table")
-      --requests        Add the open merge or pull requests of the branch, counted through glab or gh
-      --since string    Keep only the folders with a commit or a jump this recent: 12h, 7d, 2w, 3mo
-  -t, --tags strings    Only report on folders carrying all of these tags
+      --branches           Add the default branch, how far behind it the branch is, and how old the branch is
+  -d, --dirty              Show only the folders with something to attend to
+      --forks int          How many folders to read at once (default 4)
+  -h, --help               help for status
+  -n, --names-only         Show only the names
+      --no-color           Don't use color
+      --no-headers         Don't print headers
+      --notes              Add the first line of each project's note (see folder note)
+  -o, --output string      Output format, one of: table, json, tsv (default "table")
+      --requests           Add the open merge or pull requests of the branch, counted through glab or gh
+      --since string       Keep only the folders with a commit or a jump this recent: 12h, 7d, 2w, 3mo
+  -t, --tags strings       Only report on folders carrying all of these tags
+      --timeout duration   Stop each glab or gh call after this long, 0 for no limit; below 0 uses the configuration's timeout, 2m unless set (default -1ns)
 ```
 
 ### Options inherited from parent commands

@@ -7,8 +7,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1410,5 +1412,101 @@ func TestSyncRows_SortByRepoThenPathThenStep(t *testing.T) {
 	}
 	if want := []string{"/aclone", "/aremote", "/bclone"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("sorted = %v, want %v", got, want)
+	}
+}
+
+// slowTool puts a stand-in for name on PATH, ahead of the real tools, that
+// runs body and records its pid. Whatever is still running when the test ends
+// is killed, also when the test fails.
+func slowTool(t *testing.T, name, body string) {
+	t.Helper()
+
+	bin := t.TempDir()
+	pids := filepath.Join(bin, "pids")
+	script := fmt.Sprintf("#!/bin/sh\necho $$ >> %q\n%s\n", pids, body)
+	if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Cleanup(func() {
+		data, _ := os.ReadFile(pids)
+		for _, line := range strings.Fields(string(data)) {
+			if pid, err := strconv.Atoi(line); err == nil {
+				_ = syscall.Kill(-pid, syscall.SIGKILL)
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
+}
+
+// slowCloneConfig configures two repositories to clone into a fresh folder.
+func slowCloneConfig(t *testing.T) string {
+	t.Helper()
+
+	work := filepath.Join(t.TempDir(), "work")
+	lazypath.SetTestConfig(lazypath.Config{
+		Folders: []lazypath.Folder{{Path: work, Git: &lazypath.GitConfig{Host: "local", Group: "org", Repos: []lazypath.GitRepo{
+			{Name: "api"}, {Name: "web"},
+		}}}},
+		GitServers: []lazypath.GitServer{{Name: "local", HTTPS: "https://git.invalid", SSH: "git@git.invalid"}},
+	})
+	t.Cleanup(lazypath.ResetTestConfig)
+	return work
+}
+
+// A clone that hangs leaves a folder behind, as a killed git would.
+const hangingClone = `if [ "$1" = clone ]; then mkdir -p "$4" && echo partial > "$4/junk"; exec sleep 30; fi
+exit 1`
+
+func TestSyncGitRepos_CloneTimeout(t *testing.T) {
+	slowCloneConfig(t)
+	slowTool(t, "git", hangingClone)
+
+	// One at a time: the git that keeps the terminal, stopped on its own. The
+	// JSON test below covers the batch, stopped as a group. (Concurrent jobs
+	// that log also race on cli's lazily built logger.)
+	start := time.Now()
+	err := SyncGitRepos(SyncOptions{Timeout: 300 * time.Millisecond, Forks: 1})
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("SyncGitRepos() took %s, want it stopped soon after the timeout", took)
+	}
+	if err == nil || !strings.Contains(err.Error(), "timed out") || !strings.Contains(err.Error(), "api") {
+		t.Errorf("SyncGitRepos() error = %v, want it to say the clone of api timed out", err)
+	}
+}
+
+func TestSyncGitRepos_CloneTimeoutJSON(t *testing.T) {
+	slowCloneConfig(t)
+	slowTool(t, "git", hangingClone)
+
+	rows, err := runSyncJSON(t, SyncOptions{Timeout: 300 * time.Millisecond})
+	if err == nil {
+		t.Fatal("a timed-out clone must fail the sync")
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %v, want one per repository", rows)
+	}
+	for _, row := range rows {
+		if row["action"] != actionClone || row["result"] != resultFailed || row["detail"] != "timed out" {
+			t.Errorf("row = %v, want clone/failed with detail \"timed out\"", row)
+		}
+	}
+}
+
+func TestSyncGitRepos_PartialCloneIsNamed(t *testing.T) {
+	work := slowCloneConfig(t)
+	original := os.Getenv("PATH")
+	slowTool(t, "git", hangingClone)
+
+	if err := SyncGitRepos(SyncOptions{Timeout: 300 * time.Millisecond, Forks: 1}); err == nil {
+		t.Fatal("the first sync must time out")
+	}
+
+	// The real git again: the folder left behind is not a repository.
+	t.Setenv("PATH", original)
+	err := SyncGitRepos(SyncOptions{Forks: 1})
+	partial := filepath.Join(work, "api")
+	if err == nil || !strings.Contains(err.Error(), partial) || !strings.Contains(err.Error(), "remove") {
+		t.Errorf("SyncGitRepos() error = %v, want it to say to remove %s", err, partial)
 	}
 }

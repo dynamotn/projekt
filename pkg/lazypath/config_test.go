@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 
@@ -681,5 +682,24 @@ func TestUnmarshalConfig_PROJEKT_AIKeepsTheAISection(t *testing.T) {
 
 	if got := OwnConfig().AI.Timeout; got != "5s" {
 		t.Errorf("OwnConfig().AI.Timeout = %q, want 5s", got)
+	}
+}
+
+func TestNetworkTimeout(t *testing.T) {
+	t.Cleanup(ResetTestConfig)
+	for _, tc := range []struct {
+		value string
+		want  time.Duration
+	}{
+		{"", 2 * time.Minute},
+		{"30s", 30 * time.Second},
+		{"0", 0},
+		{"nonsense", 2 * time.Minute},
+		{"-5s", 2 * time.Minute},
+	} {
+		SetTestConfig(Config{Timeout: tc.value})
+		if got := NetworkTimeout(); got != tc.want {
+			t.Errorf("NetworkTimeout() with timeout %q = %s, want %s", tc.value, got, tc.want)
+		}
 	}
 }

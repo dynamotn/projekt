@@ -22,6 +22,11 @@ failure of the command.
 The exit code is non-zero when the command failed anywhere, which makes it
 usable as a check. Working trees are projects too, so they are included.
 
+--timeout stops the command in a folder that runs longer, together with
+everything it started, and reports it as timed out. --fail-fast starts no new
+folder after the first failure; the ones already running finish, and the rest
+are reported as not started.
+
 With -o json, stdout holds one array with an object per folder (name, path,
 exit, output, seconds), in the same order. exit is -1 when the command could
 not start or the folder is missing.
@@ -33,13 +38,15 @@ projekt folder exec -- [command] [flags]
 ### Options
 
 ```
-      --dry-run         List what would be run, without running any of it
-      --forks int       How many folders to work on at once (default 4)
-  -h, --help            help for exec
-      --no-output       Report the verdict per folder, not the command's output
-  -o, --output string   Output format, one of: json
-  -q, --quiet           Report only the folders where the command failed
-  -t, --tags strings    Only run in folders carrying all of these tags
+      --dry-run            List what would be run, without running any of it
+      --fail-fast          Start no new folder after the first failure
+      --forks int          How many folders to work on at once (default 4)
+  -h, --help               help for exec
+      --no-output          Report the verdict per folder, not the command's output
+  -o, --output string      Output format, one of: json
+  -q, --quiet              Report only the folders where the command failed
+  -t, --tags strings       Only run in folders carrying all of these tags
+      --timeout duration   Stop the command in a folder after this long, 0 for no limit
 ```
 
 ### Options inherited from parent commands

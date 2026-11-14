@@ -2,11 +2,13 @@ package folder
 
 import (
 	"io"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 const statusLongHelp = `Show what every project folder looks like right now.
@@ -30,7 +32,9 @@ last commit was.
 checked-out branch has not got, and how long ago the two parted. --requests
 asks glab or gh — whichever the origin calls for — how many merge or pull
 requests the branch has open; it is the one column that goes to the network,
-so it is off unless asked for, and reads n/a without the tool.
+so it is off unless asked for, and reads n/a without the tool, or timeout when
+the tool gave no answer within --timeout (the configuration's timeout, or two
+minutes when it sets none; 0 means no limit).
 
 Unlike 'projekt folder check', which verifies the repositories your config
 declares, this looks at every folder it can reach — including the ones inside a
@@ -40,6 +44,7 @@ func NewFolderStatusCmd(out io.Writer) *cobra.Command {
 	o := &folderutil.StatusOptions{}
 	output := string(cli.OutputTable)
 	since := ""
+	timeout := time.Duration(-1)
 
 	cmd := &cobra.Command{
 		Use:     "status",
@@ -56,6 +61,10 @@ func NewFolderStatusCmd(out io.Writer) *cobra.Command {
 			if o.Since, err = folderutil.ParseSince(since); err != nil {
 				return err
 			}
+			// The configuration is read after the flags' defaults are set.
+			if o.Timeout = timeout; timeout < 0 {
+				o.Timeout = lazypath.NetworkTimeout()
+			}
 
 			return folderutil.StatusFolders(out, o)
 		},
@@ -68,6 +77,7 @@ func NewFolderStatusCmd(out io.Writer) *cobra.Command {
 	f.StringVar(&since, "since", "", "Keep only the folders with a commit or a jump this recent: 12h, 7d, 2w, 3mo")
 	f.BoolVar(&o.Branches, "branches", false, "Add the default branch, how far behind it the branch is, and how old the branch is")
 	f.BoolVar(&o.Requests, "requests", false, "Add the open merge or pull requests of the branch, counted through glab or gh")
+	f.DurationVar(&timeout, "timeout", timeout, "Stop each glab or gh call after this long, 0 for no limit; below 0 uses the configuration's timeout, 2m unless set")
 	f.IntVar(&o.Forks, "forks", folderutil.DefaultSyncForks, "How many folders to read at once")
 	f.BoolVar(&o.NoHeaders, "no-headers", false, "Don't print headers")
 	f.BoolVar(&o.NoColor, "no-color", false, "Don't use color")

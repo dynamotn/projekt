@@ -1,6 +1,7 @@
 package folderutil
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -263,13 +264,18 @@ func firstEnv(names ...string) string {
 }
 
 // toolOutput runs a command-line tool for one line of output, or returns ""
-// when the tool is missing or unhappy. Its errors are not the user's problem:
-// the request simply goes out without a token.
+// when the tool is missing, unhappy or slower than the network timeout. Its
+// errors are not the user's problem: the request simply goes out without a
+// token.
 func toolOutput(name string, args ...string) string {
 	if _, err := exec.LookPath(name); err != nil {
 		return ""
 	}
-	out, err := exec.Command(name, args...).Output()
+	ctx, cancel := limit(context.Background(), lazypath.NetworkTimeout())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cli.OwnGroup(cmd)
+	out, err := cmd.Output()
 	if err != nil {
 		cli.Debug("%s %v: %v", name, args, err)
 		return ""

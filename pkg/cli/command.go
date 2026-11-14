@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 )
 
 // tools are the programs projekt runs on its own account. Anything else — an
@@ -25,19 +28,58 @@ var tools = map[string]bool{"git": true, "cp": true, "sh": true}
 // A tool that cannot be found makes the returned command fail when it is run,
 // with the lookup's error.
 func Command(name string, args ...string) *exec.Cmd {
-	if !tools[name] {
-		return failed(name, args, fmt.Errorf("%s is not a tool projekt runs", name))
-	}
-	resolved, err := exec.LookPath(name)
+	resolved, err := resolveTool(name)
 	if err != nil {
 		return failed(name, args, err)
-	}
-	if !filepath.IsAbs(resolved) {
-		return failed(name, args, fmt.Errorf("%s resolves to the relative path %s", name, resolved))
 	}
 	// The program is one of the fixed tools above, at the absolute path PATH
 	// gives it, and the arguments are passed as argv, never through a shell.
 	return exec.Command(resolved, args...) // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+}
+
+// CommandContext is Command stopped when ctx ends: the tool runs in a process
+// group of its own, and the whole group goes, so nothing it started keeps
+// running — or keeps its output open — after it.
+func CommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
+	resolved, err := resolveTool(name)
+	if err != nil {
+		return failed(name, args, err)
+	}
+	// As in Command: a fixed tool, at an absolute path, with argv.
+	cmd := exec.CommandContext(ctx, resolved, args...) // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+	OwnGroup(cmd)
+	return cmd
+}
+
+// OwnGroup puts a command built with exec.CommandContext in a process group of
+// its own and stops the whole group when the context ends: TERM first, which
+// lets git remove a half-made clone, then KILL a moment later for whatever
+// ignored it. The terminal's Ctrl-C no longer reaches the group, so a caller
+// that must stop on it ends the context itself.
+func OwnGroup(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		group := -cmd.Process.Pid
+		time.AfterFunc(time.Second, func() { _ = syscall.Kill(group, syscall.SIGKILL) })
+		return syscall.Kill(group, syscall.SIGTERM)
+	}
+	// A child that keeps the pipes open must not hold Wait past that.
+	cmd.WaitDelay = 2 * time.Second
+}
+
+// resolveTool finds one of projekt's tools at an absolute path.
+func resolveTool(name string) (string, error) {
+	if !tools[name] {
+		return "", fmt.Errorf("%s is not a tool projekt runs", name)
+	}
+	resolved, err := exec.LookPath(name)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(resolved) {
+		return "", fmt.Errorf("%s resolves to the relative path %s", name, resolved)
+	}
+	return resolved, nil
 }
 
 // failed returns a command that names no program at all and only reports err

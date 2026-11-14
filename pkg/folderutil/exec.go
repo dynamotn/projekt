@@ -2,6 +2,7 @@ package folderutil
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
@@ -35,6 +37,12 @@ type ExecOptions struct {
 	// Output, when set, prints one JSON object per folder instead of the text
 	// report. Only cli.OutputJSON is accepted.
 	Output cli.OutputFormat
+	// Timeout stops the command in a folder after this long; zero means no
+	// limit.
+	Timeout time.Duration
+	// FailFast starts no new folder after the first failure. The folders
+	// already running finish.
+	FailFast bool
 }
 
 // execResult is one folder's run, kept until it is its turn to be printed.
@@ -44,6 +52,9 @@ type execResult struct {
 	err    error
 	// skipped says the folder was not there to run in.
 	skipped bool
+	// notStarted says the run stopped, at a failure or an interrupt, before
+	// this folder's turn.
+	notStarted bool
 	// took is how long the command ran.
 	took time.Duration
 }
@@ -133,24 +144,41 @@ func ExecInFolders(out io.Writer, o ExecOptions) error {
 }
 
 // runInFolders runs the command everywhere, with at most Forks at a time, and
-// returns the results in the order the folders were given.
+// returns the results in the order the folders were given. The folders start
+// in that order too, so that --fail-fast stops at a predictable place.
 func runInFolders(folders []ParsedFolder, o ExecOptions) []execResult {
 	results := make([]execResult, len(folders))
-	semaphore := make(chan struct{}, execForks(o.Forks, len(folders)))
 
-	var wg sync.WaitGroup
-	for i, folder := range folders {
-		wg.Add(1)
-
-		go func(i int, folder ParsedFolder) {
-			defer wg.Done()
-
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			results[i] = runInFolder(folder, o)
-		}(i, folder)
+	ctx := context.Background()
+	if o.Timeout > 0 {
+		// Only a command with a timeout runs in a group of its own, out of
+		// reach of the terminal's Ctrl-C.
+		var stop context.CancelFunc
+		ctx, stop = interruptible()
+		defer stop()
 	}
+
+	var failed atomic.Bool
+	next := make(chan int)
+	var wg sync.WaitGroup
+	for range execForks(o.Forks, len(folders)) {
+		wg.Go(func() {
+			for i := range next {
+				if ctx.Err() != nil || o.FailFast && failed.Load() {
+					results[i] = execResult{folder: folders[i], notStarted: true}
+					continue
+				}
+				results[i] = runInFolder(ctx, folders[i], o)
+				if results[i].err != nil {
+					failed.Store(true)
+				}
+			}
+		})
+	}
+	for i := range folders {
+		next <- i
+	}
+	close(next)
 	wg.Wait()
 
 	return results
@@ -168,8 +196,8 @@ func execForks(forks, folderCount int) int {
 	return forks
 }
 
-// runInFolder runs the command in one folder.
-func runInFolder(folder ParsedFolder, o ExecOptions) execResult {
+// runInFolder runs the command in one folder, until its timeout.
+func runInFolder(ctx context.Context, folder ParsedFolder, o ExecOptions) execResult {
 	info, err := os.Stat(folder.Path)
 	if err != nil || !info.IsDir() {
 		// A folder that is not there is not a failure of the command: it is
@@ -178,6 +206,13 @@ func runInFolder(folder ParsedFolder, o ExecOptions) execResult {
 	}
 
 	cmd := exec.Command(o.Command[0], o.Command[1:]...)
+	if o.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, o.Timeout)
+		defer cancel()
+		cmd = exec.CommandContext(ctx, o.Command[0], o.Command[1:]...)
+		cli.OwnGroup(cmd)
+	}
 	cmd.Dir = folder.Path
 
 	// Both streams into one buffer, in the order the command wrote them, which
@@ -188,6 +223,11 @@ func runInFolder(folder ParsedFolder, o ExecOptions) execResult {
 
 	start := time.Now()
 	err = cmd.Run()
+	if err != nil && ctx.Err() != nil {
+		if err = stopped(ctx, err); errors.Is(err, errTimedOut) {
+			err = fmt.Errorf("%w after %s", err, o.Timeout)
+		}
+	}
 	return execResult{folder: folder, output: output.String(), err: err, took: time.Since(start)}
 }
 
@@ -206,6 +246,14 @@ func printExecJSON(out io.Writer, results []execResult) error {
 		switch {
 		case r.skipped:
 			rec.Exit, rec.Output = -1, "missing"
+		case r.notStarted:
+			rec.Exit, rec.Output = -1, "not started"
+		case errors.Is(r.err, errTimedOut) || errors.Is(r.err, errInterrupted):
+			// What it printed before it was stopped, then why it stopped.
+			if rec.Output != "" && !strings.HasSuffix(rec.Output, "\n") {
+				rec.Output += "\n"
+			}
+			rec.Exit, rec.Output = -1, rec.Output+r.err.Error()+"\n"
 		case errors.As(r.err, &exitErr):
 			rec.Exit = exitErr.ExitCode()
 		case r.err != nil:
@@ -228,6 +276,10 @@ func printExecResult(out io.Writer, result execResult, o ExecOptions) error {
 			return nil
 		}
 		_, err := fmt.Fprintf(out, "%s: missing %s\n", result.folder.ShortName, result.folder.Path)
+		return err
+	}
+	if result.notStarted {
+		_, err := fmt.Fprintf(out, "%s: not started\n", result.folder.ShortName)
 		return err
 	}
 

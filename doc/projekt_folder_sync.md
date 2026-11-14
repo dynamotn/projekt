@@ -21,6 +21,10 @@ and left where it was. Configured working trees are pulled the same way.
   projekt folder sync --pull          # and bring the rest up to date
   projekt folder sync --pull -t work  # only the folders tagged work
 
+Every clone and fetch stops after --timeout: by default the configuration's
+timeout, or two minutes when it sets none; 0 means no limit. A repository that
+timed out is reported as failed, and the others carry on.
+
 Use --dry-run to see what would be done without making changes. With --output,
 stdout holds one row per action (clone, pull, remote, worktree or skip) with
 its result, also for --dry-run, instead of the log.
@@ -32,12 +36,13 @@ projekt folder sync [flags]
 ### Options
 
 ```
-      --dry-run         Show what would be done without making changes
-      --forks int       Number of repositories to clone concurrently (default 4)
-  -h, --help            help for sync
-  -o, --output string   Output format, one of: table, json, tsv
-      --pull            Fetch existing repositories and fast-forward clean branches
-  -t, --tags strings    Only sync folders carrying all of these tags
+      --dry-run            Show what would be done without making changes
+      --forks int          Number of repositories to clone concurrently (default 4)
+  -h, --help               help for sync
+  -o, --output string      Output format, one of: table, json, tsv
+      --pull               Fetch existing repositories and fast-forward clean branches
+  -t, --tags strings       Only sync folders carrying all of these tags
+      --timeout duration   Stop each clone or fetch after this long, 0 for no limit; below 0 uses the configuration's timeout, 2m unless set (default -1ns)
 ```
 
 ### Options inherited from parent commands

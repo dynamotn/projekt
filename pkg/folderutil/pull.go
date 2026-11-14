@@ -2,11 +2,14 @@ package folderutil
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
@@ -38,7 +41,7 @@ type pullResult struct {
 //
 // A fetch that fails is an error; a tree that cannot be moved is not.
 func pullRepo(path string, batch bool) (pullResult, error) {
-	if err := fetch(path, batch); err != nil {
+	if err := fetch(context.Background(), path, batch); err != nil {
 		return pullResult{}, fmt.Errorf("fetch: %w", err)
 	}
 	return fastForward(path)
@@ -90,25 +93,41 @@ func pullBlocker(path string) string {
 	return ""
 }
 
-// fetch brings every remote up to date, pruning what is gone. In a batch no
-// question can be answered, so git is told not to ask one.
-func fetch(path string, batch bool) error {
-	cmd := cli.Command("git", "-C", path, "fetch", "--all", "--prune", "--quiet")
-	if batch {
-		cmd.Env = batchEnv()
-	}
+// fetch brings every remote up to date, pruning what is gone, until ctx
+// ends.
+func fetch(ctx context.Context, path string, batch bool) error {
+	cmd := networkGit(ctx, batch, "-C", path, "fetch", "--all", "--prune", "--quiet")
 
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 
 	if err := cmd.Run(); err != nil {
+		if err := stopped(ctx, nil); err != nil {
+			return err
+		}
 		if text := strings.TrimSpace(output.String()); text != "" {
 			return fmt.Errorf("%w: %s", err, text)
 		}
 		return err
 	}
 	return nil
+}
+
+// networkGit builds a git command that goes to the network and stops when ctx
+// ends. In a batch no question can be answered, so git is told not to ask
+// one, and runs in a group of its own that is stopped whole. Alone, it keeps
+// the terminal's group, where ssh can still ask for a passphrase: a group of
+// its own would stop it the moment it read the terminal.
+func networkGit(ctx context.Context, batch bool, args ...string) *exec.Cmd {
+	cmd := cli.CommandContext(ctx, "git", args...)
+	if batch {
+		cmd.Env = batchEnv()
+		return cmd
+	}
+	cmd.SysProcAttr = nil
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	return cmd
 }
 
 // revCount counts the commits in a range.
@@ -133,7 +152,10 @@ func pullTrees(job syncJob, dryRun bool) error {
 
 	if !dryRun {
 		// Working trees share the repository's refs, so one fetch serves all.
-		if err := fetch(job.repoPath, job.batch); err != nil {
+		ctx, cancel := limit(job.ctx, job.timeout)
+		err := fetch(ctx, job.repoPath, job.batch)
+		cancel()
+		if err != nil {
 			job.report(actionPull, job.repoPath, resultFailed, err.Error(), func() {
 				cli.Error("Failed to pull %s: %v", job.repo.Name, err)
 			})

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 
@@ -75,6 +76,29 @@ type Config struct {
 	// AI names the owner's AI command. It is read from this file only: an
 	// included file must never choose a program that runs.
 	AI AIConfig `yaml:"ai,omitempty" mapstructure:"ai"`
+	// Timeout bounds every clone, fetch and gh/glab call, as a Go duration;
+	// 0 means no limit.
+	Timeout string `yaml:"timeout,omitempty" mapstructure:"timeout"`
+}
+
+// defaultNetworkTimeout is how long a network call may take when timeout is
+// unset.
+const defaultNetworkTimeout = 2 * time.Minute
+
+// NetworkTimeout returns how long a clone, a fetch or a gh/glab call may take:
+// the configuration's timeout, or two minutes when it is unset or unusable.
+// Zero means no limit.
+func NetworkTimeout() time.Duration {
+	value := strings.TrimSpace(GetConfig().Timeout)
+	if value == "" {
+		return defaultNetworkTimeout
+	}
+	timeout, err := time.ParseDuration(value)
+	if err != nil || timeout < 0 {
+		Notice("timeout %q is not a duration such as 2m or 90s, using %s", value, defaultNetworkTimeout)
+		return defaultNetworkTimeout
+	}
+	return timeout
 }
 
 // AIConfig is the command projekt hands a prompt to, and how long it waits.

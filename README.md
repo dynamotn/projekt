@@ -203,6 +203,14 @@ on a branch, with an upstream, and strictly behind it. Anything else is fetched,
 reported as skipped with the reason, and left exactly where it was; nothing is
 ever merged or rebased on your behalf.
 
+**Nothing waits forever.** Every clone, fetch and `gh`/`glab` call stops after
+two minutes — or the top-level `timeout:` of the configuration (`timeout: 5m`),
+or `--timeout` on `folder sync` and `folder status` (`0` for no limit). A
+repository that timed out is reported as failed, and the others carry on; a
+clone stopped that way removes what it had fetched. `folder exec --timeout 30s`
+bounds the command in each folder, everything it started included, and
+`--fail-fast` starts no new folder after the first failure.
+
 **Don't type that list.** If the repos are already on disk, `--discover` writes
 the `git` section for you: each child holding a `.git` is read, its `origin`
 matched against your configured servers, and the group, name and any differing
@@ -444,7 +452,7 @@ projekt folder status --requests    # OPEN MR/PR, through glab or gh
 default: how many of its commits the branch has not got, and how long ago the
 two parted. `--requests` is the one column that goes to the network — it asks
 `glab` or `gh`, whichever the origin calls for — so it is off unless asked for,
-reads `n/a` without the tool, and `?` when the tool could not answer. A missing folder says `missing`,
+reads `n/a` without the tool, `?` when the tool could not answer, and `timeout` when it took too long. A missing folder says `missing`,
 a non-repository says `not a repo`, and `--dirty` keeps both.
 
 `folder exec` answers the question you cannot jump to: *which of them*.

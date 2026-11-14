@@ -1,9 +1,14 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // fakeGit puts a stand-in git in a folder of its own and returns its path.
@@ -77,5 +82,45 @@ func TestCommand_RefusesAnUnknownTool(t *testing.T) {
 	}
 	if err := cmd.Run(); err == nil {
 		t.Error("Run() error = nil, want it to fail")
+	}
+}
+
+func TestCommandContext_KillsTheGroupOnTimeout(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "pid")
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	cmd := CommandContext(ctx, "sh", "-c", `sleep 30 & echo $! > "$1"; wait`, "sh", pidFile)
+	start := time.Now()
+	err := cmd.Run()
+	took := time.Since(start)
+
+	data, readErr := os.ReadFile(pidFile)
+	pid, convErr := strconv.Atoi(strings.TrimSpace(string(data)))
+	if readErr != nil || convErr != nil {
+		t.Fatalf("no background pid: %v %v", readErr, convErr)
+	}
+	// Whatever happens below, the sleep does not outlive the test.
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+
+	if err == nil || ctx.Err() != context.DeadlineExceeded {
+		t.Fatalf("Run() = %v with ctx.Err() = %v, want it stopped by the deadline", err, ctx.Err())
+	}
+	if took > 5*time.Second {
+		t.Errorf("Run() took %s, want it stopped soon after the timeout", took)
+	}
+	// The background child went with its parent; give init a moment to reap it.
+	deadline := time.Now().Add(3 * time.Second)
+	for syscall.Kill(pid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatalf("background sleep %d still runs after the timeout", pid)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestCommandContext_RefusesAnUnknownTool(t *testing.T) {
+	if err := CommandContext(context.Background(), "sometool").Run(); err == nil {
+		t.Error("only projekt's own tools may be started through CommandContext")
 	}
 }

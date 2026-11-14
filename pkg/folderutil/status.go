@@ -3,6 +3,7 @@ package folderutil
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -36,6 +37,8 @@ type StatusOptions struct {
 	// Requests adds the open merge or pull requests of the branch, counted
 	// through glab or gh. Off by default: it is a network call per folder.
 	Requests bool
+	// Timeout bounds each glab or gh call; zero means no limit.
+	Timeout time.Duration
 	cli.ListOutputOption
 }
 
@@ -120,7 +123,12 @@ func StatusFolders(out io.Writer, o *StatusOptions) error {
 	}
 	folders = FilterByTags(folders, o.Tags)
 
-	statuses := readStatuses(folders, o)
+	ctx, stop := interruptible()
+	defer stop()
+	statuses := readStatuses(ctx, folders, o)
+	if ctx.Err() != nil {
+		return errInterrupted
+	}
 	if o.Notes {
 		for i := range statuses {
 			statuses[i].Note = NoteHeadline(statuses[i].Path)
@@ -205,7 +213,7 @@ func StatusFolders(out io.Writer, o *StatusOptions) error {
 }
 
 // readStatuses reads every folder, several at a time, and keeps the order.
-func readStatuses(folders []ParsedFolder, o *StatusOptions) []FolderStatus {
+func readStatuses(ctx context.Context, folders []ParsedFolder, o *StatusOptions) []FolderStatus {
 	statuses := make([]FolderStatus, len(folders))
 	if len(folders) == 0 {
 		return statuses
@@ -222,6 +230,9 @@ func readStatuses(folders []ParsedFolder, o *StatusOptions) []FolderStatus {
 
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
+			if ctx.Err() != nil {
+				return
+			}
 
 			status := StatusOf(folder)
 			if status.State == statusOK {
@@ -232,7 +243,9 @@ func readStatuses(folders []ParsedFolder, o *StatusOptions) []FolderStatus {
 					readBranchStanding(&status)
 				}
 				if o.Requests {
-					readOpenRequests(&status, servers)
+					call, cancel := limit(ctx, o.Timeout)
+					readOpenRequests(call, &status, servers)
+					cancel()
 				}
 			}
 			statuses[i] = status
