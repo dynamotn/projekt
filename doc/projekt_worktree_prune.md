@@ -13,6 +13,13 @@ Neither half is much use without the other.
   projekt worktree prune --dry-run
   projekt worktree prune
 
+With `--merged` it also removes the working trees whose branch is merged into
+the project's default branch and that hold no change and no untracked file.
+The branch is kept, and git itself refuses a tree it finds dirty. Only the
+trees of your own configuration file go; every tree left alone is named with
+the reason. A project whose default branch cannot be found keeps all of its
+trees.
+
 `projekt folder prune` drops the configuration entry too, but only this one
 tells git about it.
 
@@ -25,6 +32,7 @@ projekt worktree prune [flags]
 ```
       --dry-run   Say what would happen without changing anything
   -h, --help      help for prune
+      --merged    Also remove the clean working trees whose branch is merged into the default branch
 ```
 
 ### Options inherited from parent commands

@@ -31,6 +31,9 @@ type Worktree struct {
 	Branch string `yaml:"branch" mapstructure:"branch"`
 	// Path is where it lives on disk, absolute.
 	Path string `yaml:"path" mapstructure:"path"`
+	// Source is the included file the entry was read from, or "" for this
+	// machine's own file.
+	Source string `yaml:"-" mapstructure:"-"`
 }
 
 // ShortName is the name this working tree is reached by.

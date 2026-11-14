@@ -87,6 +87,9 @@ func mergeOne(into Config, path string, seen map[string]struct{}, depth int) Con
 	for i := range included.Folders {
 		included.Folders[i].Source = path
 	}
+	for i := range included.Worktrees {
+		included.Worktrees[i].Source = path
+	}
 	for i := range included.Hooks {
 		included.Hooks[i].Source = path
 	}

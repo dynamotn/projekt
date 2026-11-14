@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
+	"strings"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
@@ -13,6 +15,9 @@ import (
 type PruneWorktreeOptions struct {
 	// DryRun says what would happen without changing anything.
 	DryRun bool
+	// Merged also removes the working trees whose branch is merged into the
+	// project's default branch and that hold no change or untracked file.
+	Merged bool
 }
 
 // PruneWorktrees forgets the working trees whose folder is gone, on both
@@ -71,6 +76,9 @@ func PruneWorktrees(out io.Writer, o PruneWorktreeOptions) error {
 				return err
 			}
 		}
+		if o.Merged {
+			return pruneMerged(out, o, parsed)
+		}
 		return nil
 	}
 
@@ -100,12 +108,164 @@ func PruneWorktrees(out io.Writer, o PruneWorktreeOptions) error {
 	}
 
 	if len(gone) == 0 && pruned == 0 {
-		_, err := fmt.Fprintln(out, "Nothing to prune")
+		_, err = fmt.Fprintln(out, "Nothing to prune")
+	} else {
+		_, err = fmt.Fprintf(out, "%d entr%s forgotten, %d repositor%s pruned\n",
+			len(gone), entryPlural(len(gone)), pruned, entryPlural(pruned))
+	}
+	if err != nil || !o.Merged {
 		return err
 	}
-	_, err = fmt.Fprintf(out, "%d entr%s forgotten, %d repositor%s pruned\n",
-		len(gone), entryPlural(len(gone)), pruned, entryPlural(pruned))
-	return err
+	return pruneMerged(out, o, parsed)
+}
+
+// pruneMerged removes the merged, clean working trees of every project and
+// names each tree it leaves alone with the reason.
+//
+// Removal is `git worktree remove` without --force, so git itself refuses a
+// tree the checks here misjudged; the branch is kept.
+func pruneMerged(out io.Writer, o PruneWorktreeOptions, projects []ParsedFolder) error {
+	own := make(map[string]struct{})
+	for _, worktree := range lazypath.OwnConfig().Worktrees {
+		own[worktree.ShortName()] = struct{}{}
+	}
+	config := lazypath.GetConfig()
+	// Removing an entry shifts the slice the configuration shares; work on
+	// a copy.
+	worktrees := slices.Clone(config.Worktrees)
+
+	say := func(format string, args ...any) error {
+		_, err := fmt.Fprintf(out, format+"\n", args...)
+		return err
+	}
+	removed := 0
+
+	for _, project := range projects {
+		if !IsRepoRoot(project.Path) {
+			continue
+		}
+		listing, err := gitOutput(project.Path, "worktree", "list", "--porcelain")
+		if err != nil {
+			if err := say("Cannot list the working trees of %s: %v", project.ShortName, err); err != nil {
+				return err
+			}
+			continue
+		}
+		base := defaultBranch(project.Path)
+
+		declared := map[string]struct{}{}
+		for _, folder := range config.Folders {
+			if folder.Git != nil && lazypath.SamePath(folder.Path, project.Path) {
+				for _, repo := range folder.Git.Repos {
+					for _, worktree := range repo.Worktrees {
+						declared[lazypath.Canonical(worktreeTargetPath(folder, worktree))] = struct{}{}
+					}
+				}
+			}
+		}
+
+		for _, path := range listedWorktrees(listing) {
+			if lazypath.SamePath(path, project.Path) {
+				continue // the main checkout is never removed
+			}
+			var recorded *lazypath.Worktree
+			for i, worktree := range worktrees {
+				if worktree.Project == project.ShortName && lazypath.SamePath(worktree.Path, path) {
+					recorded = &worktrees[i]
+					break
+				}
+			}
+
+			name, reason := path, ""
+			if recorded == nil {
+				reason = "not recorded by projekt"
+				if _, ok := declared[lazypath.Canonical(path)]; ok {
+					reason = "declared under git.repos"
+				}
+			} else {
+				name = recorded.ShortName()
+				if _, ours := own[name]; !ours {
+					reason = "from " + recorded.Source
+				}
+			}
+			if reason == "" {
+				reason = mergedBlocker(path, base)
+			}
+			if reason != "" {
+				if err := say("%s: %s", name, reason); err != nil {
+					return err
+				}
+				continue
+			}
+
+			if o.DryRun {
+				if err := say("[DRY RUN] Would remove %s: %s", name, path); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := runGit(project.Path, "worktree", "remove", "--", path); err != nil {
+				if err := say("%s: cannot remove: %v", name, err); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := lazypath.RemoveWorktreeFromConfig(recorded.Project, recorded.Name); err != nil {
+				return err
+			}
+			removed++
+			if err := say("Removed %s", name); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.DryRun {
+		return nil
+	}
+	return say("%d merged working tree%s removed", removed, map[bool]string{true: "", false: "s"}[removed == 1])
+}
+
+// listedWorktrees reads the paths out of `git worktree list --porcelain`.
+func listedWorktrees(porcelain string) []string {
+	var paths []string
+	for _, line := range outputLines(porcelain) {
+		if path, ok := strings.CutPrefix(line, "worktree "); ok {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+// mergedBlocker says why a working tree must stay, or "" when it holds
+// nothing that is not already in the default branch.
+func mergedBlocker(path, base string) string {
+	if base == "" {
+		return "default branch unknown"
+	}
+	if branch, err := gitOutput(path, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
+		branch = strings.TrimSpace(branch)
+		if branch == base || "origin/"+branch == base {
+			return "default branch"
+		}
+	}
+	if runGit(path, "merge-base", "--is-ancestor", "HEAD", base) != nil {
+		return "not merged"
+	}
+	status, err := gitOutput(path, "status", "--porcelain")
+	if err != nil {
+		return "cannot read status"
+	}
+	lines := outputLines(status)
+	for _, line := range lines {
+		if strings.HasPrefix(line, "??") {
+			return "untracked files"
+		}
+	}
+	if len(lines) > 0 {
+		return "uncommitted changes"
+	}
+	return ""
 }
 
 // sortedPaths returns the project paths in a stable order.
