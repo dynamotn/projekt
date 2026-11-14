@@ -132,6 +132,7 @@
 
 ### Fixed
 
+- **doctor**: no longer creates the configuration file it is checking
 - **folder describe**: a description holding a control character is refused,
   like one holding a line break
 - **config**: two commands that write the configuration at the same time, or

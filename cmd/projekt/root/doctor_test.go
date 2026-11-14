@@ -3,10 +3,15 @@ package root
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
+
 	"gitlab.com/dynamo-tools/projekt/pkg/doctor"
+	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
 func TestReportChecks_Text(t *testing.T) {
@@ -90,5 +95,33 @@ func TestRunDoctor_UnknownFormatRunsNothing(t *testing.T) {
 	}
 	if ran {
 		t.Error("runDoctor() ran every check before refusing the format")
+	}
+}
+
+func TestInitConfigFor_DoctorLeavesNoFile(t *testing.T) {
+	for _, tc := range []struct {
+		args    []string
+		created bool
+	}{
+		{[]string{"doctor"}, false},
+		{[]string{"folder", "list"}, true},
+	} {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		file := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "projekt", "config.yaml")
+		lazypath.ResetTestConfig()
+		viper.Reset()
+		lazypath.CfgFile = ""
+		t.Cleanup(func() {
+			lazypath.CfgFile = ""
+			viper.Reset()
+			lazypath.ResetTestConfig()
+		})
+
+		initConfigFor(NewRootCmd(&bytes.Buffer{}), tc.args)
+
+		_, err := os.Stat(file)
+		if got := err == nil; got != tc.created {
+			t.Errorf("%v: config file exists = %v, want %v", tc.args, got, tc.created)
+		}
 	}
 }

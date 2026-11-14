@@ -68,14 +68,23 @@ func needsConfig(cmd *cobra.Command, exempt ...string) bool {
 	return true
 }
 
-func Execute() {
-	cobra.OnInitialize(func() {
-		// CfgFile is only ever set by --config, which must name a real file.
-		lazypath.CfgFileFromFlag = lazypath.CfgFile != ""
-		lazypath.InitConfig()
-	})
+// initConfigFor loads the configuration for the command args select. doctor
+// only checks the file, so it must not create it.
+func initConfigFor(root *cobra.Command, args []string) {
+	// CfgFile is only ever set by --config, which must name a real file.
+	lazypath.CfgFileFromFlag = lazypath.CfgFile != ""
+	if cmd, _, err := root.Find(args); err == nil && cmd.Name() == "doctor" {
+		lazypath.InitConfigReadOnly()
+		return
+	}
+	lazypath.InitConfig()
+}
 
-	if err := NewRootCmd(os.Stdout).Execute(); err != nil {
+func Execute() {
+	root := NewRootCmd(os.Stdout)
+	cobra.OnInitialize(func() { initConfigFor(root, os.Args[1:]) })
+
+	if err := root.Execute(); err != nil {
 		cli.Debug("%v", err)
 		os.Exit(1)
 	}
