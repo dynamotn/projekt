@@ -132,6 +132,7 @@
 
 ### Fixed
 
+- **t add**: `--force` replaces a template only once the new copy is complete
 - **doctor**: no longer creates the configuration file it is checking
 - **folder describe**: a description holding a control character is refused,
   like one holding a line break

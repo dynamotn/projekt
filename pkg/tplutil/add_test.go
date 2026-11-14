@@ -276,3 +276,32 @@ func TestAdd_LeavesAWorktreesGitFileOut(t *testing.T) {
 		}
 	}
 }
+
+func TestAdd_ForceKeepsTheOldTemplateWhenTheCopyFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every file")
+	}
+	store := useStore(t)
+	writeTemplate(t, filepath.Join(store, "app", "old.txt"), "old\n")
+
+	source := filepath.Join(t.TempDir(), "app")
+	writeTemplate(t, filepath.Join(source, "a.txt"), "new\n")
+	writeTemplate(t, filepath.Join(source, "b.txt"), "secret\n")
+	if err := os.Chmod(filepath.Join(source, "b.txt"), 0); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Add(AddOptions{Source: source, Force: true}); err == nil {
+		t.Fatal("Add() error = nil, want the unreadable file reported")
+	}
+	if got := readFile(t, filepath.Join(store, "app", "old.txt")); got != "old\n" {
+		t.Errorf("app/old.txt = %q, want the old template untouched", got)
+	}
+	entries, err := os.ReadDir(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("the store holds %d entries, want only app: a temporary copy was left", len(entries))
+	}
+}

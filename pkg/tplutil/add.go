@@ -91,30 +91,47 @@ func Add(o AddOptions) (Added, error) {
 	if info.IsDir() && (within(store, canonical) || within(canonical, store)) {
 		return Added{}, fmt.Errorf("cannot add %s: it and the template folder %s are inside one another", source, dir)
 	}
+	exists := false
 	if _, err := os.Stat(target); err == nil {
 		if !o.Force {
 			return Added{}, fmt.Errorf("template %q already exists at %s, use --force to replace it", name, target)
 		}
-		if err := os.RemoveAll(target); err != nil {
-			return Added{}, fmt.Errorf("cannot replace %s: %w", target, err)
-		}
+		exists = true
 	} else if !os.IsNotExist(err) {
 		return Added{}, fmt.Errorf("cannot access %s: %w", target, err)
 	}
 
+	// Copy aside first: a copy that fails halfway must not cost the template
+	// it was meant to replace.
+	holder, err := os.MkdirTemp(dir, ".adding-")
+	if err != nil {
+		return Added{}, fmt.Errorf("cannot create a folder in %s: %w", dir, err)
+	}
+	defer func() { _ = os.RemoveAll(holder) }()
+	work := filepath.Join(holder, filepath.Base(target))
+
 	added := Added{Path: target}
 	if info.IsDir() {
-		files, substitutions, err := copyTree(source, target, o.Replace)
+		files, substitutions, err := copyTree(source, work, o.Replace)
 		if err != nil {
 			return Added{}, err
 		}
 		added.Files, added.Substitutions = files, substitutions
 	} else {
-		substitutions, err := copyOne(source, target, info.Mode().Perm(), o.Replace)
+		substitutions, err := copyOne(source, work, info.Mode().Perm(), o.Replace)
 		if err != nil {
 			return Added{}, err
 		}
 		added.Files, added.Substitutions = 1, substitutions
+	}
+
+	if exists {
+		if err := os.RemoveAll(target); err != nil {
+			return Added{}, fmt.Errorf("cannot replace %s: %w", target, err)
+		}
+	}
+	if err := os.Rename(work, target); err != nil {
+		return Added{}, fmt.Errorf("cannot move the copy to %s: %w", target, err)
 	}
 
 	manifest, err := manifestFor(o.Replace)
