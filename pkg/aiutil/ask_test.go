@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -253,4 +254,104 @@ func TestAsk_FailingCommand(t *testing.T) {
 	if !strings.Contains(errOut.String(), "boom") {
 		t.Errorf("errOut = %q, want the command's stderr", errOut.String())
 	}
+}
+
+func TestClean_DropsBidiControls(t *testing.T) {
+	if got := clean("\u202egnp.exe\u2066 ok\u2069 \u202a\u202b\u202c\u202d"); got != "gnp.exe ok" {
+		t.Errorf("clean() = %q, want %q", got, "gnp.exe ok")
+	}
+}
+
+// pids reads the process ids a fake AI wrote to file, waiting for it, and
+// kills them when the test ends, whatever its outcome.
+func pids(t *testing.T, file string) []int {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		data, err := os.ReadFile(file)
+		if fields := strings.Fields(string(data)); err == nil && len(fields) == 2 {
+			var out []int
+			for _, field := range fields {
+				pid, err := strconv.Atoi(field)
+				if err != nil {
+					t.Fatal(err)
+				}
+				out = append(out, pid)
+			}
+			t.Cleanup(func() {
+				for _, pid := range out {
+					_ = syscall.Kill(pid, syscall.SIGKILL)
+				}
+			})
+			return out
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the fake AI wrote no pids to %s", file)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// gone waits for pid to stop running.
+func gone(t *testing.T, pid int) {
+	t.Helper()
+	// Killed, it may linger a moment until its new parent reaps it.
+	for deadline := time.Now().Add(5 * time.Second); syscall.Kill(pid, 0) == nil; {
+		if time.Now().After(deadline) {
+			t.Errorf("pid %d is still running", pid)
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestAsk_InterruptStopsTheAIAndCleansUp(t *testing.T) {
+	loadConfig(t, "ai:\n  timeout: 3s\n")
+	tmp := fakeAI(t, `sleep 30 & echo "$$ $!" > "$PIDFILE"; wait`)
+	pidFile := filepath.Join(t.TempDir(), "pid")
+	t.Setenv("PIDFILE", pidFile)
+	// The test's own handler too, so the signal never ends the test binary,
+	// whatever Ask does with it.
+	caught := make(chan os.Signal, 1)
+	signal.Notify(caught, os.Interrupt)
+	defer signal.Stop(caught)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := Ask("", &bytes.Buffer{})
+		done <- err
+	}()
+	running := pids(t, pidFile)
+	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "interrupted") {
+			t.Errorf("Ask() error = %v, want one saying it was interrupted", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Ask did not return")
+	}
+	for _, pid := range running {
+		gone(t, pid)
+	}
+	if left, _ := os.ReadDir(tmp); len(left) != 0 {
+		t.Errorf("Ask left %v in the temporary folder", left)
+	}
+}
+
+func TestAsk_ABackgroundChildDoesNotSpoilTheAnswer(t *testing.T) {
+	loadConfig(t, "")
+	fakeAI(t, `sleep 7 & echo "$$ $!" > "$PIDFILE"; echo answer`)
+	pidFile := filepath.Join(t.TempDir(), "pid")
+	t.Setenv("PIDFILE", pidFile)
+
+	answer, err := Ask("", &bytes.Buffer{})
+	running := pids(t, pidFile)
+	if err != nil || answer != "answer" {
+		t.Errorf("Ask() = %q, %v, want %q", answer, err, "answer")
+	}
+	gone(t, running[1])
 }

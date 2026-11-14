@@ -28,7 +28,8 @@ Examples:
 --suggest asks the AI command you name in ai.command (or PROJEKT_AI) which
 literals of the project should become values. Each pair is checked, printed
 with the matching --replace line, and the template is added only on a yes at
-a terminal or with --yes. --show-prompt prints what would be sent.
+a terminal or with --yes. --show-prompt prints what would be sent. The files
+of a nested repository are left out of what is sent.
 
 ```
 t add [file or folder] [flags]

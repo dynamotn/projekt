@@ -3,7 +3,6 @@ package folder
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -26,7 +25,7 @@ A project found inside a workspace has no entry of its own and carries the
 workspace's description: describe the workspace.
 
 With --generate, the AI command you name in ai.command (or PROJEKT_AI) drafts
-the description. It is sent the project's short name, a list of its paths and
+the description. It is sent the project's short name, its top-level names and
 the start of its README: never a secret, a git-ignored file or a big file.
 Nothing is written until you answer yes (or pass --yes); --show-prompt prints
 what would be sent and stops.`
@@ -52,7 +51,7 @@ func NewFolderDescribeCmd(out io.Writer) *cobra.Command {
 					return fmt.Errorf("--generate drafts the description itself: give no text and no --clear")
 				}
 				return folderutil.GenerateDescription(args[0], folderutil.GenerateOptions{
-					ShowPrompt: showPrompt, Yes: yes, In: os.Stdin, Out: out, Err: cmd.ErrOrStderr(),
+					ShowPrompt: showPrompt, Yes: yes, In: cmd.InOrStdin(), Out: out, Err: cmd.ErrOrStderr(),
 				})
 			}
 			if yes || showPrompt {

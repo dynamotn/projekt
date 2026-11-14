@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -17,7 +18,10 @@ import (
 // where it reports.
 type SuggestOptions struct {
 	ShowPrompt bool // print the prompt and stop
-	Out, Err   io.Writer
+	// Given are the replacements typed with --replace: a suggested key that
+	// one of them already uses would make a second value of that name.
+	Given    []Replacement
+	Out, Err io.Writer
 	// Ask is the AI call; nil means aiutil.Ask. Tests set it.
 	Ask func(prompt string, errOut io.Writer) (string, error)
 }
@@ -39,7 +43,10 @@ var keyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 func SuggestReplacements(source string, o SuggestOptions) ([]Replacement, error) {
 	prompt, found, outside, err := suggestPrompt(source)
 	if err != nil {
-		return nil, fmt.Errorf("--suggest needs git to tell which files may be sent: %w", err)
+		if _, lookErr := exec.LookPath("git"); lookErr != nil {
+			return nil, fmt.Errorf("--suggest needs git to tell which files may be sent: %w", err)
+		}
+		return nil, err
 	}
 	if o.ShowPrompt {
 		_, err := fmt.Fprint(o.Out, prompt)
@@ -57,6 +64,11 @@ func SuggestReplacements(source string, o SuggestOptions) ([]Replacement, error)
 
 	var kept []Replacement
 	taken, keys := map[string]bool{}, map[string]bool{}
+	for _, r := range o.Given {
+		if key, ok := strings.CutPrefix(r.Expr, "Values."); ok {
+			keys[key] = true
+		}
+	}
 	drop := func(line, why string) { fmt.Fprintf(o.Err, "dropped %q: %s\n", line, why) }
 	for _, line := range strings.Split(answer, "\n") {
 		line = strings.TrimSpace(line)
@@ -114,7 +126,7 @@ func suggestPrompt(source string) (string, func(string) bool, func(string) bool,
 	if info, err := os.Stat(source); err == nil && !info.IsDir() {
 		project, names, tree = filepath.Dir(source), []string{filepath.Base(source)}, []string{filepath.Base(source)}
 	} else {
-		if tree, err = aiutil.Tree(source, 200); err != nil {
+		if tree, err = aiutil.Tree(source, 200, 0); err != nil {
 			return "", nil, nil, err
 		}
 	}

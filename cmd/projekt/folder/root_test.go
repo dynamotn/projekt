@@ -443,7 +443,9 @@ func TestNewFolderDescribeCmd_GenerateFlags(t *testing.T) {
 		err := cmd.Execute()
 		return out.String(), err
 	}
-	for _, args := range [][]string{{"api", "--generate", "x"}, {"api", "--generate", "--clear"}} {
+	for _, args := range [][]string{
+		{"api", "--generate", "x"}, {"api", "--generate", "--clear"}, {"api", "--yes"}, {"api", "--show-prompt"},
+	} {
 		if _, err := run(args...); err == nil {
 			t.Errorf("describe %v = nil, want an error", args)
 		}

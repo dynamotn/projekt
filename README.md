@@ -603,7 +603,8 @@ agent uses, and how to keep one source for every agent with `t` and `t apply`.
 
 projekt holds no key and speaks to no vendor: it runs the AI command-line
 tool you name. Set `ai.command` in your configuration (for example
-`claude -p`) or `PROJEKT_AI`, and `ai.timeout` if two minutes is not right.
+`claude -p --tools "" --strict-mcp-config`) or `PROJEKT_AI`, and `ai.timeout`
+if two minutes is not right.
 
 ```bash
 projekt folder describe billing --generate               # draft, show, ask
@@ -613,17 +614,22 @@ t add ./billing --suggest                                # which literals become
 t add ./billing --suggest --yes                          # ... and add without asking
 ```
 
-The prompt holds the short name, a list of the project's paths and the start
-of its README; for `t add --suggest` it holds the paths and the start of the
-manifests (`go.mod`, `package.json` and the like) instead. `--suggest` keeps
+The prompt holds the short name, the project's top-level names and the start
+of its README; for `t add --suggest` it holds the project's paths (but none
+inside a nested repository) and the start of the manifests (`go.mod`,
+`package.json` and the like) instead. `--suggest` keeps
 only the pairs whose literal really occurs there and whose key is a plain
 name, prints them with the matching `--replace` line, and adds the template
 on a yes or with `--yes`. A prompt never holds a secret file, a git-ignored
 file, a big file or a link that leaves the project, and nothing is written
 without a yes. The
-answer is only text: projekt never runs it. The AI tool itself can still read
-whatever its own permissions allow, so a print-only invocation is the safe
-choice.
+answer is only text: projekt never runs it. The AI tool itself can still
+read, run or fetch whatever its own permissions allow, and a hostile README in
+the prompt can try to steer it, so run it in a mode with no file, shell or
+network tools: that is what `--tools ""` and `--strict-mcp-config` do for
+`claude`; for another CLI, look up its own flag for that. The AI runs in a
+process group of its own, without the terminal: a CLI that asks a question
+there waits until the timeout.
 
 ## 📚 Commands
 

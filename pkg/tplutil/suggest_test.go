@@ -146,3 +146,23 @@ func TestSuggestReplacements_DropsShortLiterals(t *testing.T) {
 		t.Errorf("got %v, Err %q: want it dropped as too short", got, errOut)
 	}
 }
+
+func TestSuggestReplacements_TypedKeysComeFirst(t *testing.T) {
+	var out, errOut bytes.Buffer
+	got, err := SuggestReplacements(suggestSource(t), SuggestOptions{
+		Given: []Replacement{{"acme", "Values.author"}, {"billing", "Name"}},
+		Out:   &out, Err: &errOut,
+		Ask: func(string, io.Writer) (string, error) {
+			return "Jane Doe: author\nexample.com/billing: module\n", nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []Replacement{{"example.com/billing", "Values.module"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if !strings.Contains(errOut.String(), `"Jane Doe: author": the key came earlier`) {
+		t.Errorf("Err = %q, want the typed key named", errOut.String())
+	}
+}

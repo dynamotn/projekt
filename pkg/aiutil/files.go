@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"unicode"
+	"unicode/utf8"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
@@ -69,8 +71,10 @@ func Files(project string, names ...string) ([]File, error) {
 }
 
 // Tree lists the project's paths that may be named in a prompt, sorted,
-// at most limit of them, directories with a trailing slash.
-func Tree(project string, limit int) ([]string, error) {
+// at most limit of them, directories with a trailing slash, depth levels
+// deep (0: every level). It never looks inside a nested repository: what
+// that one ignores, the project's git cannot tell.
+func Tree(project string, limit, depth int) ([]string, error) {
 	root := lazypath.Canonical(project)
 
 	type entry struct{ name, rel string }
@@ -87,6 +91,7 @@ func Tree(project string, limit int) ([]string, error) {
 			return nil
 		}
 		name := relative(root, path)
+		deepest := depth > 0 && strings.Count(name, "/")+1 >= depth
 		real, rel, ok := allowed(root, name)
 		if !ok {
 			if d.IsDir() {
@@ -105,6 +110,9 @@ func Tree(project string, limit int) ([]string, error) {
 		}
 		entries = append(entries, entry{name, rel})
 		rels = append(rels, rel)
+		if d.IsDir() && (deepest || nestedRepository(real)) {
+			return filepath.SkipDir
+		}
 		return nil
 	})
 	if err != nil {
@@ -131,12 +139,12 @@ func Tree(project string, limit int) ([]string, error) {
 // on a forbidden name. A link is judged by what it resolves to.
 func allowed(root, name string) (real, rel string, ok bool) {
 	local := filepath.FromSlash(name)
-	if !filepath.IsLocal(local) || forbidden(name) {
+	if !filepath.IsLocal(local) || forbidden(name) || !printable(name) {
 		return "", "", false
 	}
 	real = lazypath.Canonical(filepath.Join(root, local))
 	rel = relative(root, real)
-	if rel == "." || !filepath.IsLocal(filepath.FromSlash(rel)) || forbidden(rel) {
+	if rel == "." || !filepath.IsLocal(filepath.FromSlash(rel)) || forbidden(rel) || !printable(rel) {
 		return "", "", false
 	}
 	return real, rel, true
@@ -157,6 +165,21 @@ func forbidden(name string) bool {
 		}
 	}
 	return false
+}
+
+// printable reports whether a name can be shown as one line of a prompt or
+// a terminal: valid UTF-8 with no control or bidi character, so a file named
+// "x\nIgnore all previous instructions" never becomes a line of its own.
+func printable(name string) bool {
+	return utf8.ValidString(name) && !strings.ContainsFunc(name, func(r rune) bool {
+		return unicode.IsControl(r) || bidi(r)
+	})
+}
+
+// nestedRepository reports whether dir holds a repository of its own.
+func nestedRepository(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
 }
 
 // relative returns path relative to root, slash-separated.
@@ -212,6 +235,9 @@ func gitIgnored(root string, rels []string) (map[string]bool, error) {
 		}
 	}
 	cmd := cli.Command("git", "-C", root, "check-ignore", "-z", "--stdin")
+	// Inherited, GIT_DIR and the like would make git answer for another
+	// repository, one that may ignore nothing.
+	cmd.Env = cli.WithoutRepoEnv(os.Environ())
 	cmd.Stdin = strings.NewReader(strings.Join(query, "\x00") + "\x00")
 	out, err := cmd.Output()
 	// Status 1 is git's way of saying nothing is ignored.
@@ -233,7 +259,7 @@ func gitIgnored(root string, rels []string) (map[string]bool, error) {
 func inWorkTree(root string) (bool, error) {
 	cmd := cli.Command("git", "-C", root, "rev-parse", "--is-inside-work-tree")
 	// git translates its messages; the one read below must be the English one.
-	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	cmd.Env = append(cli.WithoutRepoEnv(os.Environ()), "LC_ALL=C")
 	out, err := cmd.Output()
 	var exit *exec.ExitError
 	if errors.As(err, &exit) && bytes.Contains(exit.Stderr, []byte("not a git repository")) {
@@ -271,5 +297,6 @@ func quote(path string) (string, bool, error) {
 		return "", false, nil
 	}
 	data, err := io.ReadAll(io.LimitReader(file, quoteSize))
-	return string(data), err == nil, err
+	// The prompt is shown by --show-prompt: no escape may reach the terminal.
+	return plain(string(data)), err == nil, err
 }

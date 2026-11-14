@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -32,7 +33,9 @@ const (
 )
 
 // ErrNotConfigured is returned when neither PROJEKT_AI nor ai.command is set.
-var ErrNotConfigured = errors.New(`no AI command: set ai.command in the configuration, for example "claude -p", or PROJEKT_AI`)
+// The example gives the AI no tools: a hostile README in the prompt must find
+// nothing to steer. SplitShellWords keeps the "" as an empty argument.
+var ErrNotConfigured = errors.New(`no AI command: set ai.command in the configuration or PROJEKT_AI, for example to: claude -p --tools "" --strict-mcp-config`)
 
 // Command returns the AI command line to run, split into words, from
 // PROJEKT_AI or the owner's own ai.command.
@@ -78,7 +81,11 @@ func Ask(prompt string, errOut io.Writer) (string, error) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	// Ctrl-C never reaches a command in a group of its own: projekt takes it
+	// (and SIGTERM), kills the group and still removes the folder.
+	interrupted, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	ctx, cancel := context.WithTimeout(interrupted, timeout)
 	defer cancel()
 
 	var answer capped
@@ -96,8 +103,20 @@ func Ask(prompt string, errOut io.Writer) (string, error) {
 	cmd.WaitDelay = time.Second
 
 	err = cmd.Run()
-	if ctx.Err() == context.DeadlineExceeded {
+	if cmd.Process != nil {
+		// Whatever it left running in the background goes with it.
+		if killErr := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); killErr != nil && !errors.Is(killErr, syscall.ESRCH) {
+			return "", fmt.Errorf("cannot stop what the AI command %s left running: %w", words[0], killErr)
+		}
+	}
+	switch {
+	case interrupted.Err() != nil:
+		return "", fmt.Errorf("the AI command %s was interrupted", words[0])
+	case ctx.Err() == context.DeadlineExceeded:
 		return "", fmt.Errorf("the AI command %s gave no answer within the timeout of %s (ai.timeout)", words[0], timeout)
+	case errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState.Success():
+		// It answered and exited; only a child it left kept the pipe open.
+		err = nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("the AI command %s failed: %w", words[0], err)
@@ -118,16 +137,26 @@ func configuredTimeout() (time.Duration, error) {
 	return timeout, nil
 }
 
-// clean makes an answer plain text: valid UTF-8, no control characters but
-// newline and tab, no surrounding blanks.
+// clean makes an answer plain text, without surrounding blanks.
 func clean(answer string) string {
-	answer = strings.Map(func(r rune) rune {
-		if r != '\n' && r != '\t' && unicode.IsControl(r) {
+	return strings.TrimSpace(plain(answer))
+}
+
+// plain makes text safe to print and to quote: valid UTF-8, no control
+// characters but newline and tab, and no bidi control that would make a
+// terminal show it in another order than it reads.
+func plain(text string) string {
+	return strings.Map(func(r rune) rune {
+		if r != '\n' && r != '\t' && unicode.IsControl(r) || bidi(r) {
 			return -1
 		}
 		return r
-	}, strings.ToValidUTF8(answer, ""))
-	return strings.TrimSpace(answer)
+	}, strings.ToValidUTF8(text, ""))
+}
+
+// bidi reports whether r is an embedding, override or isolate control.
+func bidi(r rune) bool {
+	return r >= '\u202a' && r <= '\u202e' || r >= '\u2066' && r <= '\u2069'
 }
 
 // capped keeps the first maxAnswer bytes written to it and drops the rest,

@@ -1,16 +1,13 @@
 package root
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"strings"
 
-	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/tplutil"
 )
 
@@ -38,7 +35,8 @@ Examples:
 --suggest asks the AI command you name in ai.command (or PROJEKT_AI) which
 literals of the project should become values. Each pair is checked, printed
 with the matching --replace line, and the template is added only on a yes at
-a terminal or with --yes. --show-prompt prints what would be sent.`
+a terminal or with --yes. --show-prompt prints what would be sent. The files
+of a nested repository are left out of what is sent.`
 
 func NewTemplateAddCmd(out io.Writer) *cobra.Command {
 	var replace []string
@@ -61,7 +59,7 @@ func NewTemplateAddCmd(out io.Writer) *cobra.Command {
 			}
 			if suggest {
 				suggested, err := tplutil.SuggestReplacements(args[0], tplutil.SuggestOptions{
-					ShowPrompt: showPrompt, Out: out, Err: cmd.ErrOrStderr(),
+					ShowPrompt: showPrompt, Given: replacements, Out: out, Err: cmd.ErrOrStderr(),
 				})
 				if err != nil || showPrompt {
 					return err
@@ -87,7 +85,7 @@ func NewTemplateAddCmd(out io.Writer) *cobra.Command {
 				}
 				if !yes {
 					// Without a person to ask, the suggestion is only shown.
-					if ok, err := confirm(cmd, "Add the template with these replacements? [y/N] "); err != nil || !ok {
+					if ok, err := cli.Confirm(cmd.InOrStdin(), cmd.ErrOrStderr(), "Add the template with these replacements? [y/N] "); err != nil || !ok {
 						return err
 					}
 				}
@@ -124,20 +122,4 @@ func NewTemplateAddCmd(out io.Writer) *cobra.Command {
 	f.BoolVar(&showPrompt, "show-prompt", false, "With --suggest, print the prompt and stop")
 
 	return cmd
-}
-
-// confirm asks a yes/no question, and answers no when the input is not a
-// terminal.
-func confirm(cmd *cobra.Command, question string) (bool, error) {
-	f, ok := cmd.InOrStdin().(*os.File)
-	if !ok || !(isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())) {
-		return false, nil
-	}
-	fmt.Fprint(cmd.ErrOrStderr(), question)
-	line, err := bufio.NewReader(f).ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return false, err
-	}
-	reply := strings.ToLower(strings.TrimSpace(line))
-	return reply == "y" || reply == "yes", nil
 }

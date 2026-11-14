@@ -52,6 +52,7 @@ func TestEditorCommand_Quotes(t *testing.T) {
 	tests := map[string][]string{
 		`"/Applications/Some Editor.app/bin/editor" -w`: {"/Applications/Some Editor.app/bin/editor", "-w"},
 		`emacsclient -a ""`:                             {"emacsclient", "-a", ""},
+		`claude -p --tools "" --strict-mcp-config`:      {"claude", "-p", "--tools", "", "--strict-mcp-config"},
 		`'my editor' --flag='a b'`:                      {"my editor", "--flag=a b"},
 		`vim\ ish -u NONE`:                              {"vim ish", "-u", "NONE"},
 		`   code   --wait  `:                            {"code", "--wait"},

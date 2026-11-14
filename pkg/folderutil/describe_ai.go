@@ -1,15 +1,13 @@
 package folderutil
 
 import (
-	"bufio"
 	"fmt"
 	"io"
-	"os"
+	"os/exec"
 	"strings"
 
-	"github.com/mattn/go-isatty"
-
 	"gitlab.com/dynamo-tools/projekt/pkg/aiutil"
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 )
 
 // GenerateOptions say how GenerateDescription talks to the owner and to the
@@ -67,25 +65,16 @@ func GenerateDescription(shortName string, o GenerateOptions) error {
 		return err
 	}
 	// Without a person to ask, the draft is only shown.
-	f, ok := o.In.(*os.File)
-	if !ok || !(isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())) {
-		return nil
-	}
-	fmt.Fprint(o.Err, "Keep this description? [y/N] ")
-	line, err := bufio.NewReader(o.In).ReadString('\n')
-	if err != nil && err != io.EOF {
+	if keep, err := cli.Confirm(o.In, o.Err, "Keep this description? [y/N] "); err != nil || !keep {
 		return err
-	}
-	if reply := strings.ToLower(strings.TrimSpace(line)); reply != "y" && reply != "yes" {
-		return nil
 	}
 	return DescribeFolder(o.Out, shortName, draft, false)
 }
 
 // descriptionPrompt is everything the AI is told about the project: its
-// name, the paths it may be told of and the start of its README.
+// name, the top-level paths it may be told of and the start of its README.
 func descriptionPrompt(shortName, path string) (string, error) {
-	tree, err := aiutil.Tree(path, 200)
+	tree, err := aiutil.Tree(path, 200, 1)
 	if err != nil {
 		return "", needsGit(err)
 	}
@@ -103,6 +92,10 @@ func descriptionPrompt(shortName, path string) (string, error) {
 	return b.String(), nil
 }
 
+// needsGit names git as the cause only when git is what is missing.
 func needsGit(err error) error {
-	return fmt.Errorf("--generate needs git to tell which files may be sent: %w", err)
+	if _, lookErr := exec.LookPath("git"); lookErr != nil {
+		return fmt.Errorf("--generate needs git to tell which files may be sent: %w", err)
+	}
+	return err
 }

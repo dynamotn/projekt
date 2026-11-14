@@ -360,6 +360,9 @@ func TestGenerateDescription_NotATerminalOnlyPrints(t *testing.T) {
 	if !strings.Contains(out.String(), "The billing API") || configHas(t, "description") {
 		t.Errorf("out = %q, want the draft printed and nothing written", out.String())
 	}
+	if errOut := o.Err.(*bytes.Buffer).String(); !strings.Contains(errOut, "not saved; run again with --yes") {
+		t.Errorf("Err = %q, want it to say how to keep the draft", errOut)
+	}
 }
 
 func TestGenerateDescription_ShowPromptRunsNothing(t *testing.T) {
@@ -402,5 +405,24 @@ func TestGenerateDescription_AnswerIsText(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(project, "pwned")); err == nil {
 		t.Error("the answer was run")
+	}
+}
+
+func TestGenerateDescription_SendsTopLevelNamesOnly(t *testing.T) {
+	project := generateSetup(t)
+	if err := os.MkdirAll(filepath.Join(project, "src", "deep"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "src", "main.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	o := generateOpts(&out, "")
+	o.ShowPrompt = true
+	if err := GenerateDescription("work-myapp", o); err != nil {
+		t.Fatal(err)
+	}
+	if prompt := out.String(); !strings.Contains(prompt, "src/\n") || strings.Contains(prompt, "src/main.go") || strings.Contains(prompt, "src/deep") {
+		t.Errorf("prompt = %q, want src/ and nothing below it", prompt)
 	}
 }

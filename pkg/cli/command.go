@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // tools are the programs projekt runs on its own account. Anything else — an
@@ -44,4 +45,24 @@ func Command(name string, args ...string) *exec.Cmd {
 // else.
 func failed(name string, _ []string, err error) *exec.Cmd {
 	return &exec.Cmd{Err: fmt.Errorf("cannot run %s: %w", name, err)}
+}
+
+// WithoutRepoEnv drops the variables that point git at a repository other
+// than the folder it is run in. Inherited from a git hook, an alias or
+// `git rebase --exec`, GIT_DIR would answer for that repository: one with no
+// remote would vouch for a cloned store, and one that ignores nothing would
+// let a git-ignored file into a prompt.
+func WithoutRepoEnv(env []string) []string {
+	kept := make([]string, 0, len(env))
+	for _, entry := range env {
+		name, _, _ := strings.Cut(entry, "=")
+		switch name {
+		case "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+			"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+			"GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM", "GIT_NAMESPACE":
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return kept
 }

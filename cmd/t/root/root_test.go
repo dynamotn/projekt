@@ -298,3 +298,12 @@ func TestAddCmd_SuggestYesWithNothingHeldFails(t *testing.T) {
 		t.Error("--suggest --yes with nothing held = nil, want an error")
 	}
 }
+
+func TestAddCmd_SuggestReportsAMissingSource(t *testing.T) {
+	_, store := suggestFixture(t)
+	missing := filepath.Join(t.TempDir(), "nope")
+	err := runT(t, "--template-dir", store, "add", missing, "--suggest")
+	if err == nil || !strings.Contains(err.Error(), "nope") || strings.Contains(err.Error(), "git") {
+		t.Errorf("t add nope --suggest = %v, want the missing source named, not git", err)
+	}
+}
