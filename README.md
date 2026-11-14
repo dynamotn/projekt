@@ -474,7 +474,9 @@ undo; `--force` says you mean it. Destination: `$XDG_DATA_HOME/projekt/archive`,
 or `--archive-dir` / `$PROJEKT_ARCHIVE_DIR` / `--to`. The archived folder keeps
 `.projekt/archived.yaml` (where it came from, its entry); `--list` shows the
 archive, and `folder restore <name>` moves a project back with its entry
-(`--to` elsewhere, or for one archived before records; `--dry-run` first).
+(`--to` elsewhere, or for one archived before records; `--dry-run` first). A
+path taken from the record is confirmed, and hooks and git sections in it are
+printed, not restored.
 
 **Where you've been**: every jump is remembered, one entry per project, so
 `pj -` toggles between the two you're actually working on. `projekt folder

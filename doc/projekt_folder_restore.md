@@ -11,8 +11,13 @@ Bring an archived project back.
   projekt folder restore old-service
   projekt folder restore old-service --to ~/work/old-service
 
-The folder is moved back to the path its record names, and its configuration
-entry is put back as it was, tags and description included. Then the record
+The folder is moved back to the path its record names, which is shown and
+confirmed first (--yes skips the question); its parent folder must exist.
+With --to the parents are created and nothing is asked. The configuration
+entry is put back with its name, prefix, tags, description, priority and
+workspace settings. Hooks and a git section are not restored, since the
+record is a file anyone may have edited: they are printed, so that you can
+add them back with `projekt config edit` after reading them. Then the record
 is removed, so the project does not look unfinished to a later archive. A
 folder with no entry, a child of a workspace, is registered the way
 `projekt folder add <path>` would.
@@ -36,6 +41,7 @@ projekt folder restore [name] [flags]
       --from string   Restore from this archive folder instead
   -h, --help          help for restore
       --to string     Restore to this path instead of the one the record names
+  -y, --yes           Do not ask to confirm a path taken from the record
 ```
 
 ### Options inherited from parent commands

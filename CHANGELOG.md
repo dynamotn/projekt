@@ -6,7 +6,8 @@
 
 - **folder restore**: brings an archived project back where it came from, or
   `--to` elsewhere, with its configuration entry; a project archived before
-  this needs `--to`
+  this needs `--to`. A path taken from the record is confirmed first
+  (`--yes` skips it), and hooks and git sections are printed, not restored
 - **folder archive**: the archived folder remembers where it came from and
   its configuration entry, and `--list` shows what the archive holds
 - **worktree prune**: `--merged` also removes the working trees whose branch

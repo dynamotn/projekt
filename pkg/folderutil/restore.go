@@ -9,6 +9,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
@@ -20,6 +21,11 @@ type RestoreOptions struct {
 	To string
 	// DryRun says what would happen without changing anything.
 	DryRun bool
+	// Yes skips the question asked when the target comes from the record.
+	Yes bool
+	// In and Err are where that question is read and asked.
+	In  io.Reader
+	Err io.Writer
 }
 
 // insideDir reports whether path is dir or lies below it.
@@ -62,7 +68,8 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 	}
 
 	target := strings.TrimSpace(o.To)
-	if target != "" {
+	fromRecord := target == ""
+	if !fromRecord {
 		if target, err = lazypath.NormalizePath(target); err != nil {
 			return err
 		}
@@ -88,26 +95,75 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 		return fmt.Errorf("the configuration already has an entry for %s; remove it or restore with --to", target)
 	}
 
+	// The record is data from a folder anybody may have edited: only the fields
+	// that run nothing are put back, never hooks or a git section.
 	entry := &lazypath.Folder{}
+	var skipped []string
 	if record != nil && record.Entry != nil {
-		*entry = *record.Entry
+		e := record.Entry
+		*entry = lazypath.Folder{Name: e.Name, Prefix: e.Prefix, IsWorkspace: e.IsWorkspace,
+			RegexMatch: e.RegexMatch, Priority: e.Priority, Tags: e.Tags, Description: e.Description}
+		if !e.Hooks.IsEmpty() {
+			skipped = append(skipped, "hooks enter: "+fmt.Sprintf("%q", e.Hooks.Enter)+
+				", leave: "+fmt.Sprintf("%q", e.Hooks.Leave))
+		}
+		if e.Git != nil {
+			git, _ := yaml.Marshal(e.Git)
+			skipped = append(skipped, "git:\n"+strings.TrimRight(string(git), "\n"))
+		}
 	}
 	entry.Path = target
-
-	if o.DryRun {
-		_, err := fmt.Fprintf(out, "[DRY RUN] Would move %s to %s and add it to the configuration\n", source, target)
+	say := func(format string, args ...any) error {
+		_, err := fmt.Fprintf(out, format, args...)
 		return err
 	}
+	notRestored := func() error {
+		if len(skipped) == 0 {
+			return nil
+		}
+		return say("The record also held the following, which is not restored; read it, then add what you "+
+			"want back with `projekt config edit`:\n  %s\n", strings.Join(skipped, "\n  "))
+	}
 
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return fmt.Errorf("cannot create %s: %w", filepath.Dir(target), err)
+	if fromRecord {
+		// Where the record says decides where the files land, so its parent must
+		// already be there and the target is confirmed.
+		if info, err := os.Stat(filepath.Dir(target)); err != nil || !info.IsDir() {
+			return fmt.Errorf("%s does not exist; the record names %s: say where with --to", filepath.Dir(target), target)
+		}
+	}
+	if o.DryRun {
+		if err := say("[DRY RUN] Would move %s to %s and add it to the configuration\n", source, target); err != nil {
+			return err
+		}
+		return notRestored()
+	}
+	if fromRecord && !o.Yes {
+		if err := say("The record says %s came from %s\n", name, target); err != nil {
+			return err
+		}
+		errOut := o.Err
+		if errOut == nil {
+			errOut = io.Discard
+		}
+		if ok, err := cli.Confirm(o.In, errOut, fmt.Sprintf("Restore it to %s? [y/N] ", target)); err != nil || !ok {
+			return fmt.Errorf("nothing was restored; confirm %s, or use --yes, or restore elsewhere with --to", target)
+		}
+	}
+
+	if !fromRecord {
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return fmt.Errorf("cannot create %s: %w", filepath.Dir(target), err)
+		}
 	}
 	if err := moveFolder(source, target); err != nil {
 		return err
 	}
 	if err := entry.AddToConfig(); err != nil {
-		return fmt.Errorf("moved %s to %s but could not add it to the configuration: %w; "+
-			"run `projekt folder add %s`, then delete %s", source, target, err, target, filepath.Join(target, RecordFile))
+		// AddToConfig has already logged why.
+		return fmt.Errorf("moved %s to %s but the configuration was not changed; the record at %s still holds "+
+			"the entry: run `projekt folder add %s` and set it again, then delete the record",
+			source, target, filepath.Join(target, RecordFile), target)
 	}
 	// A record left behind would make the project look unfinished to the next
 	// archive. An emptied .projekt stays: it may have been there before.
@@ -118,6 +174,8 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 		}
 	}
 
-	_, err = fmt.Fprintf(out, "Restored %s to %s\n", name, target)
-	return err
+	if err := say("Restored %s to %s\n", name, target); err != nil {
+		return err
+	}
+	return notRestored()
 }

