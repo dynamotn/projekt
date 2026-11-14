@@ -286,3 +286,15 @@ func TestAddCmd_ShowPromptNeedsSuggest(t *testing.T) {
 		t.Error("--show-prompt without --suggest = nil, want an error")
 	}
 }
+
+func TestAddCmd_SuggestYesWithNothingHeldFails(t *testing.T) {
+	src, store := suggestFixture(t)
+	ai := filepath.Join(t.TempDir(), "ai.sh")
+	if err := os.WriteFile(ai, []byte("#!/bin/sh\ncat >/dev/null\necho 'not-there: name'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PROJEKT_AI", ai)
+	if err := runT(t, "--template-dir", store, "add", src, "--suggest", "--yes"); err == nil {
+		t.Error("--suggest --yes with nothing held = nil, want an error")
+	}
+}

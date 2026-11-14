@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/aiutil"
 )
@@ -16,14 +17,17 @@ import (
 // where it reports.
 type SuggestOptions struct {
 	ShowPrompt bool // print the prompt and stop
-	Yes        bool // the caller adds without asking
-	In         io.Reader
 	Out, Err   io.Writer
 	// Ask is the AI call; nil means aiutil.Ask. Tests set it.
 	Ask func(prompt string, errOut io.Writer) (string, error)
 }
 
-const maxLiteral = 200
+const (
+	maxLiteral = 200
+	minLiteral = 3 // a shorter one rewrites far more than it names
+)
+
+var actionPattern = regexp.MustCompile(`(?s)\{\{.*?\}\}`)
 
 var keyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
@@ -33,7 +37,7 @@ var keyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 //
 // The answer is only ever text: it is parsed and checked, never run.
 func SuggestReplacements(source string, o SuggestOptions) ([]Replacement, error) {
-	prompt, seen, err := suggestPrompt(source)
+	prompt, found, outside, err := suggestPrompt(source)
 	if err != nil {
 		return nil, fmt.Errorf("--suggest needs git to tell which files may be sent: %w", err)
 	}
@@ -52,7 +56,7 @@ func SuggestReplacements(source string, o SuggestOptions) ([]Replacement, error)
 	}
 
 	var kept []Replacement
-	taken := map[string]bool{}
+	taken, keys := map[string]bool{}, map[string]bool{}
 	drop := func(line, why string) { fmt.Fprintf(o.Err, "dropped %q: %s\n", line, why) }
 	for _, line := range strings.Split(answer, "\n") {
 		line = strings.TrimSpace(line)
@@ -70,12 +74,22 @@ func SuggestReplacements(source string, o SuggestOptions) ([]Replacement, error)
 			drop(line, "the key is not an identifier like module or author")
 		case literal == "" || len(literal) > maxLiteral:
 			drop(line, fmt.Sprintf("the literal is empty or over %d bytes", maxLiteral))
-		case !seen(literal):
+		case strings.IndexFunc(literal, unicode.IsControl) >= 0:
+			drop(line, "the literal holds a control character")
+		case strings.Contains(literal, "{{") || strings.Contains(literal, "}}"):
+			drop(line, "the literal is template syntax")
+		case len(literal) < minLiteral:
+			drop(line, fmt.Sprintf("the literal is shorter than %d bytes", minLiteral))
+		case !found(literal):
 			drop(line, "the literal was not found in the files that may be sent")
+		case !outside(literal):
+			drop(line, "the literal occurs only inside template actions: template syntax")
 		case taken[literal]:
 			drop(line, "the literal came earlier")
+		case keys[key]:
+			drop(line, "the key came earlier")
 		default:
-			taken[literal] = true
+			taken[literal], keys[key] = true, true
 			kept = append(kept, Replacement{Literal: literal, Expr: "Values." + key})
 		}
 	}
@@ -95,18 +109,18 @@ func SuggestReplacements(source string, o SuggestOptions) ([]Replacement, error)
 
 // suggestPrompt builds the prompt and a test of whether a literal occurs in
 // what the prompt may quote: the files Files let through or a path of Tree.
-func suggestPrompt(source string) (string, func(string) bool, error) {
+func suggestPrompt(source string) (string, func(string) bool, func(string) bool, error) {
 	project, names, tree := source, []string{"go.mod", "package.json", "pyproject.toml", "Cargo.toml", "README.md"}, []string(nil)
 	if info, err := os.Stat(source); err == nil && !info.IsDir() {
 		project, names, tree = filepath.Dir(source), []string{filepath.Base(source)}, []string{filepath.Base(source)}
 	} else {
 		if tree, err = aiutil.Tree(source, 200); err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 	}
 	files, err := aiutil.Files(project, names...)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	var b strings.Builder
@@ -119,11 +133,20 @@ func suggestPrompt(source string) (string, func(string) bool, error) {
 		fmt.Fprintf(&b, "\n%s:\n%s\n", f.Path, f.Content)
 	}
 
-	seen := func(literal string) bool {
-		return slices.ContainsFunc(tree, func(p string) bool { return strings.Contains(p, literal) }) ||
-			slices.ContainsFunc(files, func(f aiutil.File) bool { return strings.Contains(f.Content, literal) })
+	inPaths := func(literal string) bool {
+		return slices.ContainsFunc(tree, func(p string) bool { return strings.Contains(p, literal) })
 	}
-	return b.String(), seen, nil
+	found := func(literal string) bool {
+		return inPaths(literal) || slices.ContainsFunc(files, func(f aiutil.File) bool { return strings.Contains(f.Content, literal) })
+	}
+	// Whether it occurs at least once outside a {{ … }} action; what happens
+	// inside one is the replacement code's to decide.
+	outside := func(literal string) bool {
+		return inPaths(literal) || slices.ContainsFunc(files, func(f aiutil.File) bool {
+			return strings.Contains(actionPattern.ReplaceAllString(f.Content, " "), literal)
+		})
+	}
+	return b.String(), found, outside, nil
 }
 
 // shellQuote quotes one argument for a POSIX shell.

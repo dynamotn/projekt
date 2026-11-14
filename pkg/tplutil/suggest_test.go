@@ -106,3 +106,43 @@ func TestSuggestReplacements_NothingFromSecrets(t *testing.T) {
 		t.Errorf("got %v, Err %q: want it dropped as not found", got, errOut.String())
 	}
 }
+
+func TestSuggestReplacements_DropsDuplicateKey(t *testing.T) {
+	got, _, errOut := suggest(t, suggestSource(t), "Jane Doe: n\nexample.com/billing: n\n")
+	if len(got) != 1 || got[0].Literal != "Jane Doe" || !strings.Contains(errOut, "the key came earlier") {
+		t.Errorf("got %v, Err %q: want only the first pair", got, errOut)
+	}
+}
+
+func TestSuggestReplacements_DropsControlCharacters(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("a\rb here\nx\x1b[2Ky here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, _, errOut := suggest(t, dir, "a\rb here: one\nx\x1b[2Ky here: two\n")
+	if len(got) != 0 || strings.Count(errOut, "control character") != 2 {
+		t.Errorf("got %v, Err %q: want both dropped as control characters", got, errOut)
+	}
+}
+
+func TestSuggestReplacements_DropsTemplateSyntax(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "README.md"),
+		[]byte("{{ .Name }} and {{ .Title }}\nTitle again\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, _, errOut := suggest(t, dir, "{{: a\nName: b\nTitle: c\n")
+	if len(got) != 1 || got[0].Literal != "Title" {
+		t.Errorf("got %v, Err %q: want only Title (it also occurs outside an action)", got, errOut)
+	}
+	if strings.Count(errOut, "dropped") != 2 || !strings.Contains(errOut, "\"{{: a\": the literal is template") {
+		t.Errorf("Err = %q, want {{ and Name dropped as template syntax", errOut)
+	}
+}
+
+func TestSuggestReplacements_DropsShortLiterals(t *testing.T) {
+	got, _, errOut := suggest(t, suggestSource(t), "by: a\n")
+	if len(got) != 0 || !strings.Contains(errOut, "shorter") {
+		t.Errorf("got %v, Err %q: want it dropped as too short", got, errOut)
+	}
+}

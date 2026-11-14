@@ -61,10 +61,16 @@ func NewTemplateAddCmd(out io.Writer) *cobra.Command {
 			}
 			if suggest {
 				suggested, err := tplutil.SuggestReplacements(args[0], tplutil.SuggestOptions{
-					ShowPrompt: showPrompt, Yes: yes, In: cmd.InOrStdin(), Out: out, Err: cmd.ErrOrStderr(),
+					ShowPrompt: showPrompt, Out: out, Err: cmd.ErrOrStderr(),
 				})
-				if err != nil || showPrompt || len(suggested) == 0 {
+				if err != nil || showPrompt {
 					return err
+				}
+				if len(suggested) == 0 && yes {
+					return errors.New("no suggestion held; nothing added")
+				}
+				if len(suggested) == 0 {
+					return nil
 				}
 				// What was typed wins over what was suggested for one literal.
 				given := map[string]bool{}
