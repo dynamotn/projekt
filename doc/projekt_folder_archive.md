@@ -16,7 +16,7 @@ bigger decision than you want to make on a Friday.
 
 The folder is moved, not deleted, and the entry is dropped from the
 configuration — in that order, so a move that fails leaves the project where
-it was. Bringing one back is `mv` and `projekt folder add`.
+it was. `projekt folder restore` brings one back.
 
 Archiving is refused when the repository has changes that are not committed,
 commits that are not pushed, no upstream at all, or something on the stash.

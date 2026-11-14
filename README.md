@@ -471,7 +471,10 @@ drops the entry afterwards, so a failed move leaves the project where it was.
 It refuses while the repo has uncommitted changes, unpushed commits, no
 upstream or a stash — the one mistake here that moving the folder back doesn't
 undo; `--force` says you mean it. Destination: `$XDG_DATA_HOME/projekt/archive`,
-or `--archive-dir` / `$PROJEKT_ARCHIVE_DIR` / `--to`.
+or `--archive-dir` / `$PROJEKT_ARCHIVE_DIR` / `--to`. The archived folder keeps
+`.projekt/archived.yaml` (where it came from, its entry); `--list` shows the
+archive, and `folder restore <name>` moves a project back with its entry
+(`--to` elsewhere, or for one archived before records; `--dry-run` first).
 
 **Where you've been**: every jump is remembered, one entry per project, so
 `pj -` toggles between the two you're actually working on. `projekt folder
@@ -661,6 +664,7 @@ there waits until the timeout.
 | [`folder remove`](doc/projekt_folder_remove.md) | Drop a folder from the config |
 | [`folder prune`](doc/projekt_folder_prune.md) | Drop every entry whose folder is gone, with `--dry-run` |
 | [`folder archive`](doc/projekt_folder_archive.md) | Move a finished project away and drop it from the config |
+| [`folder restore`](doc/projekt_folder_restore.md) | Bring an archived project back with its config entry |
 | [`folder check`](doc/projekt_folder_check.md) | Verify configured Git repos, remotes and worktrees on disk |
 | [`folder status`](doc/projekt_folder_status.md) | Branch, changes, ahead/behind, stashes, across every folder |
 | [`folder sync`](doc/projekt_folder_sync.md) | Clone missing repositories in parallel; `--pull` fast-forwards the rest |
