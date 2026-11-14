@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/folderutil"
 )
 
@@ -24,10 +25,15 @@ runs. A folder that is not on disk is reported as missing rather than as a
 failure of the command.
 
 The exit code is non-zero when the command failed anywhere, which makes it
-usable as a check. Working trees are projects too, so they are included.`
+usable as a check. Working trees are projects too, so they are included.
+
+With -o json, stdout holds one array with an object per folder (name, path,
+exit, output, seconds), in the same order. exit is -1 when the command could
+not start or the folder is missing.`
 
 func NewFolderExecCmd(out io.Writer) *cobra.Command {
 	o := folderutil.ExecOptions{}
+	var output string
 
 	cmd := &cobra.Command{
 		Use:     "exec -- [command]",
@@ -37,6 +43,7 @@ func NewFolderExecCmd(out io.Writer) *cobra.Command {
 		Aliases: []string{"e", "each", "foreach"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.Command = args
+			o.Output = cli.OutputFormat(output)
 			return folderutil.ExecInFolders(out, o)
 		},
 	}
@@ -48,6 +55,7 @@ func NewFolderExecCmd(out io.Writer) *cobra.Command {
 	f.BoolVarP(&o.Quiet, "quiet", "q", false, "Report only the folders where the command failed")
 	f.BoolVar(&o.NoOutput, "no-output", false, "Report the verdict per folder, not the command's output")
 	f.BoolVar(&o.DryRun, "dry-run", false, "List what would be run, without running any of it")
+	cli.AddOutputFlag(cmd, &output, "", string(cli.OutputJSON))
 	registerTagsFlag(cmd, &o.Tags, "run in")
 
 	return cmd

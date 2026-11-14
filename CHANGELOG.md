@@ -4,6 +4,8 @@
 
 ### Added
 
+- **folder exec**: `-o json` prints one object per folder — name, path, exit
+  status, output and seconds taken
 - **folder check**: `-o json` and `-o tsv` print one row per finding
   (repository, remote, worktree or server) with its state, on stdout, for a
   script to read

@@ -2,11 +2,13 @@ package folderutil
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
 
@@ -166,5 +168,99 @@ func TestExecForks(t *testing.T) {
 	}
 	if got := execForks(2, 10); got != 2 {
 		t.Errorf("execForks(2, 10) = %d, want 2", got)
+	}
+}
+
+func TestExecInFolders_DefaultOutputUnchanged(t *testing.T) {
+	a, _ := execFolders(t)
+	gone := filepath.Join(filepath.Dir(a), "gone")
+
+	var out bytes.Buffer
+	err := ExecInFolders(&out, ExecOptions{Command: []string{"sh", "-c", "echo hi; echo oops >&2; exit 2"}})
+	if err == nil {
+		t.Fatal("ExecInFolders() error = nil, want a failure")
+	}
+
+	want := "alpha: exit 2\n  hi\n  oops\nbeta: exit 2\n  hi\n  oops\ngone: missing " + gone + "\n"
+	if out.String() != want {
+		t.Errorf("output = %q, want %q", out.String(), want)
+	}
+}
+
+func TestExecInFolders_JSON(t *testing.T) {
+	a, b := execFolders(t)
+
+	var out bytes.Buffer
+	err := ExecInFolders(&out, ExecOptions{
+		// Fails only in beta, where there is no marker file.
+		Command: []string{"sh", "-c", "echo hi; test -f marker || exit 3"},
+		Output:  cli.OutputJSON,
+	})
+	if err == nil || !strings.Contains(err.Error(), "1 of") {
+		t.Fatalf("ExecInFolders() error = %v, want one folder failed", err)
+	}
+
+	var got []map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("output %q is not JSON: %v", out.String(), err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d objects, want 3: %v", len(got), got)
+	}
+	for i, want := range []struct {
+		name, path string
+		exit       float64
+	}{{"alpha", a, 0}, {"beta", b, 3}} {
+		o := got[i]
+		if len(o) != 5 {
+			t.Errorf("object %d = %v, want exactly name, path, exit, output, seconds", i, o)
+		}
+		if o["name"] != want.name || o["path"] != want.path || o["exit"] != want.exit || o["output"] != "hi\n" {
+			t.Errorf("object %d = %v, want %+v and output %q", i, o, want, "hi\n")
+		}
+		if s, ok := o["seconds"].(float64); !ok || s < 0 {
+			t.Errorf("object %d seconds = %v, want a number >= 0", i, o["seconds"])
+		}
+	}
+}
+
+func TestExecInFolders_JSONMissingCommand(t *testing.T) {
+	execFolders(t)
+
+	var out bytes.Buffer
+	_ = ExecInFolders(&out, ExecOptions{Command: []string{"no-such-program"}, Tags: []string{"oss"}, Output: cli.OutputJSON})
+
+	var got []struct {
+		Exit   int
+		Output string
+	}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("output %q is not JSON: %v", out.String(), err)
+	}
+	if len(got) != 1 || got[0].Exit != -1 || !strings.Contains(got[0].Output, "no-such-program") {
+		t.Errorf("got %+v, want exit -1 and the start error as output", got)
+	}
+}
+
+func TestExecInFolders_JSONEmptySelectionAndFlags(t *testing.T) {
+	execFolders(t)
+
+	var out bytes.Buffer
+	if err := ExecInFolders(&out, ExecOptions{Command: []string{"true"}, Tags: []string{"nope"}, Output: cli.OutputJSON}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out.String()) != "[]" {
+		t.Errorf("output = %q, want []", out.String())
+	}
+
+	for name, o := range map[string]ExecOptions{
+		"table":     {Output: cli.OutputTable},
+		"quiet":     {Output: cli.OutputJSON, Quiet: true},
+		"no-output": {Output: cli.OutputJSON, NoOutput: true},
+	} {
+		o.Command = []string{"true"}
+		if err := ExecInFolders(&out, o); err == nil {
+			t.Errorf("%s: error = nil, want one", name)
+		}
 	}
 }

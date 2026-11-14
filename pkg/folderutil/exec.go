@@ -2,13 +2,16 @@ package folderutil
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
@@ -29,6 +32,9 @@ type ExecOptions struct {
 	Quiet bool
 	// NoOutput drops the command's own output, keeping the verdict per folder.
 	NoOutput bool
+	// Output, when set, prints one JSON object per folder instead of the text
+	// report. Only cli.OutputJSON is accepted.
+	Output cli.OutputFormat
 }
 
 // execResult is one folder's run, kept until it is its turn to be printed.
@@ -38,6 +44,17 @@ type execResult struct {
 	err    error
 	// skipped says the folder was not there to run in.
 	skipped bool
+	// took is how long the command ran.
+	took time.Duration
+}
+
+// execRecord is one folder's run as `-o json` prints it.
+type execRecord struct {
+	Name    string  `json:"name"`
+	Path    string  `json:"path"`
+	Exit    int     `json:"exit"`
+	Output  string  `json:"output"`
+	Seconds float64 `json:"seconds"`
 }
 
 // ExecInFolders runs one command in every selected project folder.
@@ -49,6 +66,14 @@ func ExecInFolders(out io.Writer, o ExecOptions) error {
 	if len(o.Command) == 0 {
 		return fmt.Errorf("no command given")
 	}
+	if o.Output != "" {
+		if o.Output != cli.OutputJSON {
+			return fmt.Errorf("folder exec prints only json with --output, not %q", o.Output)
+		}
+		if o.Quiet || o.NoOutput {
+			return fmt.Errorf("--quiet and --no-output shape the text report: drop them with -o json")
+		}
+	}
 
 	folders, err := ParseConfig(lazypath.GetConfig())
 	if err != nil {
@@ -56,6 +81,10 @@ func ExecInFolders(out io.Writer, o ExecOptions) error {
 	}
 	folders = FilterByTags(folders, o.Tags)
 	if len(folders) == 0 {
+		if o.Output == cli.OutputJSON {
+			_, err := fmt.Fprintln(out, "[]")
+			return err
+		}
 		cli.Warn("No folder matches")
 		return nil
 	}
@@ -76,8 +105,16 @@ func ExecInFolders(out io.Writer, o ExecOptions) error {
 		if result.err != nil {
 			failed++
 		}
-		if err := printExecResult(out, result, o); err != nil {
+	}
+	if o.Output == cli.OutputJSON {
+		if err := printExecJSON(out, results); err != nil {
 			return err
+		}
+	} else {
+		for _, result := range results {
+			if err := printExecResult(out, result, o); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -141,8 +178,38 @@ func runInFolder(folder ParsedFolder, o ExecOptions) execResult {
 	cmd.Stdout = &output
 	cmd.Stderr = &output
 
+	start := time.Now()
 	err = cmd.Run()
-	return execResult{folder: folder, output: output.String(), err: err}
+	return execResult{folder: folder, output: output.String(), err: err, took: time.Since(start)}
+}
+
+// printExecJSON writes every folder's run as one array, in the order given. A
+// folder that is not on disk is exit -1 with "missing" as its output.
+func printExecJSON(out io.Writer, results []execResult) error {
+	records := make([]execRecord, len(results))
+	for i, r := range results {
+		rec := execRecord{
+			Name:    r.folder.ShortName,
+			Path:    r.folder.Path,
+			Output:  r.output,
+			Seconds: math.Round(r.took.Seconds()*100) / 100,
+		}
+		var exitErr *exec.ExitError
+		switch {
+		case r.skipped:
+			rec.Exit, rec.Output = -1, "missing"
+		case errors.As(r.err, &exitErr):
+			rec.Exit = exitErr.ExitCode()
+		case r.err != nil:
+			// The command never started: the start error is all there is to say.
+			rec.Exit, rec.Output = -1, r.err.Error()
+		}
+		records[i] = rec
+	}
+
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(records)
 }
 
 // printExecResult writes one folder's run.
