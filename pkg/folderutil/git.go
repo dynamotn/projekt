@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -899,7 +901,7 @@ func cloneRepo(job syncJob, gitURL string) error {
 		return err
 	}
 	prefix := "." + filepath.Base(job.repoPath) + ".projekt-clone-"
-	tmp, err := os.MkdirTemp(parent, prefix)
+	tmp, err := mkdirSibling(parent, prefix)
 	if err != nil {
 		return fmt.Errorf("cannot make a folder to clone into: %w", err)
 	}
@@ -938,6 +940,23 @@ func cloneRepo(job syncJob, gitURL string) error {
 	cli.Debug("git clone %s:\n%s", cli.RedactURL(gitURL), strings.TrimSpace(output.String()))
 
 	return nil
+}
+
+// mkdirSibling makes a new folder named prefix plus a random suffix in
+// parent. Unlike os.MkdirTemp, whose 0700 the clone and the rename would keep,
+// it gets the mode any new folder gets under the umask.
+func mkdirSibling(parent, prefix string) (string, error) {
+	for range 100 {
+		path := filepath.Join(parent, prefix+strconv.FormatUint(rand.Uint64(), 36))
+		err := os.Mkdir(path, 0o777)
+		if err == nil {
+			return path, nil
+		}
+		if !os.IsExist(err) {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("no free name for %s* in %s", prefix, parent)
 }
 
 func checkGitRemote(repoPath string, server *lazypath.GitServer, gitConfig *lazypath.GitConfig, repo lazypath.GitRepo) error {

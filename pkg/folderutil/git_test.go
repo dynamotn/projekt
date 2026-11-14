@@ -1545,6 +1545,14 @@ func TestSyncGitRepos_CloneLandsAtTarget(t *testing.T) {
 	if !IsRepoRoot(target) {
 		t.Fatalf("%s is not a repository after the clone", target)
 	}
+	// The mode a plain mkdir gives under this test's umask, whatever it is.
+	plain := filepath.Join(root, "plain")
+	if err := os.Mkdir(plain, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := modeOf(t, target), modeOf(t, plain); got != want {
+		t.Errorf("clone mode = %v, want %v like any new folder", got, want)
+	}
 	remotes, err := gitRemotes(target)
 	if err != nil {
 		t.Fatal(err)
@@ -1573,4 +1581,13 @@ func TestSyncGitRepos_PartialCloneIsNamed(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), partial) || !strings.Contains(err.Error(), "remove") {
 		t.Errorf("SyncGitRepos() error = %v, want it to say to remove %s", err, partial)
 	}
+}
+
+func modeOf(t *testing.T, path string) os.FileMode {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.Mode().Perm()
 }
