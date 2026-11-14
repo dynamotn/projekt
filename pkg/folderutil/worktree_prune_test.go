@@ -182,10 +182,116 @@ func TestPruneWorktrees_Merged(t *testing.T) {
 	if strings.Join(left, ",") != "wip,open,trunk" {
 		t.Errorf("entries left = %v, want wip,open,trunk", left)
 	}
+	// Each tree once, and the main checkout not at all.
 	for _, want := range []string{"myapp@wip: untracked files", "myapp@open: not merged", "myapp@trunk: default branch"} {
+		if n := strings.Count(out.String(), want+"\n"); n != 1 {
+			t.Errorf("%q appears %d times:\n%s", want, n, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "not recorded by projekt") {
+		t.Errorf("a tree or the main checkout was named as unrecorded:\n%s", out.String())
+	}
+}
+
+func TestPruneWorktrees_MergedKeepsIgnoredFiles(t *testing.T) {
+	project, trees := mergedWorktrees(t)
+	// info/exclude lives in the common git dir, so it covers every tree.
+	if err := os.WriteFile(filepath.Join(project, ".git", "info", "exclude"), []byte("notes.local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(trees["done"], "notes.local"), []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := PruneWorktrees(&out, PruneWorktreeOptions{Merged: true}); err != nil {
+		t.Fatalf("PruneWorktrees() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(trees["done"], "notes.local")); err != nil {
+		t.Errorf("the ignored file is gone: %v", err)
+	}
+	if !strings.Contains(out.String(), "myapp@done: ignored files\n") {
+		t.Errorf("out = %q", out.String())
+	}
+}
+
+func TestPruneWorktrees_MergedNamesDriftedAndDetached(t *testing.T) {
+	_, trees := mergedWorktrees(t)
+	mustGit(t, trees["done"], "switch", "-c", "elsewhere")
+	mustGit(t, trees["wip"], "checkout", "--detach")
+
+	var out bytes.Buffer
+	if err := PruneWorktrees(&out, PruneWorktreeOptions{Merged: true}); err != nil {
+		t.Fatalf("PruneWorktrees() error = %v", err)
+	}
+	for _, want := range []string{"myapp@done: on elsewhere, configured done\n", "myapp@wip: detached HEAD\n"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("out lacks %q:\n%s", want, out.String())
 		}
+	}
+	if _, err := os.Stat(trees["done"]); err != nil {
+		t.Errorf("done was removed: %v", err)
+	}
+}
+
+func TestPruneWorktrees_MergedOwnerByPath(t *testing.T) {
+	project, trees := mergedWorktrees(t)
+	root := filepath.Dir(project)
+
+	// The same name in both files: the own entry points at open, the included
+	// one at done. Only the entry that records a path decides about that path.
+	included := filepath.Join(root, "team.yaml")
+	body := "worktrees:\n  - {project: myapp, name: mine, branch: done, path: " + trees["done"] + "}\n"
+	own := "include: [" + included + "]\nfolders:\n  - path: " + project + "\n" +
+		"worktrees:\n  - {project: myapp, name: mine, branch: open, path: " + trees["open"] + "}\n"
+	if err := os.WriteFile(included, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lazypath.CfgFile, []byte(own), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lazypath.ResetTestConfig()
+	lazypath.InitConfig()
+
+	var out bytes.Buffer
+	if err := PruneWorktrees(&out, PruneWorktreeOptions{Merged: true}); err != nil {
+		t.Fatalf("PruneWorktrees() error = %v", err)
+	}
+	if _, err := os.Stat(trees["done"]); err != nil {
+		t.Errorf("done, recorded only by the included file, was removed: %v", err)
+	}
+	for _, want := range []string{"myapp@mine: from " + included + "\n", "myapp@mine: not merged\n"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("out lacks %q:\n%s", want, out.String())
+		}
+	}
+	if own := lazypath.OwnConfig().Worktrees; len(own) != 1 || own[0].Path != trees["open"] {
+		t.Errorf("own entries = %#v, want the open one untouched", own)
+	}
+}
+
+func TestPruneWorktrees_MergedDeclaredUnderGitRepos(t *testing.T) {
+	project, trees := mergedWorktrees(t)
+	declared := filepath.Join(project, ".worktrees", "declared")
+	mustGit(t, project, "worktree", "add", "-b", "declared", declared)
+	lazypath.SetTestConfig(lazypath.Config{Folders: []lazypath.Folder{{
+		Path: project,
+		Git: &lazypath.GitConfig{Repos: []lazypath.GitRepo{{
+			Name:      "myapp",
+			Worktrees: []lazypath.GitWorktree{{Path: declared, Branch: "declared"}},
+		}}},
+	}}})
+	_ = trees
+
+	var out bytes.Buffer
+	if err := PruneWorktrees(&out, PruneWorktreeOptions{Merged: true}); err != nil {
+		t.Fatalf("PruneWorktrees() error = %v", err)
+	}
+	if _, err := os.Stat(declared); err != nil {
+		t.Errorf("a tree declared under git.repos was removed: %v", err)
+	}
+	if want := declared + ": declared under git.repos\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("out lacks %q:\n%s", want, out.String())
 	}
 }
 

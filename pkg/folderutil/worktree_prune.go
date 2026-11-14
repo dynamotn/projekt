@@ -39,10 +39,6 @@ func PruneWorktrees(out io.Writer, o PruneWorktreeOptions) error {
 	for _, folder := range parsed {
 		byName[folder.ShortName] = folder
 	}
-	own := make(map[string]struct{})
-	for _, worktree := range lazypath.OwnConfig().Worktrees {
-		own[worktree.ShortName()] = struct{}{}
-	}
 
 	// One `git worktree prune` per project, not per working tree.
 	projects := map[string]string{}
@@ -54,7 +50,7 @@ func PruneWorktrees(out io.Writer, o PruneWorktreeOptions) error {
 		if _, err := os.Stat(worktree.Path); !os.IsNotExist(err) {
 			continue
 		}
-		if _, ours := own[worktree.ShortName()]; !ours {
+		if worktree.Source != "" {
 			// An included file is read, never written: say so instead of
 			// failing to forget what was never ours.
 			if _, err := fmt.Fprintf(out, "%s is gone but comes from an included file; edit that file to forget it\n", worktree.ShortName()); err != nil {
@@ -125,10 +121,6 @@ func PruneWorktrees(out io.Writer, o PruneWorktreeOptions) error {
 // Removal is `git worktree remove` without --force, so git itself refuses a
 // tree the checks here misjudged; the branch is kept.
 func pruneMerged(out io.Writer, o PruneWorktreeOptions, projects []ParsedFolder) error {
-	own := make(map[string]struct{})
-	for _, worktree := range lazypath.OwnConfig().Worktrees {
-		own[worktree.ShortName()] = struct{}{}
-	}
 	config := lazypath.GetConfig()
 	// Removing an entry shifts the slice the configuration shares; work on
 	// a copy.
@@ -141,7 +133,9 @@ func pruneMerged(out io.Writer, o PruneWorktreeOptions, projects []ParsedFolder)
 	removed := 0
 
 	for _, project := range projects {
-		if !IsRepoRoot(project.Path) {
+		// ParseConfig also lists every working tree as a folder; a tree is
+		// not a project, and its own listing would repeat the project's.
+		if _, _, isTree := lazypath.SplitWorktreeName(project.ShortName); isTree || !IsRepoRoot(project.Path) {
 			continue
 		}
 		listing, err := gitOutput(project.Path, "worktree", "list", "--porcelain")
@@ -164,10 +158,8 @@ func pruneMerged(out io.Writer, o PruneWorktreeOptions, projects []ParsedFolder)
 			}
 		}
 
-		for _, path := range listedWorktrees(listing) {
-			if lazypath.SamePath(path, project.Path) {
-				continue // the main checkout is never removed
-			}
+		// The first entry is the main checkout, which is never removed.
+		for _, path := range listedWorktrees(listing)[1:] {
 			var recorded *lazypath.Worktree
 			for i, worktree := range worktrees {
 				if worktree.Project == project.ShortName && lazypath.SamePath(worktree.Path, path) {
@@ -176,20 +168,20 @@ func pruneMerged(out io.Writer, o PruneWorktreeOptions, projects []ParsedFolder)
 				}
 			}
 
-			name, reason := path, ""
+			name, reason, configured := path, "", ""
 			if recorded == nil {
 				reason = "not recorded by projekt"
 				if _, ok := declared[lazypath.Canonical(path)]; ok {
 					reason = "declared under git.repos"
 				}
 			} else {
-				name = recorded.ShortName()
-				if _, ours := own[name]; !ours {
+				name, configured = recorded.ShortName(), recorded.Branch
+				if recorded.Source != "" {
 					reason = "from " + recorded.Source
 				}
 			}
 			if reason == "" {
-				reason = mergedBlocker(path, base)
+				reason = mergedBlocker(path, base, configured)
 			}
 			if reason != "" {
 				if err := say("%s: %s", name, reason); err != nil {
@@ -223,7 +215,7 @@ func pruneMerged(out io.Writer, o PruneWorktreeOptions, projects []ParsedFolder)
 	if o.DryRun {
 		return nil
 	}
-	return say("%d merged working tree%s removed", removed, map[bool]string{true: "", false: "s"}[removed == 1])
+	return say("merged working trees removed: %d", removed)
 }
 
 // listedWorktrees reads the paths out of `git worktree list --porcelain`.
@@ -239,20 +231,27 @@ func listedWorktrees(porcelain string) []string {
 
 // mergedBlocker says why a working tree must stay, or "" when it holds
 // nothing that is not already in the default branch.
-func mergedBlocker(path, base string) string {
+//
+// configured is the branch the configuration records, "" when it records none.
+func mergedBlocker(path, base, configured string) string {
 	if base == "" {
 		return "default branch unknown"
 	}
-	if branch, err := gitOutput(path, "symbolic-ref", "--quiet", "--short", "HEAD"); err == nil {
-		branch = strings.TrimSpace(branch)
-		if branch == base || "origin/"+branch == base {
-			return "default branch"
-		}
+	out, err := gitOutput(path, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil {
+		return "detached HEAD"
+	}
+	branch := strings.TrimSpace(out)
+	if configured != "" && branch != configured {
+		return fmt.Sprintf("on %s, configured %s", branch, configured)
+	}
+	if branch == base || "origin/"+branch == base {
+		return "default branch"
 	}
 	if runGit(path, "merge-base", "--is-ancestor", "HEAD", base) != nil {
 		return "not merged"
 	}
-	status, err := gitOutput(path, "status", "--porcelain")
+	status, err := gitOutput(path, "status", "--porcelain", "--ignored")
 	if err != nil {
 		return "cannot read status"
 	}
@@ -260,6 +259,12 @@ func mergedBlocker(path, base string) string {
 	for _, line := range lines {
 		if strings.HasPrefix(line, "??") {
 			return "untracked files"
+		}
+	}
+	// `git worktree remove` ignores ignored files too, and would lose them.
+	for _, line := range lines {
+		if strings.HasPrefix(line, "!!") {
+			return "ignored files"
 		}
 	}
 	if len(lines) > 0 {

@@ -5,9 +5,9 @@
 ### Added
 
 - **worktree prune**: `--merged` also removes the working trees whose branch
-  is merged into the default branch and that hold no change or untracked
-  file; the branch is kept, and every tree left alone is named with the
-  reason
+  is merged into the default branch and that hold no change, untracked
+  or ignored file; the branch is kept, and every tree left alone is named
+  with the reason
 - **folder sync**, **folder status**, **folder exec**: nothing waits forever
   any more. Every clone, fetch and `gh`/`glab` call stops after two minutes,
   or the configuration's `timeout`, or `--timeout` (`0` for no limit);
