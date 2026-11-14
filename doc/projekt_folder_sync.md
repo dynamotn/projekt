@@ -21,7 +21,9 @@ and left where it was. Configured working trees are pulled the same way.
   projekt folder sync --pull          # and bring the rest up to date
   projekt folder sync --pull -t work  # only the folders tagged work
 
-Use --dry-run to see what would be done without making changes.
+Use --dry-run to see what would be done without making changes. With --output,
+stdout holds one row per action (clone, pull, remote, worktree or skip) with
+its result, also for --dry-run, instead of the log.
 
 ```
 projekt folder sync [flags]
@@ -30,11 +32,12 @@ projekt folder sync [flags]
 ### Options
 
 ```
-      --dry-run        Show what would be done without making changes
-      --forks int      Number of repositories to clone concurrently (default 4)
-  -h, --help           help for sync
-      --pull           Fetch existing repositories and fast-forward clean branches
-  -t, --tags strings   Only sync folders carrying all of these tags
+      --dry-run         Show what would be done without making changes
+      --forks int       Number of repositories to clone concurrently (default 4)
+  -h, --help            help for sync
+  -o, --output string   Output format, one of: table, json, tsv
+      --pull            Fetch existing repositories and fast-forward clean branches
+  -t, --tags strings    Only sync folders carrying all of these tags
 ```
 
 ### Options inherited from parent commands

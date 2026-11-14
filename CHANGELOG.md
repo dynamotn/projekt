@@ -4,6 +4,9 @@
 
 ### Added
 
+- **folder sync**: `-o json` and `-o tsv` print one row per action — clone,
+  pull, remote, worktree or skip — with its result, also for `--dry-run`, on
+  stdout
 - **folder exec**: `-o json` prints one object per folder — name, path, exit
   status, output and seconds taken
 - **folder check**: `-o json` and `-o tsv` print one row per finding

@@ -15,6 +15,7 @@ type folderSyncOptions struct {
 	forks  int
 	pull   bool
 	tags   []string
+	output string
 }
 
 func NewFolderSyncCmd(out io.Writer) *cobra.Command {
@@ -41,7 +42,9 @@ and left where it was. Configured working trees are pulled the same way.
   projekt folder sync --pull          # and bring the rest up to date
   projekt folder sync --pull -t work  # only the folders tagged work
 
-Use --dry-run to see what would be done without making changes.`,
+Use --dry-run to see what would be done without making changes. With --output,
+stdout holds one row per action (clone, pull, remote, worktree or skip) with
+its result, also for --dry-run, instead of the log.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runFolderSync(opts, out)
 		},
@@ -52,6 +55,7 @@ Use --dry-run to see what would be done without making changes.`,
 	f.IntVar(&opts.forks, "forks", folderutil.DefaultSyncForks, "Number of repositories to clone concurrently")
 	f.BoolVar(&opts.pull, "pull", false, "Fetch existing repositories and fast-forward clean branches")
 	registerTagsFlag(cmd, &opts.tags, "sync")
+	cli.AddOutputFlag(cmd, &opts.output, "")
 
 	cli.SetColorAndStyles(cmd)
 	return cmd
@@ -64,7 +68,13 @@ func runFolderSync(opts *folderSyncOptions, out io.Writer) error {
 		return fmt.Errorf("--forks must be at least 1, got %d", opts.forks)
 	}
 
-	if opts.dryRun {
+	var format cli.OutputFormat
+	if opts.output != "" {
+		var err error
+		if format, err = cli.ParseOutputFormat(opts.output); err != nil {
+			return err
+		}
+	} else if opts.dryRun {
 		cli.Info("Running in dry-run mode...")
 	}
 
@@ -73,5 +83,7 @@ func runFolderSync(opts *folderSyncOptions, out io.Writer) error {
 		Forks:  opts.forks,
 		Pull:   opts.pull,
 		Tags:   opts.tags,
+		Output: format,
+		Out:    out,
 	})
 }

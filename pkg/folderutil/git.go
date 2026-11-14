@@ -2,11 +2,13 @@ package folderutil
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -41,6 +43,75 @@ type SyncOptions struct {
 	// Pull also fetches the repositories that are already on disk, worktrees
 	// included, and fast-forwards each clean branch onto its upstream.
 	Pull bool
+	// Output, when set, prints one row per action to Out instead of logging
+	// it.
+	Output cli.OutputFormat
+	// Out receives the rows; nil means standard output.
+	Out io.Writer
+}
+
+// Actions and results a sync row can carry.
+const (
+	actionClone    = "clone"
+	actionPull     = "pull"
+	actionRemote   = "remote"
+	actionWorktree = "worktree"
+	actionSkip     = "skip"
+
+	resultDone    = "done"
+	resultPlanned = "planned"
+	resultSkipped = "skipped"
+	resultFailed  = "failed"
+)
+
+// syncRow is one step of a sync.
+type syncRow struct {
+	repo, path, action, target, result, detail string
+	// seq keeps the order steps happened in within a repository.
+	seq int
+}
+
+// syncRows collects the rows of concurrent jobs. A nil *syncRows means the
+// sync logs instead.
+type syncRows struct {
+	mu   sync.Mutex
+	rows []syncRow
+}
+
+func (s *syncRows) add(row syncRow) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row.seq = len(s.rows)
+	s.rows = append(s.rows, row)
+}
+
+// sorted returns the rows by repository, then by the order they happened in.
+func (s *syncRows) sorted() []syncRow {
+	rows := slices.Clone(s.rows)
+	slices.SortStableFunc(rows, func(a, b syncRow) int {
+		return cmp.Or(strings.Compare(a.repo, b.repo), cmp.Compare(a.seq, b.seq))
+	})
+	return rows
+}
+
+// report records a step of the job, or runs log when nothing is collecting.
+func (j syncJob) report(action, target, result, detail string, log func()) {
+	if j.rows == nil {
+		log()
+		return
+	}
+	j.rows.add(syncRow{repo: j.repo.Name, path: j.repoPath, action: action, target: target, result: result, detail: detail})
+}
+
+func encodeSyncRows(out io.Writer, format cli.OutputFormat, rows []syncRow) error {
+	view := cli.ListView{Ordered: true}
+	for _, key := range []string{"repo", "path", "action", "target", "result", "detail"} {
+		view.Columns = append(view.Columns, cli.ListColumn{Header: strings.ToUpper(key), Key: key})
+	}
+	for _, r := range rows {
+		view.AppendRow(r.repo, r.path, r.action, r.target, r.result, r.detail)
+	}
+	return cli.EncodeList(out, view, cli.ListOutputOption{Output: format})
 }
 
 // syncJob is one repository to clone, resolved before the concurrent phase so
@@ -58,6 +129,8 @@ type syncJob struct {
 	batch bool
 	// pull says an existing clone is fetched and fast-forwarded too.
 	pull bool
+	// rows collects what the job does as rows; nil means it logs.
+	rows *syncRows
 }
 
 // SyncGitRepos synchronizes all Git repositories in the configuration.
@@ -67,6 +140,11 @@ type syncJob struct {
 // the combined failure is returned at the end, in configuration order.
 func SyncGitRepos(opts SyncOptions) error {
 	c := lazypath.GetConfig()
+
+	var collected *syncRows
+	if opts.Output != "" {
+		collected = &syncRows{}
+	}
 
 	var errs []error
 	var jobs []syncJob
@@ -86,11 +164,23 @@ func SyncGitRepos(opts SyncOptions) error {
 		}
 		for i := range folderJobs {
 			folderJobs[i].pull = opts.Pull
+			folderJobs[i].rows = collected
 		}
 		jobs = append(jobs, folderJobs...)
 	}
 
 	errs = append(errs, runSyncJobs(jobs, opts)...)
+
+	if collected != nil {
+		out := opts.Out
+		if out == nil {
+			out = os.Stdout
+		}
+		// The rows are printed even when a step failed: they say which.
+		if err := encodeSyncRows(out, opts.Output, collected.sorted()); err != nil {
+			errs = append(errs, err)
+		}
+	}
 
 	return errors.Join(errs...)
 }
@@ -259,24 +349,33 @@ func cloneIfMissing(job syncJob, dryRun bool) (existed bool, err error) {
 	}
 
 	// Repository doesn't exist, clone it
+	primaryURL, fallbackURL := getGitURLs(job.server, job.group, job.repo.Name)
+	target := cli.RedactURL(primaryURL)
 	if dryRun {
-		primaryURL, fallbackURL := getGitURLs(job.server, job.group, job.repo.Name)
-		if fallbackURL != "" {
-			cli.Info("[DRY RUN] Would clone: %s (fallback: %s) -> %s", cli.RedactURL(primaryURL), cli.RedactURL(fallbackURL), job.repoPath)
-		} else {
-			cli.Info("[DRY RUN] Would clone: %s -> %s", cli.RedactURL(primaryURL), job.repoPath)
-		}
+		job.report(actionClone, target, resultPlanned, "", func() {
+			if fallbackURL != "" {
+				cli.Info("[DRY RUN] Would clone: %s (fallback: %s) -> %s", target, cli.RedactURL(fallbackURL), job.repoPath)
+			} else {
+				cli.Info("[DRY RUN] Would clone: %s -> %s", target, job.repoPath)
+			}
+		})
 		return false, nil
 	}
 
-	cli.Info("Cloning %s to %s", job.repo.Name, job.repoPath)
+	if job.rows == nil {
+		cli.Info("Cloning %s to %s", job.repo.Name, job.repoPath)
+	}
 	if err := cloneRepoWithFallback(job.server, job.group, job.repo.Name, job.repoPath, job.batch); err != nil {
-		cli.Error("Failed to clone %s: %v", job.repo.Name, err)
+		job.report(actionClone, target, resultFailed, err.Error(), func() {
+			cli.Error("Failed to clone %s: %v", job.repo.Name, err)
+		})
 		// Keep going with the other repos, but remember the failure so the
 		// command exits non-zero.
 		return false, fmt.Errorf("clone %s: %w", job.repo.Name, err)
 	}
-	cli.Info("Successfully cloned %s", job.repo.Name)
+	job.report(actionClone, target, resultDone, "", func() {
+		cli.Info("Successfully cloned %s", job.repo.Name)
+	})
 
 	return false, nil
 }
@@ -291,14 +390,18 @@ func ensureRemotes(job syncJob, dryRun bool) error {
 
 	if dryRun {
 		for _, name := range names {
-			cli.Info("[DRY RUN] Would set remote %s -> %s in %s", name, cli.RedactURL(job.repo.Remotes[name]), job.repoPath)
+			job.report(actionRemote, name, resultPlanned, cli.RedactURL(job.repo.Remotes[name]), func() {
+				cli.Info("[DRY RUN] Would set remote %s -> %s in %s", name, cli.RedactURL(job.repo.Remotes[name]), job.repoPath)
+			})
 		}
 		return nil
 	}
 
 	existing, err := gitRemotes(job.repoPath)
 	if err != nil {
-		return fmt.Errorf("read remotes of %s: %w", job.repo.Name, err)
+		err = fmt.Errorf("read remotes of %s: %w", job.repo.Name, err)
+		job.report(actionRemote, "", resultFailed, err.Error(), func() {})
+		return err
 	}
 
 	var errs []error
@@ -309,18 +412,28 @@ func ensureRemotes(job syncJob, dryRun bool) error {
 		switch {
 		case !present:
 			if err := runGit(job.repoPath, "remote", "add", "--", name, want); err != nil {
-				errs = append(errs, fmt.Errorf("add remote %s to %s: %w", name, job.repo.Name, err))
+				err = fmt.Errorf("add remote %s to %s: %w", name, job.repo.Name, err)
+				job.report(actionRemote, name, resultFailed, err.Error(), func() {})
+				errs = append(errs, err)
 				continue
 			}
-			cli.Info("Added remote %s -> %s in %s", name, cli.RedactURL(want), job.repo.Name)
+			job.report(actionRemote, name, resultDone, "added "+cli.RedactURL(want), func() {
+				cli.Info("Added remote %s -> %s in %s", name, cli.RedactURL(want), job.repo.Name)
+			})
 		case current != want:
 			if err := runGit(job.repoPath, "remote", "set-url", "--", name, want); err != nil {
-				errs = append(errs, fmt.Errorf("update remote %s of %s: %w", name, job.repo.Name, err))
+				err = fmt.Errorf("update remote %s of %s: %w", name, job.repo.Name, err)
+				job.report(actionRemote, name, resultFailed, err.Error(), func() {})
+				errs = append(errs, err)
 				continue
 			}
-			cli.Info("Updated remote %s -> %s in %s", name, cli.RedactURL(want), job.repo.Name)
+			job.report(actionRemote, name, resultDone, "updated "+cli.RedactURL(want), func() {
+				cli.Info("Updated remote %s -> %s in %s", name, cli.RedactURL(want), job.repo.Name)
+			})
 		default:
-			cli.Debug("Remote %s of %s already points at %s", name, job.repo.Name, want)
+			job.report(actionSkip, name, resultSkipped, "remote already points at "+cli.RedactURL(want), func() {
+				cli.Debug("Remote %s of %s already points at %s", name, job.repo.Name, want)
+			})
 		}
 	}
 
@@ -336,23 +449,33 @@ func ensureWorktrees(job syncJob, dryRun bool) error {
 		path := job.worktreePaths[i]
 
 		if strings.TrimSpace(worktree.Branch) == "" {
-			cli.Warn("Skipping worktree %s of %s: no branch configured", path, job.repo.Name)
+			job.report(actionSkip, path, resultSkipped, "no branch configured", func() {
+				cli.Warn("Skipping worktree %s of %s: no branch configured", path, job.repo.Name)
+			})
 			continue
 		}
 		if dryRun {
-			cli.Info("[DRY RUN] Would add worktree %s (%s) for %s", path, worktree.Branch, job.repo.Name)
+			job.report(actionWorktree, path, resultPlanned, worktree.Branch, func() {
+				cli.Info("[DRY RUN] Would add worktree %s (%s) for %s", path, worktree.Branch, job.repo.Name)
+			})
 			continue
 		}
 		if _, err := os.Stat(path); err == nil {
-			cli.Debug("Worktree %s of %s already exists", path, job.repo.Name)
+			job.report(actionSkip, path, resultSkipped, "worktree already exists", func() {
+				cli.Debug("Worktree %s of %s already exists", path, job.repo.Name)
+			})
 			continue
 		}
 
 		if err := addWorktree(job.repoPath, path, worktree.Branch); err != nil {
-			errs = append(errs, fmt.Errorf("add worktree %s of %s: %w", path, job.repo.Name, err))
+			err = fmt.Errorf("add worktree %s of %s: %w", path, job.repo.Name, err)
+			job.report(actionWorktree, path, resultFailed, err.Error(), func() {})
+			errs = append(errs, err)
 			continue
 		}
-		cli.Info("Added worktree %s (%s) for %s", path, worktree.Branch, job.repo.Name)
+		job.report(actionWorktree, path, resultDone, worktree.Branch, func() {
+			cli.Info("Added worktree %s (%s) for %s", path, worktree.Branch, job.repo.Name)
+		})
 	}
 
 	return errors.Join(errs...)

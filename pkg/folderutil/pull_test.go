@@ -263,3 +263,35 @@ func TestBatchEnv_KeepsTheUsersSSHCommand(t *testing.T) {
 		t.Errorf("GIT_SSH_COMMAND = %q, want batch mode by default", got)
 	}
 }
+
+func TestSyncGitRepos_PullJSON(t *testing.T) {
+	behind, other := pullable(t)
+	pushCommit(t, other, "new")
+	dirty, other2 := pullable(t)
+	pushCommit(t, other2, "new")
+	if err := os.WriteFile(filepath.Join(dirty, "README"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	folder := func(clone string) lazypath.Folder {
+		return lazypath.Folder{Path: filepath.Dir(clone), Git: &lazypath.GitConfig{Host: "local", Group: "org",
+			Repos: []lazypath.GitRepo{{Name: filepath.Base(clone)}}}}
+	}
+	rows, err := syncJSON(t, SyncOptions{Pull: true}, folder(behind), folder(dirty))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	results := map[string]map[string]string{}
+	for _, row := range rows {
+		if row["action"] == "pull" {
+			results[row["path"]] = row
+		}
+	}
+	if r := results[behind]; r["result"] != "done" {
+		t.Errorf("behind clone row = %v, want pull/done", r)
+	}
+	if r := results[dirty]; r["result"] != "skipped" || r["detail"] != "uncommitted changes" {
+		t.Errorf("dirty clone row = %v, want pull/skipped with the reason", r)
+	}
+}

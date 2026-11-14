@@ -134,7 +134,9 @@ func pullTrees(job syncJob, dryRun bool) error {
 	if !dryRun {
 		// Working trees share the repository's refs, so one fetch serves all.
 		if err := fetch(job.repoPath, job.batch); err != nil {
-			cli.Error("Failed to pull %s: %v", job.repo.Name, err)
+			job.report(actionPull, job.repoPath, resultFailed, err.Error(), func() {
+				cli.Error("Failed to pull %s: %v", job.repo.Name, err)
+			})
 			return fmt.Errorf("pull %s: fetch: %w", job.repo.Name, err)
 		}
 	}
@@ -142,23 +144,33 @@ func pullTrees(job syncJob, dryRun bool) error {
 	var errs []error
 	for _, tree := range trees {
 		if dryRun {
-			cli.Info("[DRY RUN] Would fetch and fast-forward: %s", tree.path)
+			job.report(actionPull, tree.path, resultPlanned, "", func() {
+				cli.Info("[DRY RUN] Would fetch and fast-forward: %s", tree.path)
+			})
 			continue
 		}
 
 		result, err := fastForward(tree.path)
 		if err != nil {
-			cli.Error("Failed to pull %s: %v", tree.name, err)
+			job.report(actionPull, tree.path, resultFailed, err.Error(), func() {
+				cli.Error("Failed to pull %s: %v", tree.name, err)
+			})
 			errs = append(errs, fmt.Errorf("pull %s: %w", tree.name, err))
 			continue
 		}
 		switch result.Outcome {
 		case pullUpdated:
-			cli.Info("Pulled %s: %d new commit(s)", tree.name, result.Commits)
+			job.report(actionPull, tree.path, resultDone, fmt.Sprintf("%d new commit(s)", result.Commits), func() {
+				cli.Info("Pulled %s: %d new commit(s)", tree.name, result.Commits)
+			})
 		case pullSkipped:
-			cli.Warn("Skipped %s: %s", tree.name, result.Reason)
+			job.report(actionPull, tree.path, resultSkipped, result.Reason, func() {
+				cli.Warn("Skipped %s: %s", tree.name, result.Reason)
+			})
 		default:
-			cli.Debug("%s is up to date", tree.name)
+			job.report(actionPull, tree.path, resultSkipped, pullUpToDate, func() {
+				cli.Debug("%s is up to date", tree.name)
+			})
 		}
 	}
 

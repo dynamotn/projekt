@@ -1235,3 +1235,101 @@ func TestCheckGitReposStatus_DefaultOutputUnchanged(t *testing.T) {
 		t.Errorf("Out received %q, want nothing without Output", buf.String())
 	}
 }
+
+// syncJSON runs a -o json sync and decodes the rows it printed.
+func syncJSON(t *testing.T, opts SyncOptions, folders ...lazypath.Folder) (rows []map[string]string, err error) {
+	t.Helper()
+
+	lazypath.SetTestConfig(lazypath.Config{
+		Folders:    folders,
+		GitServers: []lazypath.GitServer{{Name: "local", HTTPS: "file://" + filepath.Join(t.TempDir(), "none")}},
+	})
+	defer lazypath.ResetTestConfig()
+
+	return runSyncJSON(t, opts)
+}
+
+func runSyncJSON(t *testing.T, opts SyncOptions) (rows []map[string]string, err error) {
+	t.Helper()
+
+	var buf strings.Builder
+	opts.Output, opts.Out = cli.OutputJSON, &buf
+	err = SyncGitRepos(opts)
+	if jsonErr := json.Unmarshal([]byte(buf.String()), &rows); jsonErr != nil {
+		t.Fatalf("not a JSON array: %v\n%s", jsonErr, buf.String())
+	}
+	return rows, err
+}
+
+func TestSyncGitRepos_DryRunJSON(t *testing.T) {
+	folder := lazypath.Folder{Path: t.TempDir(), Git: &lazypath.GitConfig{Host: "local", Group: "org", Repos: []lazypath.GitRepo{
+		{Name: "b-api"},
+		{Name: "a-web", Remotes: map[string]string{"upstream": "git@example.com:up/web.git"}},
+	}}}
+
+	rows, err := syncJSON(t, SyncOptions{DryRun: true}, folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+	for _, row := range rows {
+		for _, key := range []string{"repo", "path", "action", "target", "result", "detail"} {
+			if _, ok := row[key]; !ok {
+				t.Errorf("row %v lacks key %q", row, key)
+			}
+		}
+		got = append(got, row["repo"]+":"+row["action"]+":"+row["result"])
+	}
+	// Sorted by repository, steps in the order they happen.
+	want := []string{"a-web:clone:planned", "a-web:remote:planned", "b-api:clone:planned"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("rows = %v, want %v", got, want)
+	}
+}
+
+func TestSyncGitRepos_JSONDoneAndFailed(t *testing.T) {
+	root := t.TempDir()
+	seed := filepath.Join(root, "seed")
+	initRepo(t, seed)
+	mustGit(t, root, "clone", "--quiet", "--bare", "--", seed, filepath.Join(root, "org", "good.git"))
+
+	folder := lazypath.Folder{Path: filepath.Join(root, "work"), Git: &lazypath.GitConfig{Host: "local", Group: "org", Repos: []lazypath.GitRepo{
+		{Name: "good"}, {Name: "missing"},
+	}}}
+	lazypath.SetTestConfig(lazypath.Config{
+		Folders:    []lazypath.Folder{folder},
+		GitServers: []lazypath.GitServer{{Name: "local", HTTPS: "file://" + root}},
+	})
+	defer lazypath.ResetTestConfig()
+
+	rows, err := runSyncJSON(t, SyncOptions{Forks: 2})
+	if err == nil {
+		t.Error("error = nil, want one for the repository that cannot be cloned")
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %v, want 2", rows)
+	}
+	if rows[0]["repo"] != "good" || rows[0]["action"] != "clone" || rows[0]["result"] != "done" {
+		t.Errorf("rows[0] = %v, want good clone/done", rows[0])
+	}
+	if rows[1]["repo"] != "missing" || rows[1]["result"] != "failed" || !strings.Contains(rows[1]["detail"], "missing") {
+		t.Errorf("rows[1] = %v, want missing clone/failed with git's message", rows[1])
+	}
+}
+
+func TestSyncGitRepos_DefaultOutputUnchanged(t *testing.T) {
+	lazypath.SetTestConfig(lazypath.Config{Folders: []lazypath.Folder{{
+		Path: t.TempDir(),
+		Git:  &lazypath.GitConfig{Host: "local", Group: "org", Repos: []lazypath.GitRepo{{Name: "gone"}}},
+	}}, GitServers: []lazypath.GitServer{{Name: "local", HTTPS: "https://example.com"}}})
+	defer lazypath.ResetTestConfig()
+
+	var buf strings.Builder
+	if err := SyncGitRepos(SyncOptions{DryRun: true, Out: &buf}); err != nil {
+		t.Fatal(err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("Out received %q, want nothing without Output", buf.String())
+	}
+}
