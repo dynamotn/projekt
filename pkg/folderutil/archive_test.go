@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"go.yaml.in/yaml/v3"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
 )
@@ -247,5 +250,122 @@ func TestArchiveRoot(t *testing.T) {
 
 	if got, _ := archiveRoot(ArchiveOptions{To: "/tmp/from-to"}); got != "/tmp/from-to" {
 		t.Errorf("archiveRoot() = %v, want --to to win", got)
+	}
+}
+
+func TestArchiveFolder_WritesARecord(t *testing.T) {
+	project, archive := archivable(t)
+	pushable(t, project)
+
+	if err := ArchiveFolder(&bytes.Buffer{}, "old-service", ArchiveOptions{}); err != nil {
+		t.Fatalf("ArchiveFolder() error = %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(archive, "old-service", ".projekt", "archived.yaml"))
+	if err != nil {
+		t.Fatalf("no record: %v", err)
+	}
+	var record ArchiveRecord
+	if err := yaml.Unmarshal(data, &record); err != nil {
+		t.Fatalf("record does not decode: %v\n%s", err, data)
+	}
+	if record.Original != project {
+		t.Errorf("Original = %q, want %q", record.Original, project)
+	}
+	if record.Entry == nil || record.Entry.Path != project {
+		t.Errorf("Entry = %#v, want the dropped entry", record.Entry)
+	}
+	if time.Since(record.ArchivedAt) > time.Minute {
+		t.Errorf("ArchivedAt = %v, want now", record.ArchivedAt)
+	}
+}
+
+func TestArchiveFolder_RefusesALinkedProjektFolderBeforeMoving(t *testing.T) {
+	project, _ := archivable(t)
+	pushable(t, project)
+	if err := os.Symlink(t.TempDir(), filepath.Join(project, ".projekt")); err != nil {
+		t.Fatal(err)
+	}
+
+	err := ArchiveFolder(&bytes.Buffer{}, "old-service", ArchiveOptions{Force: true})
+	if err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("error = %v, want a refusal naming the link", err)
+	}
+	if _, statErr := os.Stat(project); statErr != nil {
+		t.Errorf("the project was moved: %v", statErr)
+	}
+}
+
+func TestArchiveFolder_RefusesWorktrees(t *testing.T) {
+	for _, configured := range []bool{true, false} {
+		project, archive := archivable(t)
+		tree := filepath.Join(filepath.Dir(project), "tree")
+		mustGit(t, project, "worktree", "add", "-b", "side", tree)
+		if configured {
+			lazypath.SetTestConfig(lazypath.Config{
+				Folders:   []lazypath.Folder{{Path: project}},
+				Worktrees: []lazypath.Worktree{{Project: "old-service", Name: "side", Branch: "side", Path: tree}},
+			})
+		}
+
+		err := ArchiveFolder(&bytes.Buffer{}, "old-service", ArchiveOptions{Force: true})
+		if err == nil || !strings.Contains(err.Error(), "remove its working trees first") {
+			t.Errorf("configured=%v: error = %v, want a refusal", configured, err)
+		}
+		if _, statErr := os.Stat(project); statErr != nil {
+			t.Errorf("configured=%v: the project was moved", configured)
+		}
+		if _, statErr := os.Stat(archive); !os.IsNotExist(statErr) {
+			t.Errorf("configured=%v: the archive was created", configured)
+		}
+	}
+}
+
+func TestArchiveFolder_RefusesAnIncludedProject(t *testing.T) {
+	project, _ := archivable(t)
+	lazypath.SetTestConfig(lazypath.Config{Folders: []lazypath.Folder{{Path: project, Source: "/etc/team.yaml"}}})
+
+	err := ArchiveFolder(&bytes.Buffer{}, "old-service", ArchiveOptions{Force: true})
+	if err == nil || !strings.Contains(err.Error(), "declared in /etc/team.yaml; archive it there") {
+		t.Fatalf("error = %v, want a refusal naming the file", err)
+	}
+	if _, statErr := os.Stat(project); statErr != nil {
+		t.Errorf("the project was moved: %v", statErr)
+	}
+}
+
+func TestListArchive(t *testing.T) {
+	archive := t.TempDir()
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	data, err := yaml.Marshal(ArchiveRecord{Original: "/old/b", ArchivedAt: at})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(archive, "b", ".projekt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(archive, "b", ".projekt", "archived.yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(archive, "a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ListArchive(ArchiveOptions{To: archive})
+	if err != nil {
+		t.Fatalf("ListArchive() error = %v", err)
+	}
+	if len(got) != 2 || got[0].Name != "a" || got[1].Name != "b" {
+		t.Fatalf("got %#v, want a then b", got)
+	}
+	if got[0].Original != "" || !got[0].At.IsZero() {
+		t.Errorf("a = %#v, want no record", got[0])
+	}
+	if got[1].Original != "/old/b" || !got[1].At.Equal(at) {
+		t.Errorf("b = %#v, want its record", got[1])
+	}
+
+	if none, err := ListArchive(ArchiveOptions{To: filepath.Join(archive, "missing")}); err != nil || len(none) != 0 {
+		t.Errorf("missing archive = %v, %v, want an empty list", none, err)
 	}
 }

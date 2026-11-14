@@ -4,6 +4,8 @@
 
 ### Added
 
+- **folder archive**: the archived folder remembers where it came from and
+  its configuration entry, and `--list` shows what the archive holds
 - **worktree prune**: `--merged` also removes the working trees whose branch
   is merged into the default branch and that hold no change, untracked
   or ignored file; the branch is kept, and every tree left alone is named
@@ -95,6 +97,9 @@
 
 ### Changed
 
+- **folder archive**: a project with working trees, or one declared in an
+  included file, is refused with the way out, instead of being moved and left
+  half-attached
 - **t**: `t` reads the projekt configuration, with `--config` like `projekt`
   and `b`, so `t init gl:group/store` resolves a configured git server. It
   only reads: a missing or broken configuration never stops `t` or makes it

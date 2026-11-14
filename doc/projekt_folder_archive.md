@@ -23,20 +23,29 @@ commits that are not pushed, no upstream at all, or something on the stash.
 That is the one mistake here that moving the folder back does not undo.
 --force says you mean it.
 
+A project with working trees, or one declared in an included file, is
+refused whatever --force says: remove the trees first, or archive it in the
+file that declares it.
+
+The archived folder keeps .projekt/archived.yaml, which records where it came
+from and its configuration entry. --list shows what the archive holds.
+
 The archive folder is $XDG_DATA_HOME/projekt/archive unless --archive-dir,
 $PROJEKT_ARCHIVE_DIR or --to says otherwise.
 
 ```
-projekt folder archive [short name] [flags]
+projekt folder archive [short name | --list] [flags]
 ```
 
 ### Options
 
 ```
-      --dry-run     Say what would happen without moving anything
-  -F, --force       Archive even with work that is not committed or not pushed
-  -h, --help        help for archive
-      --to string   Archive into this folder instead
+      --dry-run         Say what would happen without moving anything
+  -F, --force           Archive even with work that is not committed or not pushed
+  -h, --help            help for archive
+      --list            List what the archive holds instead of archiving
+  -o, --output string   Output format, one of: table, json, tsv (default "table")
+      --to string       Archive into this folder instead
 ```
 
 ### Options inherited from parent commands

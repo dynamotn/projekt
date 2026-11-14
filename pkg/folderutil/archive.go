@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
+
+	"go.yaml.in/yaml/v3"
 
 	"gitlab.com/dynamo-tools/projekt/pkg/cli"
 	"gitlab.com/dynamo-tools/projekt/pkg/lazypath"
@@ -26,6 +29,114 @@ type ArchiveOptions struct {
 	Force bool
 	// DryRun says what would happen without moving anything.
 	DryRun bool
+}
+
+// RecordFile is where an archived folder remembers where it came from,
+// relative to the folder.
+const RecordFile = ".projekt/archived.yaml"
+
+// ArchiveRecord is .projekt/archived.yaml inside an archived folder.
+type ArchiveRecord struct {
+	// Original is the absolute path the folder was moved from.
+	Original   string    `yaml:"original"`
+	ArchivedAt time.Time `yaml:"archived_at"`
+	// Entry is the configuration entry that was dropped; nil for a child of
+	// a workspace, which has none.
+	Entry *lazypath.Folder `yaml:"entry,omitempty"`
+}
+
+// ArchivedFolder is one folder in the archive.
+type ArchivedFolder struct {
+	Name     string
+	Path     string
+	Original string    // "" when there is no record
+	At       time.Time // zero when there is no record
+}
+
+// ListArchive returns what is in the archive folder o would use, by name.
+func ListArchive(o ArchiveOptions) ([]ArchivedFolder, error) {
+	root, err := archiveRoot(o)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("cannot read %s: %w", root, err)
+	}
+
+	var result []ArchivedFolder
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		item := ArchivedFolder{Name: entry.Name(), Path: filepath.Join(root, entry.Name())}
+		// A record that is missing, linked or unreadable is a folder without one.
+		if projektFileIsPlain(item.Path, RecordFile, "an archive record") == nil {
+			if data, err := os.ReadFile(filepath.Join(item.Path, RecordFile)); err == nil {
+				var record ArchiveRecord
+				if yaml.Unmarshal(data, &record) == nil {
+					item.Original, item.At = record.Original, record.ArchivedAt
+				}
+			}
+		}
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+// refuseBlockers fails when the project has working trees, or is declared in a
+// file that is not this machine's own. Neither is overridden by --force: the
+// first would leave trees pointing into a moved repository, the second would
+// leave an entry that comes back on the next read.
+func refuseBlockers(shortName string, folder ParsedFolder, entry *lazypath.Folder) error {
+	if entry != nil && entry.Source != "" {
+		return fmt.Errorf("%s is declared in %s; archive it there", shortName, entry.Source)
+	}
+	blocked := false
+	for _, w := range lazypath.GetConfig().Worktrees {
+		if w.Project == folder.ShortName {
+			blocked = true
+		}
+	}
+	if listing, err := gitOutput(folder.Path, "worktree", "list", "--porcelain"); err == nil && len(listedWorktrees(listing)) > 1 {
+		blocked = true
+	}
+	if blocked {
+		return fmt.Errorf("%s has working trees; remove its working trees first (projekt worktree remove %s@…)",
+			shortName, shortName)
+	}
+	return nil
+}
+
+// configuredEntry returns the configuration entry of a path, nil when it has
+// none (a child of a workspace).
+func configuredEntry(path string) *lazypath.Folder {
+	key := lazypath.Canonical(path)
+	for _, f := range lazypath.GetConfig().Folders {
+		if lazypath.Canonical(f.Path) == key {
+			return &f
+		}
+	}
+	return nil
+}
+
+// writeRecord saves the record into the archived folder, never through a link.
+func writeRecord(dir string, record ArchiveRecord) error {
+	if err := projektFileIsPlain(dir, RecordFile, "an archive record"); err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(record)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, RecordFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 // DefaultArchiveDir returns where finished projects go when nothing says
@@ -76,6 +187,15 @@ func ArchiveFolder(out io.Writer, shortName string, o ArchiveOptions) error {
 		return fmt.Errorf("%s is not there: %s", shortName, folder.Path)
 	}
 
+	entry := configuredEntry(folder.Path)
+	if err := refuseBlockers(shortName, folder, entry); err != nil {
+		return err
+	}
+	// Refused now rather than after the move, when it could only be reported.
+	if err := projektFileIsPlain(folder.Path, RecordFile, "an archive record"); err != nil {
+		return err
+	}
+
 	root, err := archiveRoot(o)
 	if err != nil {
 		return err
@@ -104,6 +224,14 @@ func ArchiveFolder(out io.Writer, shortName string, o ArchiveOptions) error {
 	}
 	if err := moveFolder(folder.Path, target); err != nil {
 		return err
+	}
+
+	// The record goes in before the entry is dropped: if it cannot be written
+	// the entry stays, and the user is told where both are.
+	record := ArchiveRecord{Original: folder.Path, ArchivedAt: time.Now().UTC(), Entry: entry}
+	if err := writeRecord(target, record); err != nil {
+		return fmt.Errorf("moved %s to %s but could not write its archive record: %w; "+
+			"the configuration entry still points at %s", folder.Path, target, err, folder.Path)
 	}
 
 	// Only once the files are somewhere safe: an entry dropped for a move that

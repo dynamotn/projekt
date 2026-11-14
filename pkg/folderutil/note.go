@@ -90,8 +90,14 @@ func ReadNote(projectPath string) (string, error) {
 // swapped in between is not caught; upgrade to openat-style opens if that
 // matters.
 func noteIsPlain(projectPath string) error {
-	dir := filepath.Join(projectPath, filepath.Dir(NoteFile))
-	for _, p := range []string{dir, filepath.Join(projectPath, NoteFile)} {
+	return projektFileIsPlain(projectPath, NoteFile, "a note")
+}
+
+// projektFileIsPlain is noteIsPlain for any file of .projekt; what names it in
+// the refusal.
+func projektFileIsPlain(projectPath, file, what string) error {
+	dir := filepath.Join(projectPath, filepath.Dir(file))
+	for _, p := range []string{dir, filepath.Join(projectPath, file)} {
 		info, err := os.Lstat(p)
 		if os.IsNotExist(err) {
 			continue
@@ -100,7 +106,7 @@ func noteIsPlain(projectPath string) error {
 			return err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%s is a symbolic link; a note is never read or written through one", p)
+			return fmt.Errorf("%s is a symbolic link; %s is never read or written through one", p, what)
 		}
 	}
 	return nil
