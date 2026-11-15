@@ -371,3 +371,27 @@ func TestArchiveRecord_IsPrivateAndRestoreRedactsRemotes(t *testing.T) {
 		t.Errorf("output = %q, want the redacted remote", out.String())
 	}
 }
+
+func TestRestoreFolder_RefusesFormatCharactersInTheGitSection(t *testing.T) {
+	project, archive := archivable(t)
+	if err := os.RemoveAll(project); err != nil {
+		t.Fatal(err)
+	}
+	for name, git := range map[string]*lazypath.GitConfig{
+		"host":   {Host: "evil‮.example"},
+		"remote": {Repos: []lazypath.GitRepo{{Name: "x", Remotes: map[string]string{"up": "https://h/‮x.git"}}}},
+	} {
+		lazypath.SetTestConfig(lazypath.Config{})
+		_ = os.RemoveAll(project)
+		writeArchiveRecord(t, filepath.Join(archive, name), ArchiveRecord{Original: project,
+			Entry: &lazypath.Folder{Git: git}})
+		var out bytes.Buffer
+		err := RestoreFolder(&out, name, RestoreOptions{Yes: true})
+		if err == nil || strings.Contains(out.String(), "‮") || strings.Contains(err.Error(), "‮") {
+			t.Errorf("%s: err = %v, out = %q, want a refusal that prints nothing raw", name, err, out.String())
+		}
+		if _, statErr := os.Stat(project); statErr == nil {
+			t.Errorf("%s: the folder was restored", name)
+		}
+	}
+}

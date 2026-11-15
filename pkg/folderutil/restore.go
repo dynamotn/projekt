@@ -144,6 +144,10 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 				}
 			}
 			git, _ := yaml.Marshal(&shown)
+			// yaml escapes control characters but prints U+202E and its kin raw.
+			if hasControl(strings.ReplaceAll(string(git), "\n", "")) {
+				return fmt.Errorf("the record of %s has a control character in its git section; edit or delete the record", name)
+			}
 			skipped = append(skipped, "git:\n"+strings.TrimRight(string(git), "\n"))
 		}
 	}
@@ -213,7 +217,7 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 	// archive. An emptied .projekt stays: it may have been there before.
 	if record != nil {
 		if err := os.Remove(filepath.Join(target, RecordFile)); err != nil {
-			return fmt.Errorf("moved %s to %s and added it to the configuration but could not remove %s: %w; "+
+			return fmt.Errorf("moved %s to %s but could not remove %s: %w; "+
 				"delete it by hand", source, target, filepath.Join(target, RecordFile), err)
 		}
 	}
