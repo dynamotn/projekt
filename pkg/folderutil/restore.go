@@ -150,7 +150,7 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 	entry.Path = target
 	// A workspace child has no entry of its own: the move is all there is to do.
 	_, covered := CoveringWorkspace(target)
-	register := !(record != nil && record.Entry == nil && covered)
+	register := record == nil || record.Entry != nil || !covered
 	say := func(format string, args ...any) error {
 		_, err := fmt.Fprintf(out, format, args...)
 		return err

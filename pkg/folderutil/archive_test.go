@@ -407,7 +407,7 @@ func TestListArchive(t *testing.T) {
 
 func TestListArchive_QuotesAHostileOriginal(t *testing.T) {
 	archive := t.TempDir()
-	for name, original := range map[string]string{"esc": "/old/\x1b[2Kx", "bidi": "/old/a‮b"} {
+	for name, original := range map[string]string{"esc": "/old/\x1b[2Kx", "bidi": "/old/a\u202eb"} {
 		data, err := yaml.Marshal(ArchiveRecord{Original: original})
 		if err != nil {
 			t.Fatal(err)
@@ -425,7 +425,7 @@ func TestListArchive_QuotesAHostileOriginal(t *testing.T) {
 		t.Fatalf("ListArchive() error = %v", err)
 	}
 	for _, item := range got {
-		if strings.ContainsAny(item.Original, "\x1b‮") || !strings.HasPrefix(item.Original, `"`) {
+		if strings.ContainsAny(item.Original, "\x1b\u202e") || !strings.HasPrefix(item.Original, `"`) {
 			t.Errorf("%s original = %q, want it quoted with no raw control character", item.Name, item.Original)
 		}
 	}
