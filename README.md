@@ -189,9 +189,11 @@ folders:
 
 ```bash
 projekt folder check          # [OK] / [MISSING] / [NOT GIT] / [REMOTE MISMATCH] / …
+projekt folder check -o json  # one row per finding, for a script
 projekt folder sync --dry-run # what would be cloned and set up
 projekt folder sync           # clone the missing ones, 4 at a time (--forks)
 projekt folder sync --pull    # and bring the ones already here up to date
+projekt folder sync -o json   # one row per action and its result, on stdout
 ```
 
 An existing worktree is left alone — it may have work in progress — and an
@@ -209,7 +211,9 @@ or `--timeout` on `folder sync` and `folder status` (`0` for no limit). A
 repository that timed out is reported as failed, and the others carry on; a
 clone stopped that way removes what it had fetched. `folder exec --timeout 30s`
 bounds the command in each folder, everything it started included, and
-`--fail-fast` starts no new folder after the first failure.
+`--fail-fast` starts no new folder after the first failure. Ctrl-C stops what
+`folder sync`, `folder status --requests` and `folder exec --timeout` started,
+and they exit with `interrupted`.
 
 **Don't type that list.** If the repos are already on disk, `--discover` writes
 the `git` section for you: each child holding a `.git` is read, its `origin`
@@ -464,6 +468,8 @@ as a failure, and the exit code is non-zero when the command failed anywhere:
 ```bash
 projekt folder exec -- git status --short
 projekt folder exec -t work --quiet -- git diff --quiet || echo "something is dirty"
+projekt folder exec -o json -- git rev-parse HEAD   # one object per folder: exit, output, seconds
+projekt folder exec --timeout 30s -- make test      # stop a folder that hangs; --fail-fast stops early
 ```
 
 **When a project is done**, `folder archive` **moves** it (never deletes) and
@@ -505,6 +511,7 @@ projekt folder show myapp                         # everything about one project
 projekt folder status --notes                     # the first line of every note
 
 projekt worktree prune              # forget the working trees that are gone
+projekt worktree prune --merged     # and remove the ones whose branch is merged
 ```
 
 A **description** lives in the configuration and says what a project *is*; it
@@ -527,7 +534,9 @@ their name, since moving a project renames it.
 
 `worktree prune` is the other half of `folder prune`: it also runs
 `git worktree prune`, so git stops listing a working tree that was removed with
-`rm -rf`.
+`rm -rf`. With `--merged` it also removes the working trees whose branch is
+merged into the default branch and that hold no change, untracked or ignored
+file; the branch is kept, and every tree left alone is named with the reason.
 
 A project found inside a workspace has no entry of its own, so it cannot be
 moved or tagged on its own — projekt says so rather than doing nothing.
@@ -716,6 +725,10 @@ is `[]`, never `null`. TSV is what the shell integration uses for completion.
 projekt folder list -o json | jq -r '.[].shortName'
 projekt folder list -o tsv --short-only --no-headers
 ```
+
+`folder check` and `folder sync` take `-o json` and `-o tsv` too, with one row
+per finding or action, and `folder exec -o json` prints one object per folder;
+these go to stdout, for a script to read.
 
 Every command takes `--verbose`/`-v` and honours `LOG_LEVEL` (or
 `PROJEKT_LOG_LEVEL`): `trace`, `debug`, `info` (default), `warn`, `error`, `fatal`.

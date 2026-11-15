@@ -90,6 +90,8 @@ Output shows:
 - `[NOT GIT]` - Directory exists but is not a Git repository
 - `[WARNING]` - Repository exists but remote URL doesn't match
 
+`-o json` or `-o tsv` prints one row per finding on stdout, for a script.
+
 ### Sync Repositories
 
 Clone all missing repositories:
@@ -103,6 +105,8 @@ Use dry-run mode to preview changes:
 ```bash
 projekt folder sync --dry-run
 ```
+
+`-o json` or `-o tsv` prints one row per action and its result on stdout, also with `--dry-run`; `--timeout` bounds each clone and fetch (`0` for no limit).
 
 ## Example Workflow
 
