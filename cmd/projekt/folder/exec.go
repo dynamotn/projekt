@@ -30,11 +30,14 @@ usable as a check. Working trees are projects too, so they are included.
 --timeout stops the command in a folder that runs longer, together with
 everything it started, and reports it as timed out. --fail-fast starts no new
 folder after the first failure; the ones already running finish, and the rest
-are reported as not started.
+are reported as not started. With --timeout the command runs in a process
+group of its own, so one that asks the terminal for input is stopped and
+reported as timed out: leave --timeout off for an interactive command.
 
 With -o json, stdout holds one array with an object per folder (name, path,
 exit, output, seconds), in the same order. exit is -1 when the command could
-not start or the folder is missing.`
+not start, timed out, was interrupted or was not started because of
+--fail-fast, and when the folder is missing.`
 
 func NewFolderExecCmd(out io.Writer) *cobra.Command {
 	o := folderutil.ExecOptions{}
