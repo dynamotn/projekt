@@ -378,8 +378,8 @@ func TestRestoreFolder_RefusesFormatCharactersInTheGitSection(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, git := range map[string]*lazypath.GitConfig{
-		"host":   {Host: "evil‮.example"},
-		"remote": {Repos: []lazypath.GitRepo{{Name: "x", Remotes: map[string]string{"up": "https://h/‮x.git"}}}},
+		"host":   {Host: "evil\u202e.example"},
+		"remote": {Repos: []lazypath.GitRepo{{Name: "x", Remotes: map[string]string{"up": "https://h/\u202ex.git"}}}},
 	} {
 		lazypath.SetTestConfig(lazypath.Config{})
 		_ = os.RemoveAll(project)
@@ -387,7 +387,7 @@ func TestRestoreFolder_RefusesFormatCharactersInTheGitSection(t *testing.T) {
 			Entry: &lazypath.Folder{Git: git}})
 		var out bytes.Buffer
 		err := RestoreFolder(&out, name, RestoreOptions{Yes: true})
-		if err == nil || strings.Contains(out.String(), "‮") || strings.Contains(err.Error(), "‮") {
+		if err == nil || strings.Contains(out.String(), "\u202e") || strings.Contains(err.Error(), "\u202e") {
 			t.Errorf("%s: err = %v, out = %q, want a refusal that prints nothing raw", name, err, out.String())
 		}
 		if _, statErr := os.Stat(project); statErr == nil {
