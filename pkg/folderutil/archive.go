@@ -158,7 +158,8 @@ func writeRecord(dir string, record ArchiveRecord) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	// The entry may hold a remote URL with a token, and the config is 0600.
+	return os.WriteFile(path, data, 0o600)
 }
 
 // DefaultArchiveDir returns where finished projects go when nothing says

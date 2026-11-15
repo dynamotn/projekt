@@ -340,3 +340,34 @@ func TestRestoreFolder_WorkspaceChildIsTheMoveAlone(t *testing.T) {
 		t.Errorf("config = %#v, want only the workspace", folders)
 	}
 }
+
+func TestArchiveRecord_IsPrivateAndRestoreRedactsRemotes(t *testing.T) {
+	project, archive := archivable(t)
+	pushable(t, project)
+	lazypath.SetTestConfig(lazypath.Config{Folders: []lazypath.Folder{{Path: project, Git: &lazypath.GitConfig{
+		Host:  "https://u:hosttok@host.example",
+		Repos: []lazypath.GitRepo{{Name: "x", Remotes: map[string]string{"up": "https://user:tok@host/x.git"}}},
+	}}}})
+	if err := ArchiveFolder(&bytes.Buffer{}, "old-service", ArchiveOptions{}); err != nil {
+		t.Fatalf("ArchiveFolder() error = %v", err)
+	}
+
+	info, err := os.Stat(filepath.Join(archive, "old-service", RecordFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("record mode = %v, want 0600", info.Mode().Perm())
+	}
+
+	var out bytes.Buffer
+	if err := RestoreFolder(&out, "old-service", RestoreOptions{Yes: true}); err != nil {
+		t.Fatalf("RestoreFolder() error = %v", err)
+	}
+	if strings.Contains(out.String(), "tok") {
+		t.Errorf("output = %q, want no credential", out.String())
+	}
+	if !strings.Contains(out.String(), "host/x.git") {
+		t.Errorf("output = %q, want the redacted remote", out.String())
+	}
+}

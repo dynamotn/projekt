@@ -129,7 +129,21 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 				", leave: "+fmt.Sprintf("%q", e.Hooks.Leave))
 		}
 		if e.Git != nil {
-			git, _ := yaml.Marshal(e.Git)
+			// Printed copy only: a remote URL may carry a token, as in sync and check.
+			shown := *e.Git
+			shown.Host = cli.RedactURL(shown.Host)
+			shown.Repos = make([]lazypath.GitRepo, len(e.Git.Repos))
+			for i, repo := range e.Git.Repos {
+				shown.Repos[i] = repo
+				shown.Repos[i].Remotes = map[string]string{}
+				for name, url := range repo.Remotes {
+					shown.Repos[i].Remotes[name] = cli.RedactURL(url)
+				}
+				if len(repo.Remotes) == 0 {
+					shown.Repos[i].Remotes = nil
+				}
+			}
+			git, _ := yaml.Marshal(&shown)
 			skipped = append(skipped, "git:\n"+strings.TrimRight(string(git), "\n"))
 		}
 	}
