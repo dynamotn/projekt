@@ -430,3 +430,29 @@ func TestListArchive_QuotesAHostileOriginal(t *testing.T) {
 		}
 	}
 }
+
+func TestArchiveFolder_RecordIsPrivateOverAnExistingOne(t *testing.T) {
+	project, archive := archivable(t)
+	pushable(t, project)
+	if err := os.MkdirAll(filepath.Join(project, ".projekt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := filepath.Join(project, RecordFile)
+	if err := os.WriteFile(old, []byte("original: /x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, project, "add", "-A")
+	mustGit(t, project, "commit", "--quiet", "-m", "record")
+	mustGit(t, project, "push", "--quiet")
+
+	if err := ArchiveFolder(&bytes.Buffer{}, "old-service", ArchiveOptions{}); err != nil {
+		t.Fatalf("ArchiveFolder() error = %v", err)
+	}
+	info, err := os.Stat(filepath.Join(archive, "old-service", RecordFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("record mode = %v, want 0600", info.Mode().Perm())
+	}
+}

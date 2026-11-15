@@ -159,7 +159,11 @@ func writeRecord(dir string, record ArchiveRecord) error {
 		return err
 	}
 	// The entry may hold a remote URL with a token, and the config is 0600.
-	return os.WriteFile(path, data, 0o600)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	// WriteFile keeps the mode of a record that was already there.
+	return os.Chmod(path, 0o600)
 }
 
 // DefaultArchiveDir returns where finished projects go when nothing says
