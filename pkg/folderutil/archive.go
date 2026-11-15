@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -79,6 +80,10 @@ func ListArchive(o ArchiveOptions) ([]ArchivedFolder, error) {
 				var record ArchiveRecord
 				if yaml.Unmarshal(data, &record) == nil {
 					item.Original, item.At = record.Original, record.ArchivedAt
+					// The record is a file anyone may have edited, and this is printed.
+					if hasControl(item.Original) {
+						item.Original = strconv.Quote(item.Original)
+					}
 				}
 			}
 		}

@@ -29,8 +29,10 @@ type RestoreOptions struct {
 	Err io.Writer
 }
 
+// hasControl reports a control character or a format one (U+202E reorders
+// the text around it), neither of which belongs in what a record makes us print.
 func hasControl(s string) bool {
-	return strings.IndexFunc(s, unicode.IsControl) >= 0
+	return strings.IndexFunc(s, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) >= 0
 }
 
 // insideDir reports whether path is dir or lies below it.

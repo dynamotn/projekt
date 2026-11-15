@@ -404,3 +404,29 @@ func TestListArchive(t *testing.T) {
 		t.Errorf("missing archive = %v, %v, want an empty list", none, err)
 	}
 }
+
+func TestListArchive_QuotesAHostileOriginal(t *testing.T) {
+	archive := t.TempDir()
+	for name, original := range map[string]string{"esc": "/old/\x1b[2Kx", "bidi": "/old/a‮b"} {
+		data, err := yaml.Marshal(ArchiveRecord{Original: original})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(archive, name, ".projekt"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(archive, name, RecordFile), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := ListArchive(ArchiveOptions{To: archive})
+	if err != nil {
+		t.Fatalf("ListArchive() error = %v", err)
+	}
+	for _, item := range got {
+		if strings.ContainsAny(item.Original, "\x1b‮") || !strings.HasPrefix(item.Original, `"`) {
+			t.Errorf("%s original = %q, want it quoted with no raw control character", item.Name, item.Original)
+		}
+	}
+}

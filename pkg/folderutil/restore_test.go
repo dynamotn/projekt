@@ -283,6 +283,7 @@ func TestRestoreFolder_RefusesControlCharactersInARecord(t *testing.T) {
 	base := t.TempDir()
 	cases := map[string]ArchiveRecord{
 		"original": {Original: base + "/x\x1b[2K\rSAFE"},
+		"bidi":     {Original: base + "/x\u202eSAFE"},
 		"name":     {Original: base + "/y", Entry: &lazypath.Folder{Name: "a\x1bb"}},
 		"tags":     {Original: base + "/z", Entry: &lazypath.Folder{Tags: []string{"a\x07"}}},
 	}
