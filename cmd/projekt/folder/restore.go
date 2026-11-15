@@ -23,8 +23,9 @@ workspace settings. Hooks and a git section are not restored, since the
 record is a file anyone may have edited: they are printed, so that you can
 add them back with ` + "`projekt config edit`" + ` after reading them. Then the record
 is removed, so the project does not look unfinished to a later archive. A
-folder with no entry, a child of a workspace, is registered the way
-` + "`projekt folder add <path>`" + ` would.
+child of a workspace has no entry of its own, so restoring it is the move
+alone; a folder restored from an old archive, or with --to to a place no
+workspace reaches, is registered the way ` + "`projekt folder add <path>`" + ` would.
 
 Nothing changes when the path already exists, when the configuration already
 has an entry for it, or when the record is missing, links elsewhere or names

@@ -132,6 +132,9 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 		}
 	}
 	entry.Path = target
+	// A workspace child has no entry of its own: the move is all there is to do.
+	_, covered := CoveringWorkspace(target)
+	register := !(record != nil && record.Entry == nil && covered)
 	say := func(format string, args ...any) error {
 		_, err := fmt.Fprintf(out, format, args...)
 		return err
@@ -152,7 +155,11 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 		}
 	}
 	if o.DryRun {
-		if err := say("[DRY RUN] Would move %s to %q and add it to the configuration\n", source, target); err != nil {
+		plan := "Would move %s to %q and add it to the configuration\n"
+		if !register {
+			plan = "Would move %s to %q; its workspace already lists it\n"
+		}
+		if err := say("[DRY RUN] "+plan, source, target); err != nil {
 			return err
 		}
 		return notRestored()
@@ -178,11 +185,13 @@ func RestoreFolder(out io.Writer, name string, o RestoreOptions) error {
 	if err := moveFolder(source, target); err != nil {
 		return err
 	}
-	if err := entry.AddToConfig(); err != nil {
-		// AddToConfig has already logged why.
-		return fmt.Errorf("moved %s to %s but the configuration was not changed; the record at %s still holds "+
-			"the entry: run `projekt folder add %s` and set it again, then delete the record",
-			source, target, filepath.Join(target, RecordFile), target)
+	if register {
+		if err := entry.AddToConfig(); err != nil {
+			// AddToConfig has already logged why.
+			return fmt.Errorf("moved %s to %s but the configuration was not changed; the record at %s still holds "+
+				"the entry: run `projekt folder add %s` and set it again, then delete the record",
+				source, target, filepath.Join(target, RecordFile), target)
+		}
 	}
 	// A record left behind would make the project look unfinished to the next
 	// archive. An emptied .projekt stays: it may have been there before.

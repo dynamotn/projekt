@@ -304,3 +304,38 @@ func TestRestoreFolder_RefusesControlCharactersInARecord(t *testing.T) {
 		})
 	}
 }
+
+func TestRestoreFolder_WorkspaceChildIsTheMoveAlone(t *testing.T) {
+	project, _ := archivable(t)
+	ws := filepath.Join(filepath.Dir(project), "ws")
+	child := filepath.Join(ws, "old-service")
+	if err := os.MkdirAll(ws, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(project, child); err != nil {
+		t.Fatal(err)
+	}
+	pushable(t, child)
+	config := lazypath.Config{Folders: []lazypath.Folder{{Path: ws, IsWorkspace: true}}}
+	lazypath.SetTestConfig(config)
+	if err := ArchiveFolder(&bytes.Buffer{}, "old-service", ArchiveOptions{}); err != nil {
+		t.Fatalf("ArchiveFolder() error = %v", err)
+	}
+
+	var plan bytes.Buffer
+	if err := RestoreFolder(&plan, "old-service", RestoreOptions{DryRun: true}); err != nil {
+		t.Fatalf("dry run error = %v", err)
+	}
+	if strings.Contains(plan.String(), "add it to the configuration") {
+		t.Errorf("plan = %q, want no promise of a configuration entry", plan.String())
+	}
+	if err := RestoreFolder(&bytes.Buffer{}, "old-service", RestoreOptions{Yes: true}); err != nil {
+		t.Fatalf("RestoreFolder() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(child, "README")); err != nil {
+		t.Errorf("the child is not back: %v", err)
+	}
+	if folders := lazypath.GetConfig().Folders; !reflect.DeepEqual(folders, config.Folders) {
+		t.Errorf("config = %#v, want only the workspace", folders)
+	}
+}
